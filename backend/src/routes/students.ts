@@ -2,16 +2,37 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import { authenticateToken, requireTeacher } from '../middleware/auth';
+import { ALLOWED_MONTHLY_FEES, ensureStudentPaymentSchedule } from '../services/payments';
 
 const router = Router();
 const prisma = new PrismaClient();
 
+const parseBillingFields = (body: Record<string, unknown>) => {
+  const monthlyFee = Number(body.monthlyFee);
+  const courseDurationMonths = Number(body.courseDurationMonths);
+
+  if (!Number.isInteger(courseDurationMonths) || courseDurationMonths <= 0) {
+    return { error: 'La duración del curso debe ser un número entero positivo.' };
+  }
+
+  if (!ALLOWED_MONTHLY_FEES.includes(monthlyFee as 35 | 65)) {
+    return { error: 'La tarifa mensual debe ser 35 o 65 euros.' };
+  }
+
+  return { monthlyFee, courseDurationMonths };
+};
+
 // Ruta protegida: solo profesores pueden crear alumnos
 router.post('/', authenticateToken, requireTeacher, async (req, res) => {
   const { email, firstName, lastName } = req.body;
+  const billing = parseBillingFields(req.body as Record<string, unknown>);
 
   if (!email || !firstName || !lastName) {
     return res.status(400).json({ error: 'Faltan campos requeridos' });
+  }
+
+  if ('error' in billing) {
+    return res.status(400).json(billing);
   }
 
   try {
@@ -24,6 +45,9 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
         email,
         passwordHash,
         role: 'STUDENT',
+        monthlyFee: billing.monthlyFee,
+        courseDurationMonths: billing.courseDurationMonths,
+        courseStartDate: new Date(),
         profile: {
           create: {
             firstName,
@@ -34,6 +58,15 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
       include: {
         profile: true
       }
+    });
+
+    await ensureStudentPaymentSchedule(prisma, {
+      id: newStudent.id,
+      role: newStudent.role,
+      createdAt: newStudent.createdAt,
+      courseDurationMonths: newStudent.courseDurationMonths,
+      monthlyFee: newStudent.monthlyFee,
+      courseStartDate: newStudent.courseStartDate
     });
 
     // Intentar notificar a n8n para que envíe el correo
@@ -61,6 +94,9 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
         email: newStudent.email,
         firstName: newStudent.profile?.firstName,
         lastName: newStudent.profile?.lastName,
+        monthlyFee: newStudent.monthlyFee,
+        courseDurationMonths: newStudent.courseDurationMonths,
+        courseStartDate: newStudent.courseStartDate,
       },
       generatedPassword: autoPassword // En un entorno real se enviaría por email
     });
@@ -82,6 +118,9 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
         id: true,
         email: true,
         createdAt: true,
+        monthlyFee: true,
+        courseDurationMonths: true,
+        courseStartDate: true,
         profile: {
           select: {
             firstName: true,
@@ -101,9 +140,14 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
 router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
   const studentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const { firstName, lastName, email } = req.body;
+  const billing = parseBillingFields(req.body as Record<string, unknown>);
 
   if (!firstName || !lastName || !email) {
     return res.status(400).json({ error: 'Todos los campos son obligatorios' });
+  }
+
+  if ('error' in billing) {
+    return res.status(400).json(billing);
   }
 
   try {
@@ -119,6 +163,8 @@ router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
       where: { id: studentId },
       data: {
         email,
+        monthlyFee: billing.monthlyFee,
+        courseDurationMonths: billing.courseDurationMonths,
         profile: {
           upsert: {
             create: { firstName, lastName },
@@ -129,13 +175,25 @@ router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
       include: { profile: true }
     });
 
+    await ensureStudentPaymentSchedule(prisma, {
+      id: updatedUser.id,
+      role: updatedUser.role,
+      createdAt: updatedUser.createdAt,
+      courseDurationMonths: updatedUser.courseDurationMonths,
+      monthlyFee: updatedUser.monthlyFee,
+      courseStartDate: updatedUser.courseStartDate
+    });
+
     res.json({
       message: 'Alumno actualizado con éxito',
       student: {
         id: updatedUser.id,
         email: updatedUser.email,
         firstName: updatedUser.profile?.firstName,
-        lastName: updatedUser.profile?.lastName
+        lastName: updatedUser.profile?.lastName,
+        monthlyFee: updatedUser.monthlyFee,
+        courseDurationMonths: updatedUser.courseDurationMonths,
+        courseStartDate: updatedUser.courseStartDate
       }
     });
   } catch (error) {
@@ -151,6 +209,7 @@ router.delete('/:id', authenticateToken, requireTeacher, async (req, res) => {
   try {
     // Eliminar en cascada manualmente dentro de una transacción
     await prisma.$transaction([
+      prisma.paymentStatus.deleteMany({ where: { studentId } }),
       prisma.submission.deleteMany({ where: { studentId } }),
       prisma.enrollment.deleteMany({ where: { studentId } }),
       prisma.profile.deleteMany({ where: { userId: studentId } }),

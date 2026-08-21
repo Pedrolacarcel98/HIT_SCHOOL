@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { UserPlus, Search, Edit2, Trash2, Mail, Check, X, AlertTriangle, Users } from 'lucide-react';
+import { UserPlus, Search, Edit2, Trash2, Check, X, AlertTriangle, Users } from 'lucide-react';
 
 interface Student {
   id: string;
   email: string;
   createdAt?: string;
+  monthlyFee?: number | null;
+  courseDurationMonths?: number | null;
+  courseStartDate?: string | null;
   profile?: {
     firstName: string;
     lastName: string;
@@ -21,12 +24,16 @@ const StudentsManagement: React.FC = () => {
   const [newFirstName, setNewFirstName] = useState('');
   const [newLastName, setNewLastName] = useState('');
   const [newEmail, setNewEmail] = useState('');
+  const [newMonthlyFee, setNewMonthlyFee] = useState('35');
+  const [newCourseDurationMonths, setNewCourseDurationMonths] = useState('9');
 
   // Modal Editar
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [editFirstName, setEditFirstName] = useState('');
   const [editLastName, setEditLastName] = useState('');
   const [editEmail, setEditEmail] = useState('');
+  const [editMonthlyFee, setEditMonthlyFee] = useState('35');
+  const [editCourseDurationMonths, setEditCourseDurationMonths] = useState('9');
 
   // Modal Eliminar
   const [deletingStudent, setDeletingStudent] = useState<Student | null>(null);
@@ -77,7 +84,9 @@ const StudentsManagement: React.FC = () => {
         body: JSON.stringify({
           firstName: newFirstName,
           lastName: newLastName,
-          email: newEmail
+          email: newEmail,
+          monthlyFee: Number(newMonthlyFee),
+          courseDurationMonths: Number(newCourseDurationMonths)
         })
       });
 
@@ -93,6 +102,8 @@ const StudentsManagement: React.FC = () => {
       setNewFirstName('');
       setNewLastName('');
       setNewEmail('');
+      setNewMonthlyFee('35');
+      setNewCourseDurationMonths('9');
       fetchStudents();
     } catch (err) {
       showToast('Error de conexión', 'error');
@@ -104,6 +115,8 @@ const StudentsManagement: React.FC = () => {
     setEditFirstName(student.profile?.firstName || '');
     setEditLastName(student.profile?.lastName || '');
     setEditEmail(student.email);
+    setEditMonthlyFee(String(student.monthlyFee || 35));
+    setEditCourseDurationMonths(String(student.courseDurationMonths || 9));
   };
 
   const handleUpdate = async (e: React.FormEvent) => {
@@ -122,7 +135,9 @@ const StudentsManagement: React.FC = () => {
         body: JSON.stringify({
           firstName: editFirstName,
           lastName: editLastName,
-          email: editEmail
+          email: editEmail,
+          monthlyFee: Number(editMonthlyFee),
+          courseDurationMonths: Number(editCourseDurationMonths)
         })
       });
 
@@ -253,6 +268,8 @@ const StudentsManagement: React.FC = () => {
             <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid var(--border)' }}>
               <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.85rem' }}>ALUMNO</th>
               <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.85rem' }}>CORREO</th>
+              <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.85rem' }}>TARIFA</th>
+              <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.85rem' }}>DURACIÓN</th>
               <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.85rem' }}>FECHA ALTA</th>
               <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.85rem', textAlign: 'right' }}>ACCIONES</th>
             </tr>
@@ -260,13 +277,13 @@ const StudentsManagement: React.FC = () => {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={4} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                <td colSpan={6} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                   Cargando alumnos...
                 </td>
               </tr>
             ) : filteredStudents.length === 0 ? (
               <tr>
-                <td colSpan={4} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                <td colSpan={6} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                   {searchTerm ? 'No se encontraron alumnos con ese criterio.' : 'No hay alumnos registrados en el sistema.'}
                 </td>
               </tr>
@@ -300,6 +317,12 @@ const StudentsManagement: React.FC = () => {
                     </td>
                     <td style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                       {s.email}
+                    </td>
+                    <td style={{ padding: '1rem 1.5rem', color: 'var(--text)', fontSize: '0.9rem', fontWeight: '600' }}>
+                      {s.monthlyFee ? `${s.monthlyFee} € / mes` : 'Sin definir'}
+                    </td>
+                    <td style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                      {s.courseDurationMonths ? `${s.courseDurationMonths} meses` : 'Sin definir'}
                     </td>
                     <td style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                       {createdDate}
@@ -413,6 +436,32 @@ const StudentsManagement: React.FC = () => {
                 />
               </div>
 
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Tarifa mensual</label>
+                  <select
+                    required
+                    value={newMonthlyFee}
+                    onChange={(e) => setNewMonthlyFee(e.target.value)}
+                    style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }}
+                  >
+                    <option value="35">35 € / mes</option>
+                    <option value="65">65 € / mes</option>
+                  </select>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Duración del curso</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={newCourseDurationMonths}
+                    onChange={(e) => setNewCourseDurationMonths(e.target.value)}
+                    style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }}
+                  />
+                </div>
+              </div>
+
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1rem' }}>
                 <button
                   type="button"
@@ -486,6 +535,32 @@ const StudentsManagement: React.FC = () => {
                   onChange={(e) => setEditEmail(e.target.value)}
                   style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }}
                 />
+              </div>
+
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Tarifa mensual</label>
+                  <select
+                    required
+                    value={editMonthlyFee}
+                    onChange={(e) => setEditMonthlyFee(e.target.value)}
+                    style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }}
+                  >
+                    <option value="35">35 € / mes</option>
+                    <option value="65">65 € / mes</option>
+                  </select>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Duración del curso</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={editCourseDurationMonths}
+                    onChange={(e) => setEditCourseDurationMonths(e.target.value)}
+                    style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }}
+                  />
+                </div>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1rem' }}>
