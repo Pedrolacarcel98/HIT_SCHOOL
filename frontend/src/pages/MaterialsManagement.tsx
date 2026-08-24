@@ -14,7 +14,8 @@ import {
   ExternalLink,
   Eye,
   Filter,
-  X
+  X,
+  Send
 } from 'lucide-react';
 import AudioPlayer from '../components/AudioPlayer';
 import VideoPlayer from '../components/VideoPlayer';
@@ -34,6 +35,12 @@ interface Material {
   createdAt: string;
 }
 
+interface Student {
+  id: string;
+  email: string;
+  profile?: { firstName: string; lastName: string };
+}
+
 const MaterialsManagement: React.FC = () => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,6 +57,12 @@ const MaterialsManagement: React.FC = () => {
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
   const [viewingMaterial, setViewingMaterial] = useState<Material | null>(null);
   const [deletingMaterial, setDeletingMaterial] = useState<Material | null>(null);
+  const [assigningMaterial, setAssigningMaterial] = useState<Material | null>(null);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [studentSearch, setStudentSearch] = useState('');
+  const [assignmentDeadline, setAssignmentDeadline] = useState('');
+  const [assignmentLoading, setAssignmentLoading] = useState(false);
 
   // Formulario nuevo recurso estándar
   const [resTitle, setResTitle] = useState('');
@@ -62,6 +75,10 @@ const MaterialsManagement: React.FC = () => {
   useEffect(() => {
     fetchMaterials();
   }, [typeFilter, levelFilter, categoryFilter]);
+
+  useEffect(() => {
+    fetchStudents();
+  }, []);
 
   const fetchMaterials = async () => {
     try {
@@ -85,6 +102,17 @@ const MaterialsManagement: React.FC = () => {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchStudents = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+      const res = await fetch(`${apiUrl}/api/students`, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (res.ok) setStudents(await res.json());
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -139,6 +167,40 @@ const MaterialsManagement: React.FC = () => {
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const openAssignmentModal = (material: Material) => {
+    setAssigningMaterial(material);
+    setSelectedStudentIds([]);
+    setStudentSearch('');
+    setAssignmentDeadline('');
+  };
+
+  const handleAssignMaterial = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!assigningMaterial || selectedStudentIds.length === 0) return;
+
+    try {
+      setAssignmentLoading(true);
+      const token = localStorage.getItem('token');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+      const res = await fetch(`${apiUrl}/api/materials/${assigningMaterial.id}/assignments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ studentIds: selectedStudentIds, deadline: assignmentDeadline || null })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        window.alert(data.error || 'No se pudo asignar el material');
+        return;
+      }
+      setAssigningMaterial(null);
+      window.alert('Material asignado correctamente');
+    } catch (err) {
+      window.alert('Error de conexión al asignar el material');
+    } finally {
+      setAssignmentLoading(false);
     }
   };
 
@@ -360,13 +422,22 @@ const MaterialsManagement: React.FC = () => {
 
               {/* Action Bar */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border)', paddingTop: '1rem', marginTop: 'auto' }}>
-                <button
-                  onClick={() => setViewingMaterial(m)}
-                  className="btn-primary"
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1rem', fontSize: '0.85rem' }}
-                >
-                  <Play size={15} /> {m.type === 'FORM' ? 'Abrir Examen' : 'Ver / Reproducir'}
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => setViewingMaterial(m)}
+                    className="btn-primary"
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                  >
+                    <Play size={15} /> {m.type === 'FORM' ? 'Abrir Examen' : 'Ver / Reproducir'}
+                  </button>
+                  <button
+                    onClick={() => openAssignmentModal(m)}
+                    title="Compartir con alumnos"
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.8rem', border: 'none', borderRadius: '8px', background: '#16a34a', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: '0.82rem' }}
+                  >
+                    <Send size={15} /> Compartir / Asignar
+                  </button>
+                </div>
 
                 <div style={{ display: 'flex', gap: '0.4rem' }}>
                   {m.type === 'FORM' && (
@@ -488,6 +559,50 @@ const MaterialsManagement: React.FC = () => {
                 />
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {assigningMaterial && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 75, padding: '1rem' }}>
+          <div className="glass-panel animate-fade-in" style={{ width: '100%', maxWidth: '560px', maxHeight: '90vh', overflowY: 'auto', padding: '2rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '1.5rem' }}>
+              <div>
+                <span style={{ color: 'var(--primary)', fontSize: '0.75rem', fontWeight: 700 }}>COMPARTIR MATERIAL</span>
+                <h3 style={{ margin: '0.3rem 0 0', color: 'var(--text)' }}>Asignar Material: {assigningMaterial.title}</h3>
+              </div>
+              <button onClick={() => setAssigningMaterial(null)} aria-label="Cerrar" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={20} /></button>
+            </div>
+
+            <form onSubmit={handleAssignMaterial} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Alumnos destinatarios</label>
+                <input type="search" value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} placeholder="Buscar alumno por nombre o email..." style={{ width: '100%', padding: '0.7rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }} />
+                <div style={{ marginTop: '0.6rem', maxHeight: '190px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '8px' }}>
+                  {students.filter((student) => `${student.profile?.firstName || ''} ${student.profile?.lastName || ''} ${student.email}`.toLowerCase().includes(studentSearch.toLowerCase())).map((student) => {
+                    const selected = selectedStudentIds.includes(student.id);
+                    return (
+                      <label key={student.id} style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', padding: '0.7rem 0.8rem', borderBottom: '1px solid var(--border)', cursor: 'pointer', background: selected ? 'rgba(34,197,94,0.1)' : 'transparent' }}>
+                        <input type="checkbox" checked={selected} onChange={() => setSelectedStudentIds((ids) => selected ? ids.filter((id) => id !== student.id) : [...ids, student.id])} />
+                        <span style={{ color: 'var(--text)', fontSize: '0.9rem' }}>{student.profile?.firstName} {student.profile?.lastName} <small style={{ color: 'var(--text-muted)' }}>({student.email})</small></span>
+                      </label>
+                    );
+                  })}
+                  {students.length === 0 && <p style={{ padding: '1rem', margin: 0, color: 'var(--text-muted)', fontSize: '0.85rem' }}>No hay alumnos matriculados.</p>}
+                </div>
+                <span style={{ display: 'block', marginTop: '0.4rem', color: 'var(--text-muted)', fontSize: '0.78rem' }}>{selectedStudentIds.length} alumno(s) seleccionado(s)</span>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Fecha de entrega (opcional)</label>
+                <input type="date" value={assignmentDeadline} onChange={(event) => setAssignmentDeadline(event.target.value)} min={new Date().toISOString().split('T')[0]} style={{ width: '100%', padding: '0.7rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }} />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                <button type="button" onClick={() => setAssigningMaterial(null)} style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--text)', padding: '0.7rem 1.1rem', borderRadius: '8px', cursor: 'pointer' }}>Cancelar</button>
+                <button type="submit" disabled={assignmentLoading || selectedStudentIds.length === 0} className="btn-primary" style={{ padding: '0.7rem 1.1rem', opacity: assignmentLoading || selectedStudentIds.length === 0 ? 0.55 : 1 }}>{assignmentLoading ? 'Enviando...' : 'Enviar Material'}</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

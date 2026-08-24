@@ -31,17 +31,28 @@ enum MaterialType {
   FORM
 }
 
+enum PaymentState {
+  PENDING
+  PAID
+}
+
 model User {
   id           String       @id @default(uuid())
   email        String       @unique
   passwordHash String
   role         Role         @default(STUDENT)
+  courseDurationMonths Int?
+  monthlyFee   Int?
+  courseStartDate DateTime?
   createdAt    DateTime     @default(now())
   profile      Profile?
   courses      Course[]     @relation("TeacherCourses")
   enrollments  Enrollment[]
   submissions  Submission[]
   materials    Material[]
+  materialAssignments MaterialAssignment[] @relation("StudentMaterialAssignments")
+  paymentStatuses PaymentStatus[] @relation("StudentPayments")
+  markedPayments  PaymentStatus[] @relation("MarkedPayments")
 }
 
 model Profile {
@@ -127,4 +138,44 @@ model Material {
   teacher     User          @relation(fields: [teacherId], references: [id])
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
+  assignments MaterialAssignment[]
+}
+
+enum MaterialAssignmentStatus {
+  PENDING
+  COMPLETED
+}
+
+model MaterialAssignment {
+  id         String                   @id @default(uuid())
+  materialId String
+  studentId  String
+  deadline   DateTime?
+  status     MaterialAssignmentStatus @default(PENDING)
+  assignedAt DateTime                 @default(now())
+  material   Material                 @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  student    User                     @relation("StudentMaterialAssignments", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([materialId, studentId])
+  @@index([studentId, assignedAt])
+}
+
+model PaymentStatus {
+  id         String   @id @default(uuid())
+  studentId  String
+  markedById String?
+  month      Int
+  year       Int
+  amount     Int      @default(0)
+  dueDate    DateTime @default(now())
+  paidAt     DateTime?
+  status     PaymentState @default(PENDING)
+  isPaid     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  student    User     @relation("StudentPayments", fields: [studentId], references: [id])
+  markedBy   User?    @relation("MarkedPayments", fields: [markedById], references: [id])
+
+  @@unique([studentId, month, year])
+  @@index([studentId, dueDate])
 }

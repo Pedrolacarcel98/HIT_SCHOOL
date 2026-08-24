@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import { ensureStudentPaymentSchedule, getVisibleMonthTargets } from '../src/services/payments';
 
 const prisma = new PrismaClient();
 
@@ -26,11 +27,18 @@ async function main() {
 
   const student = await prisma.user.upsert({
     where: { email: 'alumno@hitschool.com' },
-    update: {},
+    update: {
+      monthlyFee: 35,
+      courseDurationMonths: 9,
+      courseStartDate: new Date('2026-06-01T12:00:00.000Z')
+    },
     create: {
       email: 'alumno@hitschool.com',
       passwordHash: hashedPassword, // 1234
       role: 'STUDENT',
+      monthlyFee: 35,
+      courseDurationMonths: 9,
+      courseStartDate: new Date('2026-06-01T12:00:00.000Z'),
       profile: {
         create: {
           firstName: 'Laura',
@@ -42,6 +50,34 @@ async function main() {
 
   console.log('Profesor de prueba creado:', teacher.email);
   console.log('Alumno de prueba creado:', student.email);
+
+  await ensureStudentPaymentSchedule(prisma, {
+    id: student.id,
+    role: student.role,
+    createdAt: student.createdAt,
+    courseDurationMonths: student.courseDurationMonths,
+    monthlyFee: student.monthlyFee,
+    courseStartDate: student.courseStartDate
+  });
+
+  const visibleMonths = getVisibleMonthTargets(3, new Date('2026-08-21T12:00:00.000Z'));
+
+  for (const target of visibleMonths) {
+    await prisma.paymentStatus.updateMany({
+      where: {
+        studentId: student.id,
+        month: target.month,
+        year: target.year
+      },
+      data: {
+        amount: 35,
+        markedById: target.month === 8 ? teacher.id : null,
+        isPaid: target.month === 8,
+        status: target.month === 8 ? 'PAID' : 'PENDING',
+        paidAt: target.month === 8 ? new Date('2026-08-03T12:00:00.000Z') : null
+      }
+    });
+  }
 
   // Crear materiales de ejemplo para la biblioteca
   const existingMaterial = await prisma.material.findFirst({ where: { teacherId: teacher.id } });

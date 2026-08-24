@@ -1,10 +1,30 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { BookOpen, Users, LogOut, GraduationCap, FolderArchive } from 'lucide-react';
+import { BookOpen, Users, LogOut, GraduationCap, FolderArchive, CircleDollarSign } from 'lucide-react';
 
 const TeacherLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('userRole');
+
+    if (!token) {
+      navigate('/');
+      return;
+    }
+
+    if (role !== 'TEACHER' && role !== 'ADMIN') {
+      navigate(role === 'STUDENT' ? '/student' : '/');
+    }
+  }, [navigate]);
+
+  const userRole = localStorage.getItem('userRole');
+
+  if (userRole !== 'TEACHER' && userRole !== 'ADMIN') {
+    return null;
+  }
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -16,6 +36,7 @@ const TeacherLayout: React.FC = () => {
     { label: 'Mis Clases', path: '/teacher', icon: <BookOpen size={20} /> },
     { label: 'Material de Clase', path: '/teacher/materials', icon: <FolderArchive size={20} /> },
     { label: 'Gestión de Alumnos', path: '/teacher/students', icon: <Users size={20} /> },
+    { label: 'Control de Pagos', path: '/teacher/payments', icon: <CircleDollarSign size={20} /> },
   ];
 
   return (

@@ -54,6 +54,61 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Obtener los materiales asignados al alumno autenticado
+router.get('/assigned-to-me', authenticateToken, async (req: AuthRequest, res: Response) => {
+  if (req.user?.role !== 'STUDENT') {
+    return res.status(403).json({ error: 'Solo los alumnos pueden consultar sus asignaciones' });
+  }
+
+  try {
+    const assignments = await prisma.materialAssignment.findMany({
+      where: { studentId: req.user.id },
+      orderBy: { assignedAt: 'desc' },
+      include: {
+        material: {
+          include: {
+            teacher: {
+              select: {
+                profile: { select: { firstName: true, lastName: true } }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    res.json(assignments);
+  } catch (error) {
+    console.error('Error al obtener materiales asignados:', error);
+    res.status(500).json({ error: 'Error interno al obtener materiales asignados' });
+  }
+});
+
+// Materiales asignados al alumno autenticado
+router.get('/assigned-to-me', authenticateToken, async (req: AuthRequest, res: Response) => {
+  if (req.user?.role !== 'STUDENT') {
+    return res.status(403).json({ error: 'Solo los alumnos pueden consultar sus asignaciones' });
+  }
+
+  try {
+    const assignments = await prisma.materialAssignment.findMany({
+      where: { studentId: req.user.id },
+      orderBy: { assignedAt: 'desc' },
+      include: {
+        material: {
+          include: {
+            teacher: { select: { profile: { select: { firstName: true, lastName: true } } } }
+          }
+        }
+      }
+    });
+    res.json(assignments);
+  } catch (error) {
+    console.error('Error al obtener materiales asignados:', error);
+    res.status(500).json({ error: 'Error interno al obtener materiales asignados' });
+  }
+});
+
 // Obtener un material específico
 router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
@@ -81,6 +136,96 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
   } catch (error) {
     console.error('Error al obtener material:', error);
     res.status(500).json({ error: 'Error interno al obtener el material' });
+  }
+});
+
+// Asignar un material a uno o varios alumnos
+router.post('/:id/assignments', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
+  const materialId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const { studentIds, deadline } = req.body as { studentIds?: unknown; deadline?: unknown };
+
+  if (!Array.isArray(studentIds) || studentIds.length === 0 || studentIds.some((id) => typeof id !== 'string')) {
+    return res.status(400).json({ error: 'Debes seleccionar al menos un alumno' });
+  }
+
+  let parsedDeadline: Date | null = null;
+  if (deadline) {
+    parsedDeadline = new Date(String(deadline));
+    if (Number.isNaN(parsedDeadline.getTime())) {
+      return res.status(400).json({ error: 'La fecha de entrega no es válida' });
+    }
+  }
+
+  try {
+    const material = await prisma.material.findFirst({ where: { id: materialId, teacherId: req.user!.id } });
+    if (!material) return res.status(404).json({ error: 'Material no encontrado' });
+
+    const uniqueStudentIds = [...new Set(studentIds as string[])];
+    const students = await prisma.user.findMany({
+      where: { id: { in: uniqueStudentIds }, role: 'STUDENT' },
+      select: { id: true }
+    });
+    if (students.length !== uniqueStudentIds.length) {
+      return res.status(400).json({ error: 'Uno o más alumnos no son válidos' });
+    }
+
+    const assignments = await prisma.$transaction(
+      students.map((student) => prisma.materialAssignment.upsert({
+        where: { materialId_studentId: { materialId, studentId: student.id } },
+        update: { deadline: parsedDeadline, status: 'PENDING' },
+        create: { materialId, studentId: student.id, deadline: parsedDeadline }
+      }))
+    );
+    res.status(201).json({ message: 'Material asignado correctamente', assignments });
+  } catch (error) {
+    console.error('Error al asignar material:', error);
+    res.status(500).json({ error: 'Error interno al asignar el material' });
+  }
+});
+
+// Asignar un material a uno o varios alumnos
+router.post('/:id/assignments', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
+  const materialId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const { studentIds, deadline } = req.body as { studentIds?: unknown; deadline?: unknown };
+
+  if (!Array.isArray(studentIds) || studentIds.length === 0 || studentIds.some((id) => typeof id !== 'string')) {
+    return res.status(400).json({ error: 'Debes seleccionar al menos un alumno' });
+  }
+
+  let parsedDeadline: Date | null = null;
+  if (deadline) {
+    parsedDeadline = new Date(String(deadline));
+    if (Number.isNaN(parsedDeadline.getTime())) {
+      return res.status(400).json({ error: 'La fecha de entrega no es válida' });
+    }
+  }
+
+  try {
+    const material = await prisma.material.findFirst({ where: { id: materialId, teacherId: req.user!.id } });
+    if (!material) {
+      return res.status(404).json({ error: 'Material no encontrado' });
+    }
+
+    const students = await prisma.user.findMany({
+      where: { id: { in: studentIds as string[] }, role: 'STUDENT' },
+      select: { id: true }
+    });
+    if (students.length !== new Set(studentIds as string[]).size) {
+      return res.status(400).json({ error: 'Uno o más alumnos no son válidos' });
+    }
+
+    const assignments = await prisma.$transaction(
+      students.map((student) => prisma.materialAssignment.upsert({
+        where: { materialId_studentId: { materialId, studentId: student.id } },
+        update: { deadline: parsedDeadline, status: 'PENDING' },
+        create: { materialId, studentId: student.id, deadline: parsedDeadline }
+      }))
+    );
+
+    res.status(201).json({ message: 'Material asignado correctamente', assignments });
+  } catch (error) {
+    console.error('Error al asignar material:', error);
+    res.status(500).json({ error: 'Error interno al asignar el material' });
   }
 });
 
