@@ -126,6 +126,16 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
             firstName: true,
             lastName: true
           }
+        },
+        enrollments: {
+          select: {
+            courseId: true,
+            course: {
+              select: {
+                title: true
+              }
+            }
+          }
         }
       },
       orderBy: { createdAt: 'desc' }

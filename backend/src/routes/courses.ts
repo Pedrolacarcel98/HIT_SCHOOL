@@ -127,6 +127,7 @@ router.post('/:id/assignments', authenticateToken, requireTeacher, verifyCourseA
   if (!title || !category) return res.status(400).json({ error: 'Título y categoría son obligatorios' });
 
   try {
+    const teacherId = req.user!.id;
     const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const assignment = await prisma.assignment.create({
       data: {
@@ -134,12 +135,82 @@ router.post('/:id/assignments', authenticateToken, requireTeacher, verifyCourseA
         description: description || '',
         category,
         dueDate: dueDate ? new Date(dueDate) : null,
-        courseId
+        courseId,
+        teacherId
       }
     });
     res.status(201).json(assignment);
   } catch (error) {
     res.status(500).json({ error: 'Error al crear tarea' });
+  }
+});
+
+// ALUMNOS DE LA CLASE
+router.get('/:id/students', authenticateToken, verifyCourseAccess, async (req: AuthRequest, res: Response) => {
+  try {
+    const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const enrollments = await prisma.enrollment.findMany({
+      where: { courseId },
+      include: {
+        student: {
+          select: {
+            id: true,
+            email: true,
+            profile: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            }
+          }
+        }
+      }
+    });
+    // Extraer solo la info del estudiante
+    const students = enrollments.map(e => e.student);
+    res.json(students);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener los alumnos del curso' });
+  }
+});
+
+router.post('/:id/enroll', authenticateToken, requireTeacher, verifyCourseAccess, async (req: AuthRequest, res: Response) => {
+  const { studentIds } = req.body;
+  if (!Array.isArray(studentIds) || studentIds.length === 0) {
+    return res.status(400).json({ error: 'Se requiere un array de studentIds' });
+  }
+
+  try {
+    const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    
+    // Evitar duplicados comprobando quién está ya matriculado
+    const existingEnrollments = await prisma.enrollment.findMany({
+      where: {
+        courseId,
+        studentId: { in: studentIds }
+      }
+    });
+    
+    const existingStudentIds = existingEnrollments.map(e => e.studentId);
+    const newStudentIds = studentIds.filter(id => !existingStudentIds.includes(id));
+
+    if (newStudentIds.length === 0) {
+      return res.status(400).json({ error: 'Todos los alumnos seleccionados ya están en la clase.' });
+    }
+
+    const dataToInsert = newStudentIds.map(studentId => ({
+      courseId,
+      studentId
+    }));
+
+    await prisma.enrollment.createMany({
+      data: dataToInsert
+    });
+
+    res.status(201).json({ message: 'Alumnos añadidos con éxito', count: newStudentIds.length });
+  } catch (error) {
+    console.error('Error en /enroll:', error);
+    res.status(500).json({ error: 'Error interno al matricular alumnos' });
   }
 });
 

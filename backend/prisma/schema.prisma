@@ -53,6 +53,8 @@ model User {
   materialAssignments MaterialAssignment[] @relation("StudentMaterialAssignments")
   paymentStatuses PaymentStatus[] @relation("StudentPayments")
   markedPayments  PaymentStatus[] @relation("MarkedPayments")
+  assignments     Assignment[]    @relation("StudentAssignments")
+  createdAssignments Assignment[] @relation("TeacherAssignments")
 }
 
 model Profile {
@@ -104,12 +106,19 @@ model Enrollment {
 
 model Assignment {
   id          String         @id @default(uuid())
-  courseId    String
+  teacherId   String
+  courseId    String?
+  studentId   String?
+  materialId  String?
   title       String
-  description String
+  description String?
   dueDate     DateTime?
   category    SkillCategory  @default(GRAMMAR_VOCABULARY)
-  course      Course         @relation(fields: [courseId], references: [id])
+  
+  teacher     User           @relation("TeacherAssignments", fields: [teacherId], references: [id])
+  course      Course?        @relation(fields: [courseId], references: [id])
+  student     User?          @relation("StudentAssignments", fields: [studentId], references: [id])
+  material    Material?      @relation(fields: [materialId], references: [id])
   submissions Submission[]
 }
 
@@ -117,7 +126,8 @@ model Submission {
   id           String     @id @default(uuid())
   assignmentId String
   studentId    String
-  content      String     // Text or URL
+  content      String?
+
   grade        Float?
   feedback     String?
   submittedAt  DateTime   @default(now())
@@ -138,7 +148,8 @@ model Material {
   teacher     User          @relation(fields: [teacherId], references: [id])
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
-  assignments MaterialAssignment[]
+  materialAssignments MaterialAssignment[]
+  assignments Assignment[]
 }
 
 enum MaterialAssignmentStatus {

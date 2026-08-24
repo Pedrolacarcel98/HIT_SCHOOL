@@ -11,6 +11,7 @@ import studentRoutes from './routes/students';
 import courseRoutes from './routes/courses';
 import materialRoutes from './routes/materials';
 import paymentRoutes from './routes/payments';
+import assignmentRoutes from './routes/assignments';
 
 app.use(cors());
 app.use(express.json());
@@ -20,6 +21,7 @@ app.use('/api/students', studentRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/materials', materialRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/assignments', assignmentRoutes);
 
 app.get('/', (req, res) => {
   res.send('API de HitSchool funcionando correctamente');

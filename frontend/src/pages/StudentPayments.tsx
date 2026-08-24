@@ -112,7 +112,7 @@ const StudentPayments: React.FC = () => {
   }, [monthsToShow]);
 
   return (
-    <div style={{ padding: '2.5rem', maxWidth: '1100px', margin: '0 auto' }}>
+    <div className="page-container">
       <header style={{ marginBottom: '2rem' }}>
         <h1 style={{ margin: 0, fontSize: '1.8rem', color: 'var(--text-main)' }}>Mis Pagos</h1>
         <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)' }}>
@@ -120,7 +120,7 @@ const StudentPayments: React.FC = () => {
         </p>
       </header>
 
-      <div className="glass-panel" style={{ padding: '2rem' }}>
+      <div className="glass-panel">
         {loading && (
           <p style={{ color: 'var(--text-muted)', margin: 0 }}>Cargando estado de pago...</p>
         )}
@@ -145,7 +145,7 @@ const StudentPayments: React.FC = () => {
                 </div>
 
                 {payment.error ? (
-                  <div style={{ borderRadius: '10px', border: '1px solid #ef4444', background: '#fee2e2', color: '#991b1b', padding: '1rem' }}>
+                  <div style={{ borderRadius: '10px', border: '1px solid #f7caca', background: '#fdf0f0', color: '#9e2a2b', padding: '1rem' }}>
                     {payment.error}
                   </div>
                 ) : payment.data ? (
@@ -171,18 +171,18 @@ const StudentPayments: React.FC = () => {
                     </div>
 
                     {payment.data.visualStatus === 'PAID' ? (
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#15803d', fontWeight: 700 }}>
-                        <CheckCircle2 size={22} />
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#24583e', background: 'var(--primary-light)', padding: '0.4rem 0.85rem', borderRadius: '20px', border: '1px solid var(--primary-border)', fontWeight: 700 }}>
+                        <CheckCircle2 size={18} />
                         Pagado
                       </div>
                     ) : payment.data.visualStatus === 'OVERDUE' ? (
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#b91c1c', fontWeight: 700 }}>
-                        <XCircle size={22} />
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#9e2a2b', background: '#fdf0f0', padding: '0.4rem 0.85rem', borderRadius: '20px', border: '1px solid #f7caca', fontWeight: 700 }}>
+                        <XCircle size={18} />
                         Impago
                       </div>
                     ) : (
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#a16207', fontWeight: 700 }}>
-                        <XCircle size={22} />
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#8d5b12', background: '#fef7e8', padding: '0.4rem 0.85rem', borderRadius: '20px', border: '1px solid #fae0b0', fontWeight: 700 }}>
+                        <XCircle size={18} />
                         Pendiente
                       </div>
                     )}

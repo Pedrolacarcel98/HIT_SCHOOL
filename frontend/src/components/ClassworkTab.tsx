@@ -12,13 +12,17 @@ const SKILL_CATEGORIES = [
 
 const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const [assignments, setAssignments] = useState<any[]>([]);
+  const [materials, setMaterials] = useState<any[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newCategory, setNewCategory] = useState('GRAMMAR_VOCABULARY');
+  const [newDueDate, setNewDueDate] = useState('');
+  const [newMaterialId, setNewMaterialId] = useState('');
 
   useEffect(() => {
     fetchAssignments();
+    fetchMaterials();
   }, [courseId]);
 
   const fetchAssignments = async () => {
@@ -34,6 +38,21 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     }
   };
 
+  const fetchMaterials = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+      const res = await fetch(`${apiUrl}/api/materials`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setMaterials(await res.json());
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle) return;
@@ -41,7 +60,8 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     try {
       const token = localStorage.getItem('token');
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-      const res = await fetch(`${apiUrl}/api/courses/${courseId}/assignments`, {
+      // Utilizamos el nuevo endpoint centralizado (o seguimos con el del curso que internamente hemos adaptado, pero mejor usar el global)
+      const res = await fetch(`${apiUrl}/api/assignments`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -50,7 +70,10 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
         body: JSON.stringify({ 
           title: newTitle, 
           description: newDesc, 
-          category: newCategory 
+          category: newCategory,
+          dueDate: newDueDate || null,
+          materialId: newMaterialId || null,
+          courseId: courseId
         }),
       });
 
@@ -58,6 +81,8 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
         setIsCreating(false);
         setNewTitle('');
         setNewDesc('');
+        setNewDueDate('');
+        setNewMaterialId('');
         fetchAssignments();
       }
     } catch (err) {
@@ -81,28 +106,44 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
         <form onSubmit={handleCreate} className="glass-panel animate-fade-in" style={{ marginBottom: '2rem', padding: '1.5rem' }}>
           <h3 style={{ marginTop: 0, color: 'var(--primary)', marginBottom: '1rem' }}>Nueva Tarea</h3>
           
-          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
-            <div style={{ flex: 2 }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Título</label>
-              <input type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} required style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)' }} />
+          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+            <div style={{ flex: '2 1 220px', minWidth: 0 }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '500' }}>Título</label>
+              <input type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} required style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }} />
             </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Categoría (Skill)</label>
-              <select value={newCategory} onChange={(e) => setNewCategory(e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
+            <div style={{ flex: '1 1 180px', minWidth: 0 }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '500' }}>Categoría (Skill)</label>
+              <select value={newCategory} onChange={(e) => setNewCategory(e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}>
                 {SKILL_CATEGORIES.map(cat => (
                   <option key={cat.id} value={cat.id}>{cat.label}</option>
                 ))}
               </select>
             </div>
           </div>
+
+          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+            <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '500' }}>Material Vinculado (Opcional)</label>
+              <select value={newMaterialId} onChange={(e) => setNewMaterialId(e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}>
+                <option value="">Ninguno</option>
+                {materials.map(m => (
+                  <option key={m.id} value={m.id}>{m.title} ({m.type})</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ flex: '1 1 180px', minWidth: 0 }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '500' }}>Fecha de Vencimiento (Opcional)</label>
+              <input type="datetime-local" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }} />
+            </div>
+          </div>
           
           <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', marginBottom: '0.5rem' }}>Descripción (opcional)</label>
-            <textarea value={newDesc} onChange={(e) => setNewDesc(e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', resize: 'vertical', minHeight: '80px' }} />
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '500' }}>Descripción / Instrucciones (Opcional)</label>
+            <textarea value={newDesc} onChange={(e) => setNewDesc(e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', resize: 'vertical', minHeight: '80px', background: 'var(--surface-alt)', color: 'var(--text-main)' }} />
           </div>
 
           <div style={{ display: 'flex', gap: '1rem' }}>
-            <button type="submit" className="btn-primary">Guardar</button>
+            <button type="submit" className="btn-primary">Asignar Tarea</button>
             <button type="button" onClick={() => setIsCreating(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancelar</button>
           </div>
         </form>

@@ -79,6 +79,38 @@ async function main() {
     });
   }
 
+  // --- NUEVA SECCIÓN: CREAR CLASE Y VINCULAR ALUMNO ---
+  let demoCourse = await prisma.course.findFirst({ where: { teacherId: teacher.id } });
+  if (!demoCourse) {
+    demoCourse = await prisma.course.create({
+      data: {
+        title: 'Inglés B2 - Grupo Mañana',
+        teacherId: teacher.id
+      }
+    });
+    console.log('Clase de demostración creada:', demoCourse.title);
+  }
+
+  // Matricular al alumno en la clase
+  const existingEnrollment = await prisma.enrollment.findUnique({
+    where: {
+      studentId_courseId: {
+        studentId: student.id,
+        courseId: demoCourse.id
+      }
+    }
+  });
+
+  if (!existingEnrollment) {
+    await prisma.enrollment.create({
+      data: {
+        studentId: student.id,
+        courseId: demoCourse.id
+      }
+    });
+    console.log('Alumno matriculado en la clase de demostración.');
+  }
+
   // Crear materiales de ejemplo para la biblioteca
   const existingMaterial = await prisma.material.findFirst({ where: { teacherId: teacher.id } });
   if (!existingMaterial) {
@@ -167,6 +199,26 @@ async function main() {
     });
 
     console.log('Materiales de demostración creados con éxito.');
+
+    // Asignar una tarea de ejemplo para que el dashboard del alumno no esté vacío
+    const materialForTask = await prisma.material.findFirst({ where: { teacherId: teacher.id } });
+    if (materialForTask && demoCourse) {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      
+      await prisma.assignment.create({
+        data: {
+          title: 'Simulacro B2 Listening - Obligatorio',
+          description: 'Por favor, completad este simulacro antes de la clase de mañana.',
+          category: 'MOCK_EXAM',
+          dueDate: tomorrow,
+          teacherId: teacher.id,
+          courseId: demoCourse.id,
+          materialId: materialForTask.id
+        }
+      });
+      console.log('Tarea de demostración asignada a la clase.');
+    }
   }
 }
 

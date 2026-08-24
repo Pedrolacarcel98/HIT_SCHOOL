@@ -189,7 +189,7 @@ const StudentsManagement: React.FC = () => {
   });
 
   return (
-    <div style={{ padding: '2.5rem', maxWidth: '1200px', margin: '0 auto' }}>
+    <div className="page-container">
       {/* Toast Notification */}
       {notification && (
         <div style={{
@@ -198,9 +198,9 @@ const StudentsManagement: React.FC = () => {
           right: '24px',
           padding: '1rem 1.5rem',
           borderRadius: '8px',
-          background: notification.type === 'success' ? '#166534' : '#991b1b',
+          background: notification.type === 'success' ? 'var(--primary)' : '#991b1b',
           color: '#ffffff',
-          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)',
+          boxShadow: 'var(--shadow-lg)',
           display: 'flex',
           alignItems: 'center',
           gap: '0.75rem',
@@ -215,7 +215,7 @@ const StudentsManagement: React.FC = () => {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.8rem', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <h1 style={{ margin: 0, fontSize: '1.8rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <Users style={{ color: 'var(--primary)' }} /> Gestión de Alumnos
           </h1>
           <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)', fontSize: '0.95rem' }}>
@@ -233,8 +233,8 @@ const StudentsManagement: React.FC = () => {
       </div>
 
       {/* Stats Bar & Search */}
-      <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '2rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ position: 'relative', minWidth: '320px', flex: 1, maxWidth: '450px' }}>
+      <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ position: 'relative', flex: '1 1 240px', minWidth: 0, maxWidth: '450px' }}>
           <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
           <input
             type="text"
@@ -246,26 +246,27 @@ const StudentsManagement: React.FC = () => {
               padding: '0.75rem 1rem 0.75rem 2.5rem',
               borderRadius: '8px',
               border: '1px solid var(--border)',
-              background: 'var(--surface)',
-              color: 'var(--text)',
+              background: 'var(--surface-alt)',
+              color: 'var(--text-main)',
               outline: 'none',
               fontSize: '0.9rem'
             }}
           />
         </div>
 
-        <div style={{ display: 'flex', gap: '1rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+        <div style={{ display: 'flex', gap: '1rem', color: 'var(--text-muted)', fontSize: '0.9rem', flexWrap: 'wrap' }}>
           <span>Total alumnos: <strong style={{ color: 'var(--primary)' }}>{students.length}</strong></span>
           <span>•</span>
-          <span>Mostrando: <strong style={{ color: 'var(--text)' }}>{filteredStudents.length}</strong></span>
+          <span>Mostrando: <strong style={{ color: 'var(--text-main)' }}>{filteredStudents.length}</strong></span>
         </div>
       </div>
 
       {/* Students Table */}
       <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-          <thead>
-            <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid var(--border)' }}>
+        <div className="table-responsive">
+          <table style={{ width: '100%', minWidth: '680px', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <thead>
+              <tr style={{ background: 'var(--surface-alt)', borderBottom: '1px solid var(--border)' }}>
               <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.85rem' }}>ALUMNO</th>
               <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.85rem' }}>CORREO</th>
               <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.85rem' }}>TARIFA</th>
@@ -373,6 +374,7 @@ const StudentsManagement: React.FC = () => {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Modal: Crear Alumno */}

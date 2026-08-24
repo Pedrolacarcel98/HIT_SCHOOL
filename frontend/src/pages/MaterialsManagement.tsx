@@ -232,11 +232,11 @@ const MaterialsManagement: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: '2.5rem', maxWidth: '1300px', margin: '0 auto' }}>
+    <div className="page-container">
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.8rem', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <h1 style={{ margin: 0, fontSize: '1.8rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <FolderArchive style={{ color: 'var(--primary)' }} /> Material de Clase
           </h1>
           <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)' }}>
@@ -244,19 +244,14 @@ const MaterialsManagement: React.FC = () => {
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           <button
             onClick={() => setShowAddResourceModal(true)}
+            className="btn-secondary"
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '0.5rem',
-              padding: '0.75rem 1.25rem',
-              borderRadius: '8px',
-              border: '1px solid var(--border)',
-              background: 'var(--surface)',
-              color: 'var(--text)',
-              fontWeight: '600',
               cursor: 'pointer'
             }}
           >
@@ -266,7 +261,7 @@ const MaterialsManagement: React.FC = () => {
           <button
             onClick={() => { setEditingMaterial(null); setShowFormBuilder(true); }}
             className="btn-primary"
-            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.25rem' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
           >
             <HelpCircle size={18} /> Crear Examen / Formulario
           </button>
@@ -274,7 +269,7 @@ const MaterialsManagement: React.FC = () => {
       </div>
 
       {/* Tabs por Tipo de Material */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
+      <div className="scrollable-tabs" style={{ marginBottom: '1.5rem' }}>
         {[
           { id: 'ALL', label: 'Todos los Recursos', icon: <FolderArchive size={16} /> },
           { id: 'DOCUMENT', label: 'Documentos', icon: <FileText size={16} /> },
@@ -293,8 +288,8 @@ const MaterialsManagement: React.FC = () => {
               padding: '0.6rem 1.2rem',
               borderRadius: '20px',
               border: typeFilter === tab.id ? '1px solid var(--primary)' : '1px solid var(--border)',
-              background: typeFilter === tab.id ? 'rgba(34,197,94,0.15)' : 'var(--surface)',
-              color: typeFilter === tab.id ? 'var(--primary)' : 'var(--text-muted)',
+              background: typeFilter === tab.id ? 'var(--primary-light)' : 'var(--surface)',
+              color: typeFilter === tab.id ? 'var(--primary-text)' : 'var(--text-muted)',
               fontWeight: typeFilter === tab.id ? '600' : '500',
               cursor: 'pointer',
               whiteSpace: 'nowrap',
@@ -380,7 +375,7 @@ const MaterialsManagement: React.FC = () => {
           </p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.5rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '1.25rem' }}>
           {filteredMaterials.map(m => (
             <div
               key={m.id}
@@ -406,7 +401,7 @@ const MaterialsManagement: React.FC = () => {
                 </div>
 
                 <div style={{ display: 'flex', gap: '0.4rem' }}>
-                  <span style={{ fontSize: '0.7rem', fontWeight: 'bold', padding: '2px 8px', borderRadius: '12px', background: 'rgba(34,197,94,0.1)', color: 'var(--primary)' }}>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 'bold', padding: '2px 8px', borderRadius: '12px', background: 'var(--primary-light)', color: 'var(--primary-text)', border: '1px solid var(--primary-border)' }}>
                     {m.level}
                   </span>
                 </div>
@@ -433,7 +428,7 @@ const MaterialsManagement: React.FC = () => {
                   <button
                     onClick={() => openAssignmentModal(m)}
                     title="Compartir con alumnos"
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.8rem', border: 'none', borderRadius: '8px', background: '#16a34a', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: '0.82rem' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.8rem', border: '1px solid var(--primary-border)', borderRadius: '8px', background: 'var(--primary-light)', color: 'var(--primary-text)', fontWeight: 600, cursor: 'pointer', fontSize: '0.82rem' }}
                   >
                     <Send size={15} /> Compartir / Asignar
                   </button>
@@ -582,7 +577,7 @@ const MaterialsManagement: React.FC = () => {
                   {students.filter((student) => `${student.profile?.firstName || ''} ${student.profile?.lastName || ''} ${student.email}`.toLowerCase().includes(studentSearch.toLowerCase())).map((student) => {
                     const selected = selectedStudentIds.includes(student.id);
                     return (
-                      <label key={student.id} style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', padding: '0.7rem 0.8rem', borderBottom: '1px solid var(--border)', cursor: 'pointer', background: selected ? 'rgba(34,197,94,0.1)' : 'transparent' }}>
+                      <label key={student.id} style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', padding: '0.7rem 0.8rem', borderBottom: '1px solid var(--border)', cursor: 'pointer', background: selected ? 'var(--primary-light)' : 'transparent' }}>
                         <input type="checkbox" checked={selected} onChange={() => setSelectedStudentIds((ids) => selected ? ids.filter((id) => id !== student.id) : [...ids, student.id])} />
                         <span style={{ color: 'var(--text)', fontSize: '0.9rem' }}>{student.profile?.firstName} {student.profile?.lastName} <small style={{ color: 'var(--text-muted)' }}>({student.email})</small></span>
                       </label>

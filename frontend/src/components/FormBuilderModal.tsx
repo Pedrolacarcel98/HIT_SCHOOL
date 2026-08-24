@@ -162,7 +162,7 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
       <div className="glass-panel animate-fade-in" style={{
         width: '100%',
         maxWidth: '900px',
-        maxHeight: '90vh',
+        maxHeight: '92vh',
         display: 'flex',
         flexDirection: 'column',
         padding: 0,
@@ -170,15 +170,17 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
       }}>
         {/* Modal Header */}
         <div style={{
-          padding: '1.25rem 2rem',
+          padding: '1.25rem 1.5rem',
           borderBottom: '1px solid var(--border)',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          background: 'rgba(255,255,255,0.02)'
+          background: 'var(--surface-alt)',
+          gap: '1rem',
+          flexWrap: 'wrap'
         }}>
           <div>
-            <h3 style={{ margin: 0, color: 'var(--text)', fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <HelpCircle style={{ color: 'var(--primary)' }} />
               {initialData?.id ? 'Editar Examen Interactivo' : 'Creador de Examen / Formulario'}
             </h3>
@@ -187,7 +189,7 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
             </span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <button
               type="button"
               onClick={() => setPreviewMode(!previewMode)}
@@ -195,11 +197,11 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.4rem',
-                padding: '0.5rem 1rem',
+                padding: '0.5rem 0.9rem',
                 borderRadius: '6px',
                 border: '1px solid var(--border)',
-                background: previewMode ? 'var(--primary)' : 'var(--background)',
-                color: previewMode ? '#ffffff' : 'var(--text)',
+                background: previewMode ? 'var(--primary)' : 'var(--surface)',
+                color: previewMode ? '#ffffff' : 'var(--text-main)',
                 cursor: 'pointer',
                 fontSize: '0.85rem'
               }}
@@ -207,16 +209,16 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
               <Eye size={16} /> {previewMode ? 'Modo Editor' : 'Vista Previa'}
             </button>
 
-            <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}>
               <X size={22} />
             </button>
           </div>
         </div>
 
         {/* Modal Body */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '2rem' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem' }}>
           {error && (
-            <div style={{ padding: '0.75rem 1rem', background: '#fee2e2', color: '#ef4444', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
+            <div style={{ padding: '0.75rem 1rem', background: '#fdf0f0', color: '#9e2a2b', border: '1px solid #f7caca', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
               {error}
             </div>
           )}
@@ -397,7 +399,7 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
                                     padding: '0.5rem 0.75rem',
                                     borderRadius: '6px',
                                     border: isCorrect ? '1px solid var(--primary)' : '1px solid var(--border)',
-                                    background: isCorrect ? 'rgba(34,197,94,0.05)' : 'var(--background)',
+                                    background: isCorrect ? 'var(--primary-subtle)' : 'var(--background)',
                                     color: 'var(--text)'
                                   }}
                                 />
@@ -464,9 +466,9 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
                     gap: '0.5rem',
                     padding: '0.85rem',
                     borderRadius: '8px',
-                    border: '2px dashed var(--primary)',
-                    background: 'rgba(34, 197, 94, 0.05)',
-                    color: 'var(--primary)',
+                    border: '2px dashed var(--primary-border)',
+                    background: 'var(--primary-subtle)',
+                    color: 'var(--primary-text)',
                     fontWeight: '600',
                     cursor: 'pointer'
                   }}

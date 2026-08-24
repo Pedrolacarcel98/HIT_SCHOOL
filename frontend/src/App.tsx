@@ -7,6 +7,7 @@ import TeacherDashboard from './pages/TeacherDashboard';
 import StudentsManagement from './pages/StudentsManagement';
 import MaterialsManagement from './pages/MaterialsManagement';
 import CourseView from './pages/CourseView';
+import StudentCourseView from './pages/StudentCourseView';
 import StudentDashboard from './pages/StudentDashboard';
 import StudentPayments from './pages/StudentPayments';
 import TeacherPayments from './pages/TeacherPayments';
@@ -30,6 +31,7 @@ function App() {
         <Route path="/student" element={<StudentLayout />}>
           <Route index element={<StudentPayments />} />
           <Route path="dashboard" element={<StudentDashboard />} />
+          <Route path="course/:id" element={<StudentCourseView />} />
         </Route>
       </Routes>
     </BrowserRouter>

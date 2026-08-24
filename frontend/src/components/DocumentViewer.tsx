@@ -19,8 +19,8 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({ url, title }) => {
       border: '1px solid var(--border)',
       display: 'flex',
       flexDirection: 'column',
-      height: '600px',
-      boxShadow: '0 8px 24px rgba(0,0,0,0.2)'
+      height: 'min(600px, 70vh)',
+      boxShadow: 'var(--shadow-lg)'
     }}>
       {/* Header bar */}
       <div style={{

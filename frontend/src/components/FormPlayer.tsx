@@ -119,13 +119,14 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                   width: '64px',
                   height: '64px',
                   borderRadius: '50%',
-                  background: 'rgba(34, 197, 94, 0.15)',
-                  color: 'var(--primary)',
+                  background: 'var(--primary-light)',
+                  color: 'var(--primary-text)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   margin: '0 auto 1.5rem',
-                  boxShadow: '0 0 20px rgba(34, 197, 94, 0.2)'
+                  border: '1px solid var(--primary-border)',
+                  boxShadow: 'var(--shadow-primary)'
                 }}>
                   <CheckCircle2 size={36} />
                 </div>
@@ -160,12 +161,13 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                   width: '64px',
                   height: '64px',
                   borderRadius: '50%',
-                  background: percentage >= 60 ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                  color: percentage >= 60 ? '#22c55e' : '#ef4444',
+                  background: percentage >= 60 ? 'var(--primary-light)' : 'rgba(239, 68, 68, 0.12)',
+                  color: percentage >= 60 ? 'var(--primary-text)' : '#9e2a2b',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  margin: '0 auto 1.25rem'
+                  margin: '0 auto 1.25rem',
+                  border: `1px solid ${percentage >= 60 ? 'var(--primary-border)' : '#f7caca'}`
                 }}>
                   <Award size={36} />
                 </div>
@@ -176,10 +178,10 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                   margin: '1.5rem 0',
                   padding: '1.25rem',
                   borderRadius: '12px',
-                  background: percentage >= 60 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                  border: `1px solid ${percentage >= 60 ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
+                  background: percentage >= 60 ? 'var(--primary-subtle)' : '#fdf0f0',
+                  border: `1px solid ${percentage >= 60 ? 'var(--primary-border)' : '#f7caca'}`
                 }}>
-                  <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: percentage >= 60 ? '#22c55e' : '#ef4444' }}>
+                  <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: percentage >= 60 ? 'var(--primary-text)' : '#9e2a2b' }}>
                     {score} <span style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>/ {totalPoints}</span>
                   </div>
                   <div style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--text)', marginTop: '0.25rem' }}>
@@ -292,12 +294,12 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                           padding: '1.25rem',
                           borderRadius: '10px',
                           background: 'var(--surface)',
-                          border: `1px solid ${isCorrect ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
-                          borderLeft: `4px solid ${isCorrect ? '#22c55e' : '#ef4444'}`
+                          border: `1px solid ${isCorrect ? 'var(--primary-border)' : '#f7caca'}`,
+                          borderLeft: `4px solid ${isCorrect ? 'var(--primary)' : '#ef4444'}`
                         }}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                          <span style={{ fontWeight: 'bold', fontSize: '0.85rem', color: isCorrect ? '#22c55e' : '#ef4444', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                          <span style={{ fontWeight: 'bold', fontSize: '0.85rem', color: isCorrect ? 'var(--primary-text)' : '#9e2a2b', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                             {isCorrect ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
                             Pregunta {idx + 1} ({isCorrect ? `+${q.points || 1} pts` : '0 pts'})
                           </span>
@@ -422,14 +424,14 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
 
                     if (isSubmitted) {
                       if (isOptionCorrect) {
-                        bg = 'rgba(34, 197, 94, 0.15)';
-                        border = '1px solid #22c55e';
+                        bg = 'var(--primary-light)';
+                        border = '1px solid var(--primary)';
                       } else if (isSelected && !isOptionCorrect) {
-                        bg = 'rgba(239, 68, 68, 0.15)';
+                        bg = 'rgba(239, 68, 68, 0.12)';
                         border = '1px solid #ef4444';
                       }
                     } else if (isSelected) {
-                      bg = 'rgba(34, 197, 94, 0.1)';
+                      bg = 'var(--primary-light)';
                       border = '1px solid var(--primary)';
                     }
 
@@ -513,7 +515,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
               fontSize: '1rem',
               fontWeight: 'bold',
               alignSelf: 'center',
-              boxShadow: '0 4px 14px rgba(34,197,94,0.4)',
+              boxShadow: 'var(--shadow-primary)',
               cursor: 'pointer'
             }}
           >

@@ -50,13 +50,13 @@ const StreamTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   return (
     <div className="animate-fade-in">
       <div className="glass-panel" style={{ marginBottom: '2rem', padding: '1.5rem' }}>
-        <form onSubmit={handlePost} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
-          <div style={{ flex: 1 }}>
+        <form onSubmit={handlePost} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 240px', minWidth: 0 }}>
             <textarea 
               value={newPost}
               onChange={(e) => setNewPost(e.target.value)}
               placeholder="Anuncia algo a tu clase..."
-              style={{ width: '100%', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)', resize: 'none', minHeight: '80px', fontFamily: 'inherit' }}
+              style={{ width: '100%', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', resize: 'vertical', minHeight: '80px', fontFamily: 'inherit' }}
             />
           </div>
           <button type="submit" className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', height: 'fit-content' }}>

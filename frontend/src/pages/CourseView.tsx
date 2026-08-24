@@ -31,29 +31,38 @@ const CourseView: React.FC = () => {
     }
   };
 
-  if (!course) return <div style={{ padding: '2rem', textAlign: 'center' }}>Cargando...</div>;
+  if (!course) return <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>Cargando aula...</div>;
 
   return (
-    <div className="app-container" style={{ display: 'block', padding: 0 }}>
+    <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
       {/* Navbar Superior */}
-      <nav style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '0 2rem', position: 'sticky', top: 0, zIndex: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', height: '64px', gap: '2rem' }}>
-          <button onClick={() => navigate('/teacher')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--text)' }}>
-            <ArrowLeft size={20} />
-          </button>
-          <h2 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--text)' }}>{course.title}</h2>
-          
-          <div style={{ display: 'flex', gap: '2rem', marginLeft: 'auto', height: '100%' }}>
-            <TabButton active={activeTab === 'stream'} onClick={() => setActiveTab('stream')} icon={<MessageSquare size={18}/>} label="Tablón" />
-            <TabButton active={activeTab === 'classwork'} onClick={() => setActiveTab('classwork')} icon={<BookOpen size={18}/>} label="Trabajo de clase" />
-            <TabButton active={activeTab === 'people'} onClick={() => setActiveTab('people')} icon={<Users size={18}/>} label="Personas" />
-            <TabButton active={activeTab === 'grades'} onClick={() => setActiveTab('grades')} icon={<Award size={18}/>} label="Calificaciones" />
+      <nav style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, zIndex: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1.5rem', borderBottom: '1px solid var(--border)', gap: '1rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', minWidth: 0 }}>
+            <button
+              onClick={() => navigate('/teacher')}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--text-main)', padding: '4px' }}
+              aria-label="Volver a mis clases"
+            >
+              <ArrowLeft size={20} />
+            </button>
+            <h2 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {course.title}
+            </h2>
           </div>
+        </div>
+
+        {/* Pestañas con scroll horizontal en móvil */}
+        <div className="scrollable-tabs" style={{ padding: '0 1.5rem', height: '48px', alignItems: 'center', gap: '1.5rem' }}>
+          <TabButton active={activeTab === 'stream'} onClick={() => setActiveTab('stream')} icon={<MessageSquare size={18}/>} label="Tablón" />
+          <TabButton active={activeTab === 'classwork'} onClick={() => setActiveTab('classwork')} icon={<BookOpen size={18}/>} label="Trabajo de clase" />
+          <TabButton active={activeTab === 'people'} onClick={() => setActiveTab('people')} icon={<Users size={18}/>} label="Personas" />
+          <TabButton active={activeTab === 'grades'} onClick={() => setActiveTab('grades')} icon={<Award size={18}/>} label="Calificaciones" />
         </div>
       </nav>
 
       {/* Contenido Principal */}
-      <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '2rem' }}>
+      <div className="page-container" style={{ maxWidth: '1000px' }}>
         {activeTab === 'stream' && <StreamTab courseId={id!} />}
         {activeTab === 'classwork' && <ClassworkTab courseId={id!} />}
         {activeTab === 'people' && <PeopleTab courseId={id!} />}
@@ -77,7 +86,9 @@ const TabButton = ({ active, onClick, icon, label }: any) => (
       gap: '0.5rem',
       fontWeight: active ? '600' : '400',
       padding: '0 0.5rem',
-      height: '100%'
+      height: '100%',
+      whiteSpace: 'nowrap',
+      fontSize: '0.9rem'
     }}
   >
     {icon} {label}

@@ -102,7 +102,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, title, autoPlay = false 
       {title && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontWeight: '600', fontSize: '0.95rem', color: 'var(--text)' }}>{title}</span>
-          <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 'bold', background: 'rgba(34,197,94,0.1)', padding: '2px 8px', borderRadius: '4px' }}>
+          <span style={{ fontSize: '0.75rem', color: 'var(--primary-text)', fontWeight: 'bold', background: 'var(--primary-light)', border: '1px solid var(--primary-border)', padding: '2px 8px', borderRadius: '4px' }}>
             LISTENING AUDIO
           </span>
         </div>
@@ -133,7 +133,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, title, autoPlay = false 
       </div>
 
       {/* Controles Principales */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.25rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           {/* Rebobinar 5s */}
           <button
@@ -161,7 +161,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, title, autoPlay = false 
               justifyContent: 'center',
               color: '#ffffff',
               cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(34,197,94,0.4)',
+              boxShadow: 'var(--shadow-primary)',
               transition: 'transform 0.1s ease'
             }}
             onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}

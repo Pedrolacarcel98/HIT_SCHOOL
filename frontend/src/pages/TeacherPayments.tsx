@@ -143,18 +143,18 @@ const TeacherPayments: React.FC = () => {
 
   const getStatusStyles = (payment: StudentPaymentItem) => {
     if (payment.visualStatus === 'PAID') {
-      return { color: '#15803d', background: '#dcfce7', border: '#16a34a', label: 'Pagado', icon: <Check size={16} /> };
+      return { color: '#24583e', background: '#eaf4ef', border: '#bfe0d0', label: 'Pagado', icon: <Check size={16} /> };
     }
 
     if (payment.visualStatus === 'OVERDUE') {
-      return { color: '#b91c1c', background: '#fee2e2', border: '#ef4444', label: 'Impago', icon: <AlertTriangle size={16} /> };
+      return { color: '#9e2a2b', background: '#fdf0f0', border: '#f7caca', label: 'Impago', icon: <AlertTriangle size={16} /> };
     }
 
-    return { color: '#a16207', background: '#fef3c7', border: '#f59e0b', label: 'Pendiente', icon: <X size={16} /> };
+    return { color: '#8d5b12', background: '#fef7e8', border: '#fae0b0', label: 'Pendiente', icon: <X size={16} /> };
   };
 
   return (
-    <div style={{ padding: '2.5rem', maxWidth: '1280px', margin: '0 auto' }}>
+    <div className="page-container">
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', gap: '1rem', flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '1.8rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
@@ -167,26 +167,27 @@ const TeacherPayments: React.FC = () => {
       </header>
 
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        <div className="glass-panel" style={{ padding: '1rem 1.25rem', minWidth: '220px' }}>
+        <div className="glass-panel" style={{ padding: '1rem 1.25rem', flex: '1 1 180px' }}>
           <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Pagos marcados</p>
-          <p style={{ margin: '0.35rem 0 0', fontSize: '1.35rem', fontWeight: 700, color: '#15803d' }}>{totalPaid}</p>
+          <p style={{ margin: '0.35rem 0 0', fontSize: '1.35rem', fontWeight: 700, color: '#24583e' }}>{totalPaid}</p>
         </div>
-        <div className="glass-panel" style={{ padding: '1rem 1.25rem', minWidth: '220px' }}>
+        <div className="glass-panel" style={{ padding: '1rem 1.25rem', flex: '1 1 180px' }}>
           <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Warnings de impago</p>
-          <p style={{ margin: '0.35rem 0 0', fontSize: '1.35rem', fontWeight: 700, color: '#b91c1c' }}>{totalOverdue}</p>
+          <p style={{ margin: '0.35rem 0 0', fontSize: '1.35rem', fontWeight: 700, color: '#9e2a2b' }}>{totalOverdue}</p>
         </div>
       </div>
 
       {error && (
-        <div style={{ marginBottom: '1rem', borderRadius: '10px', border: '1px solid #ef4444', background: '#fee2e2', color: '#991b1b', padding: '1rem' }}>
+        <div style={{ marginBottom: '1rem', borderRadius: '10px', border: '1px solid #f7caca', background: '#fdf0f0', color: '#9e2a2b', padding: '1rem' }}>
           {error}
         </div>
       )}
 
       <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-          <thead>
-            <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid var(--border)' }}>
+        <div className="table-responsive">
+          <table style={{ width: '100%', minWidth: '600px', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <thead>
+              <tr style={{ background: 'var(--surface-alt)', borderBottom: '1px solid var(--border)' }}>
               <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.85rem' }}>ALUMNO</th>
               <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.85rem' }}>TARIFA</th>
               <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.85rem' }}>PAGOS</th>
@@ -292,9 +293,9 @@ const TeacherPayments: React.FC = () => {
                                     width: '42px',
                                     height: '42px',
                                     borderRadius: '10px',
-                                    border: `1px solid ${payment.isPaid ? '#16a34a' : 'var(--border)'}`,
-                                    background: payment.isPaid ? '#dcfce7' : 'var(--surface)',
-                                    color: payment.isPaid ? '#166534' : 'var(--text-muted)',
+                                    border: `1px solid ${payment.isPaid ? 'var(--primary)' : 'var(--border)'}`,
+                                    background: payment.isPaid ? 'var(--primary-light)' : 'var(--surface)',
+                                    color: payment.isPaid ? 'var(--primary-text)' : 'var(--text-muted)',
                                     display: 'inline-flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
@@ -322,6 +323,7 @@ const TeacherPayments: React.FC = () => {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
