@@ -211,6 +211,7 @@ router.delete('/:id', authenticateToken, requireTeacher, async (req, res) => {
     await prisma.$transaction([
       prisma.paymentStatus.deleteMany({ where: { studentId } }),
       prisma.submission.deleteMany({ where: { studentId } }),
+      prisma.materialAssignment.deleteMany({ where: { studentId } }),
       prisma.enrollment.deleteMany({ where: { studentId } }),
       prisma.profile.deleteMany({ where: { userId: studentId } }),
       prisma.user.delete({ where: { id: studentId } })

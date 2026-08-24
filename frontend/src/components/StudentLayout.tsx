@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { CircleDollarSign, GraduationCap, LogOut } from 'lucide-react';
+import { CircleDollarSign, FileText, GraduationCap, LogOut } from 'lucide-react';
 
 const StudentLayout: React.FC = () => {
   const navigate = useNavigate();
@@ -22,6 +22,7 @@ const StudentLayout: React.FC = () => {
   };
 
   const navItems = [
+    { label: 'Material asignado', path: '/student/dashboard', icon: <FileText size={20} /> },
     { label: 'Mis Pagos', path: '/student', icon: <CircleDollarSign size={20} /> }
   ];
 

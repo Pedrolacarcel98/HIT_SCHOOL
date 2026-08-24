@@ -50,6 +50,7 @@ model User {
   enrollments  Enrollment[]
   submissions  Submission[]
   materials    Material[]
+  materialAssignments MaterialAssignment[] @relation("StudentMaterialAssignments")
   paymentStatuses PaymentStatus[] @relation("StudentPayments")
   markedPayments  PaymentStatus[] @relation("MarkedPayments")
 }
@@ -137,6 +138,26 @@ model Material {
   teacher     User          @relation(fields: [teacherId], references: [id])
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
+  assignments MaterialAssignment[]
+}
+
+enum MaterialAssignmentStatus {
+  PENDING
+  COMPLETED
+}
+
+model MaterialAssignment {
+  id         String                   @id @default(uuid())
+  materialId String
+  studentId  String
+  deadline   DateTime?
+  status     MaterialAssignmentStatus @default(PENDING)
+  assignedAt DateTime                 @default(now())
+  material   Material                 @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  student    User                     @relation("StudentMaterialAssignments", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([materialId, studentId])
+  @@index([studentId, assignedAt])
 }
 
 model PaymentStatus {
