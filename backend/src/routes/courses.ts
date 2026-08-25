@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { PrismaClient, SkillCategory } from '@prisma/client';
+import { Prisma, PrismaClient, SkillCategory } from '@prisma/client';
 import { authenticateToken, requireTeacher, AuthRequest } from '../middleware/auth';
 
 const router = Router();
@@ -108,6 +108,28 @@ router.post('/:id/posts', authenticateToken, requireTeacher, verifyCourseAccess,
   }
 });
 
+router.delete('/:id/posts/:postId', authenticateToken, requireTeacher, verifyCourseAccess, async (req: AuthRequest, res: Response) => {
+  try {
+    const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const postId = Array.isArray(req.params.postId) ? req.params.postId[0] : req.params.postId;
+
+    const deleted = await prisma.post.deleteMany({
+      where: {
+        id: postId,
+        courseId
+      }
+    });
+
+    if (deleted.count === 0) {
+      return res.status(404).json({ error: 'El anuncio no existe en este curso' });
+    }
+
+    res.json({ message: 'Anuncio eliminado correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al eliminar anuncio' });
+  }
+});
+
 // TRABAJO DE CLASE (Assignments)
 router.get('/:id/assignments', authenticateToken, verifyCourseAccess, async (req: AuthRequest, res: Response) => {
   try {
@@ -123,24 +145,52 @@ router.get('/:id/assignments', authenticateToken, verifyCourseAccess, async (req
 });
 
 router.post('/:id/assignments', authenticateToken, requireTeacher, verifyCourseAccess, async (req: AuthRequest, res: Response) => {
-  const { title, description, category, dueDate } = req.body;
+  const { title, description, category, dueDate, materialId } = req.body;
   if (!title || !category) return res.status(400).json({ error: 'Título y categoría son obligatorios' });
+  if (!Object.values(SkillCategory).includes(category as SkillCategory)) {
+    return res.status(400).json({ error: 'La categoría seleccionada no es válida' });
+  }
 
   try {
     const teacherId = req.user!.id;
     const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const parsedDueDate = dueDate ? new Date(dueDate) : null;
+
+    if (parsedDueDate && Number.isNaN(parsedDueDate.getTime())) {
+      return res.status(400).json({ error: 'La fecha de vencimiento no es válida' });
+    }
+
+    if (materialId) {
+      const material = await prisma.material.findFirst({
+        where: {
+          id: materialId,
+          teacherId
+        },
+        select: { id: true }
+      });
+
+      if (!material) {
+        return res.status(400).json({ error: 'El material vinculado no existe o no pertenece al profesor' });
+      }
+    }
+
     const assignment = await prisma.assignment.create({
       data: {
         title,
         description: description || '',
-        category,
-        dueDate: dueDate ? new Date(dueDate) : null,
+        category: category as SkillCategory,
+        dueDate: parsedDueDate,
+        materialId: materialId || null,
         courseId,
         teacherId
       }
     });
     res.status(201).json(assignment);
   } catch (error) {
+    console.error('Error al crear tarea en curso:', error);
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
+      return res.status(400).json({ error: 'No se pudo crear la tarea por una referencia inválida (curso o material)' });
+    }
     res.status(500).json({ error: 'Error al crear tarea' });
   }
 });

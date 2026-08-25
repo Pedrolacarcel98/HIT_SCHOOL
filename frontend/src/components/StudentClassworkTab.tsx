@@ -183,8 +183,8 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
       )}
 
       {viewingMaterial && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1.5rem', overflowY: 'auto' }}>
-          <div className="animate-fade-in" style={{ width: '100%', maxWidth: viewingMaterial.type === 'FORM' ? '900px' : '850px', background: 'var(--background)', borderRadius: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'column', margin: 'auto' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'stretch', justifyContent: 'center', zIndex: 100, padding: '0.75rem 1rem 0', overflow: 'hidden' }}>
+          <div className="animate-fade-in" style={{ width: '100%', maxWidth: viewingMaterial.type === 'FORM' ? '980px' : '920px', height: 'calc(100vh - 0.75rem)', background: 'var(--background)', borderRadius: '12px 12px 0 0', overflow: 'hidden', display: 'flex', flexDirection: 'column', margin: '0 auto' }}>
             <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface)' }}>
               <div>
                 <span style={{ color: 'var(--primary)', fontSize: '0.75rem', fontWeight: 700 }}>{viewingMaterial.type === 'FORM' ? 'EXAMEN / TEST' : 'TAREA'}</span>
@@ -193,7 +193,7 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
               <button onClick={() => setViewingMaterial(null)} style={{ border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={20} /></button>
             </div>
             
-            <div style={{ padding: '1.5rem', flex: 1, maxHeight: '70vh', overflowY: 'auto' }}>
+            <div style={{ padding: '1.5rem', flex: 1, minHeight: 0, overflowY: 'auto' }}>
               {viewingMaterial.type === 'FORM' && viewingMaterial.formData ? (
                 viewingMaterial.status === 'COMPLETED' ? (
                   <div style={{ textAlign: 'center', padding: '3rem' }}>

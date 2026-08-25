@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, BookOpen, Users, Award } from 'lucide-react';
+import { ArrowLeft, MessageSquare, BookOpen, Users, Award } from 'lucide-react';
+import StudentStreamTab from '../components/StudentStreamTab';
 import StudentClassworkTab from '../components/StudentClassworkTab';
 import StudentPeopleTab from '../components/StudentPeopleTab';
 import StudentGradesTab from '../components/StudentGradesTab';
@@ -8,7 +9,7 @@ import StudentGradesTab from '../components/StudentGradesTab';
 const StudentCourseView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'classwork' | 'people' | 'grades'>('classwork');
+  const [activeTab, setActiveTab] = useState<'stream' | 'classwork' | 'people' | 'grades'>('stream');
   const [course, setCourse] = useState<any>(null);
 
   useEffect(() => {
@@ -59,6 +60,7 @@ const StudentCourseView: React.FC = () => {
 
         {/* Pestañas */}
         <div className="scrollable-tabs" style={{ padding: '0 1.5rem', height: '48px', alignItems: 'center', gap: '1.5rem' }}>
+          <TabButton active={activeTab === 'stream'} onClick={() => setActiveTab('stream')} icon={<MessageSquare size={18}/>} label="Tablón" />
           <TabButton active={activeTab === 'classwork'} onClick={() => setActiveTab('classwork')} icon={<BookOpen size={18}/>} label="Material Asignado / Tareas" />
           <TabButton active={activeTab === 'people'} onClick={() => setActiveTab('people')} icon={<Users size={18}/>} label="Compañeros" />
           <TabButton active={activeTab === 'grades'} onClick={() => setActiveTab('grades')} icon={<Award size={18}/>} label="Calificaciones" />
@@ -67,6 +69,7 @@ const StudentCourseView: React.FC = () => {
 
       {/* Contenido Principal */}
       <main>
+        {activeTab === 'stream' && <StudentStreamTab courseId={id!} />}
         {activeTab === 'classwork' && <StudentClassworkTab courseId={id!} />}
         {activeTab === 'people' && <StudentPeopleTab courseId={id!} />}
         {activeTab === 'grades' && <StudentGradesTab courseId={id!} />}

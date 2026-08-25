@@ -14,6 +14,8 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const [assignments, setAssignments] = useState<any[]>([]);
   const [materials, setMaterials] = useState<any[]>([]);
   const [isCreating, setIsCreating] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState('');
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newCategory, setNewCategory] = useState('GRAMMAR_VOCABULARY');
@@ -55,25 +57,28 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle) return;
+    if (!newTitle.trim()) {
+      setFormError('El titulo es obligatorio.');
+      return;
+    }
 
     try {
+      setIsSubmitting(true);
+      setFormError('');
       const token = localStorage.getItem('token');
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-      // Utilizamos el nuevo endpoint centralizado (o seguimos con el del curso que internamente hemos adaptado, pero mejor usar el global)
-      const res = await fetch(`${apiUrl}/api/assignments`, {
+      const res = await fetch(`${apiUrl}/api/courses/${courseId}/assignments`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ 
-          title: newTitle, 
+          title: newTitle.trim(), 
           description: newDesc, 
           category: newCategory,
           dueDate: newDueDate || null,
-          materialId: newMaterialId || null,
-          courseId: courseId
+          materialId: newMaterialId || null
         }),
       });
 
@@ -84,9 +89,15 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
         setNewDueDate('');
         setNewMaterialId('');
         fetchAssignments();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setFormError(data.error || 'No se pudo crear la tarea. Revisa los datos e intentalo de nuevo.');
       }
     } catch (err) {
       console.error(err);
+      setFormError('Error de conexion con el servidor.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -105,6 +116,11 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
       ) : (
         <form onSubmit={handleCreate} className="glass-panel animate-fade-in" style={{ marginBottom: '2rem', padding: '1.5rem' }}>
           <h3 style={{ marginTop: 0, color: 'var(--primary)', marginBottom: '1rem' }}>Nueva Tarea</h3>
+          {formError && (
+            <div style={{ marginBottom: '1rem', padding: '0.75rem 1rem', border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b', borderRadius: '8px' }}>
+              {formError}
+            </div>
+          )}
           
           <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
             <div style={{ flex: '2 1 220px', minWidth: 0 }}>
@@ -143,8 +159,10 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
           </div>
 
           <div style={{ display: 'flex', gap: '1rem' }}>
-            <button type="submit" className="btn-primary">Asignar Tarea</button>
-            <button type="button" onClick={() => setIsCreating(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancelar</button>
+            <button type="submit" className="btn-primary" disabled={isSubmitting} style={{ opacity: isSubmitting ? 0.7 : 1, cursor: isSubmitting ? 'not-allowed' : 'pointer' }}>
+              {isSubmitting ? 'Asignando...' : 'Asignar Tarea'}
+            </button>
+            <button type="button" onClick={() => setIsCreating(false)} disabled={isSubmitting} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: isSubmitting ? 'not-allowed' : 'pointer', opacity: isSubmitting ? 0.7 : 1 }}>Cancelar</button>
           </div>
         </form>
       )}
