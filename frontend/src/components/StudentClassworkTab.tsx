@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, CheckCircle2, Clock3, FileText, Search, X } from 'lucide-react';
 import DocumentViewer from './DocumentViewer';
 import FormPlayer from './FormPlayer';
+import ExamReviewModal from './ExamReviewModal';
+import type { ReviewQuestion } from './ExamReviewModal';
 
 interface AssignedMaterial {
   id: string;
@@ -17,7 +19,19 @@ interface AssignedMaterial {
   url: string;
   type?: string;
   formData?: any;
+  submissionContent?: string | null;
+  submissionGrade?: number | null;
 }
+
+const parseSavedAnswers = (content?: string | null): Record<string, string | number> => {
+  if (!content) return {};
+  try {
+    const parsed = JSON.parse(content) as { answers?: Record<string, string | number> };
+    return parsed.answers || {};
+  } catch {
+    return {};
+  }
+};
 
 const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const [assignedMaterials, setAssignedMaterials] = useState<AssignedMaterial[]>([]);
@@ -25,6 +39,7 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | AssignedMaterial['status']>('ALL');
   const [viewingMaterial, setViewingMaterial] = useState<AssignedMaterial | null>(null);
+  const [reviewingMaterial, setReviewingMaterial] = useState<AssignedMaterial | null>(null);
 
   const fetchAssignedMaterials = async () => {
     try {
@@ -53,7 +68,9 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
             status: hasSubmission ? 'COMPLETED' : 'PENDING',
             url: assignment.material ? assignment.material.url : '',
             type: assignment.material ? assignment.material.type : 'DOCUMENT',
-            formData: assignment.material ? assignment.material.formData : null
+            formData: assignment.material ? assignment.material.formData : null,
+            submissionContent: assignment.submissions?.[0]?.content,
+            submissionGrade: assignment.submissions?.[0]?.grade
           };
         }));
       }
@@ -77,15 +94,14 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     });
   }, [searchTerm, statusFilter, assignedMaterials]);
 
-  const handleSubmitAssignment = async (assignmentId: string, grade?: number) => {
+  const handleSubmitAssignment = async (assignmentId: string, grade?: number, content = 'Entregado por el alumno') => {
     try {
       const token = localStorage.getItem('token');
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
       
-      const payload: any = { content: 'Entregado por el alumno' };
+      const payload: any = { content };
       if (grade !== undefined) {
         payload.grade = grade;
-        payload.content = `Nota obtenida: ${grade.toFixed(2)}/10`;
       }
 
       const res = await fetch(`${apiUrl}/api/assignments/${assignmentId}/submit`, {
@@ -105,9 +121,9 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     }
   };
 
-  const handleFormFinish = (score: number, total: number) => {
+  const handleFormFinish = (score: number, total: number, answers: { [key: string]: any }) => {
     const grade = total > 0 ? (score / total) * 10 : 0;
-    handleSubmitAssignment(viewingMaterial!.id, grade);
+    handleSubmitAssignment(viewingMaterial!.id, grade, JSON.stringify({ answers, score, total }));
   };
 
   return (
@@ -173,8 +189,8 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: material.status === 'COMPLETED' ? '#24583e' : '#8d5b12', background: material.status === 'COMPLETED' ? 'var(--primary-light)' : '#fef7e8', padding: '0.3rem 0.65rem', borderRadius: '14px', border: material.status === 'COMPLETED' ? '1px solid var(--primary-border)' : '1px solid #fae0b0', fontSize: '0.82rem', fontWeight: 700 }}>
                   {material.status === 'COMPLETED' ? <><CheckCircle2 size={16} /> Entregado</> : <><Clock3 size={16} /> Pendiente</>}
                 </span>
-                <button onClick={() => setViewingMaterial(material)} className="btn-primary" style={{ padding: '0.55rem 0.9rem', fontSize: '0.84rem' }}>
-                  {material.status === 'COMPLETED' ? 'Ver Entregado' : 'Realizar Tarea'}
+                <button onClick={() => material.status === 'COMPLETED' && material.type === 'FORM' ? setReviewingMaterial(material) : setViewingMaterial(material)} className="btn-primary" style={{ padding: '0.55rem 0.9rem', fontSize: '0.84rem' }}>
+                  {material.status === 'COMPLETED' ? (material.type === 'FORM' ? 'Ver Examen Corregido' : 'Ver Entregado') : 'Realizar Tarea'}
                 </button>
               </div>
             </article>
@@ -240,6 +256,7 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
           </div>
         </div>
       )}
+      {reviewingMaterial?.type === 'FORM' && reviewingMaterial.formData && <ExamReviewModal title={reviewingMaterial.title} questions={reviewingMaterial.formData.questions as ReviewQuestion[] || []} answers={parseSavedAnswers(reviewingMaterial.submissionContent)} score={reviewingMaterial.submissionGrade} onClose={() => setReviewingMaterial(null)} />}
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Plus, Trash2, CheckCircle, Eye, Save, Music, HelpCircle } from 'lucide-react';
+import { X, Plus, Trash2, Eye, Save, Music, HelpCircle } from 'lucide-react';
 import FormPlayer from './FormPlayer';
 
 interface Question {
@@ -228,6 +228,8 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
               title={title || 'Título del Examen'}
               description={description}
               questions={questions}
+              readOnly
+              initialAnswers={Object.fromEntries(questions.map((question) => [question.id, question.correctAnswer]))}
             />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>

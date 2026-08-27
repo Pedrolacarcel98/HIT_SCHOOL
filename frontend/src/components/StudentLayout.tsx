@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { CircleDollarSign, FileText, GraduationCap, LogOut, Menu, X } from 'lucide-react';
+import { Award, CircleDollarSign, FileText, GraduationCap, LogOut, MessageCircle, Menu, X } from 'lucide-react';
 
 const StudentLayout: React.FC = () => {
   const navigate = useNavigate();
@@ -22,13 +22,16 @@ const StudentLayout: React.FC = () => {
 
   const handleLogout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('userId');
     localStorage.removeItem('userRole');
     navigate('/');
   };
 
   const navItems = [
     { label: 'Material asignado', path: '/student/dashboard', icon: <FileText size={20} /> },
-    { label: 'Mis Pagos', path: '/student', icon: <CircleDollarSign size={20} /> }
+    { label: 'Mis Pagos', path: '/student', icon: <CircleDollarSign size={20} /> },
+    { label: 'Calificaciones', path: '/student/grades', icon: <Award size={20} /> },
+    { label: 'Chat con Profesor', path: '/student/chat', icon: <MessageCircle size={20} /> }
   ];
 
   return (

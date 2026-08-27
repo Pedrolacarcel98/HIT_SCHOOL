@@ -55,6 +55,21 @@ model User {
   markedPayments  PaymentStatus[] @relation("MarkedPayments")
   assignments     Assignment[]    @relation("StudentAssignments")
   createdAssignments Assignment[] @relation("TeacherAssignments")
+  sentChatMessages ChatMessage[] @relation("SentChatMessages")
+  receivedChatMessages ChatMessage[] @relation("ReceivedChatMessages")
+}
+
+model ChatMessage {
+  id          String   @id @default(uuid())
+  senderId    String
+  recipientId String
+  content     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  sender      User     @relation("SentChatMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient   User     @relation("ReceivedChatMessages", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([senderId, recipientId, createdAt])
 }
 
 model Profile {

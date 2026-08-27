@@ -1,5 +1,5 @@
 import React from 'react';
-import { ExternalLink, FileText, Download } from 'lucide-react';
+import { ExternalLink, FileText } from 'lucide-react';
 
 interface DocumentViewerProps {
   url: string;

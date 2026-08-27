@@ -84,29 +84,63 @@ router.get('/assigned-to-me', authenticateToken, async (req: AuthRequest, res: R
   }
 });
 
-// Materiales asignados al alumno autenticado
-router.get('/assigned-to-me', authenticateToken, async (req: AuthRequest, res: Response) => {
-  if (req.user?.role !== 'STUDENT') {
-    return res.status(403).json({ error: 'Solo los alumnos pueden consultar sus asignaciones' });
-  }
+router.post('/assignments/:id/submit', authenticateToken, async (req: AuthRequest, res: Response) => {
+  if (req.user?.role !== 'STUDENT') return res.status(403).json({ error: 'Solo los alumnos pueden entregar este material' });
+  const materialAssignmentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const { grade, content } = req.body as { grade?: number; content?: string };
 
   try {
-    const assignments = await prisma.materialAssignment.findMany({
-      where: { studentId: req.user.id },
-      orderBy: { assignedAt: 'desc' },
-      include: {
-        material: {
-          include: {
-            teacher: { select: { profile: { select: { firstName: true, lastName: true } } } }
-          }
-        }
-      }
+    const materialAssignment = await prisma.materialAssignment.findFirst({
+      where: { id: materialAssignmentId, studentId: req.user.id },
+      include: { material: true }
     });
-    res.json(assignments);
+    if (!materialAssignment) return res.status(404).json({ error: 'Asignación no encontrada' });
+
+    let assignment = await prisma.assignment.findFirst({ where: { materialId: materialAssignment.materialId, studentId: req.user.id, courseId: null } });
+    if (!assignment) {
+      assignment = await prisma.assignment.create({
+        data: {
+          title: materialAssignment.material.title,
+          description: materialAssignment.material.description || '',
+          category: materialAssignment.material.category,
+          materialId: materialAssignment.materialId,
+          studentId: req.user.id,
+          teacherId: materialAssignment.material.teacherId
+        }
+      });
+    }
+    const existingSubmission = await prisma.submission.findFirst({ where: { assignmentId: assignment.id, studentId: req.user.id } });
+    if (existingSubmission) return res.status(400).json({ error: 'Este examen ya ha sido entregado.' });
+    const submission = await prisma.submission.create({
+      data: { assignmentId: assignment.id, studentId: req.user.id, content: content || null, grade: typeof grade === 'number' ? grade : null }
+    });
+    await prisma.materialAssignment.update({ where: { id: materialAssignment.id }, data: { status: 'COMPLETED' } });
+    res.status(201).json(submission);
   } catch (error) {
-    console.error('Error al obtener materiales asignados:', error);
-    res.status(500).json({ error: 'Error interno al obtener materiales asignados' });
+    res.status(500).json({ error: 'Error al entregar el material' });
   }
+});
+
+router.get('/:id/assignments', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
+  const materialId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const material = await prisma.material.findFirst({ where: { id: materialId, teacherId: req.user!.id }, select: { id: true } });
+  if (!material) return res.status(404).json({ error: 'Material no encontrado' });
+  const assignments = await prisma.materialAssignment.findMany({
+    where: { materialId },
+    include: { student: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } } },
+    orderBy: { assignedAt: 'desc' }
+  });
+  res.json(assignments);
+});
+
+router.delete('/:id/assignments/:studentId', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
+  const materialId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const studentId = Array.isArray(req.params.studentId) ? req.params.studentId[0] : req.params.studentId;
+  const deleted = await prisma.materialAssignment.deleteMany({
+    where: { materialId, studentId, material: { teacherId: req.user!.id } }
+  });
+  if (deleted.count === 0) return res.status(404).json({ error: 'Acceso no encontrado' });
+  res.json({ message: 'Acceso revocado' });
 });
 
 // Obtener un material específico
@@ -176,52 +210,25 @@ router.post('/:id/assignments', authenticateToken, requireTeacher, async (req: A
         create: { materialId, studentId: student.id, deadline: parsedDeadline }
       }))
     );
-    res.status(201).json({ message: 'Material asignado correctamente', assignments });
-  } catch (error) {
-    console.error('Error al asignar material:', error);
-    res.status(500).json({ error: 'Error interno al asignar el material' });
-  }
-});
-
-// Asignar un material a uno o varios alumnos
-router.post('/:id/assignments', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
-  const materialId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const { studentIds, deadline } = req.body as { studentIds?: unknown; deadline?: unknown };
-
-  if (!Array.isArray(studentIds) || studentIds.length === 0 || studentIds.some((id) => typeof id !== 'string')) {
-    return res.status(400).json({ error: 'Debes seleccionar al menos un alumno' });
-  }
-
-  let parsedDeadline: Date | null = null;
-  if (deadline) {
-    parsedDeadline = new Date(String(deadline));
-    if (Number.isNaN(parsedDeadline.getTime())) {
-      return res.status(400).json({ error: 'La fecha de entrega no es válida' });
+    if (material.type === 'FORM') {
+      for (const student of students) {
+        const existingAssignment = await prisma.assignment.findFirst({
+          where: { materialId, studentId: student.id, courseId: null }
+        });
+        if (!existingAssignment) {
+          await prisma.assignment.create({
+            data: {
+              title: material.title,
+              description: material.description || '',
+              category: material.category,
+              materialId,
+              studentId: student.id,
+              teacherId: req.user!.id
+            }
+          });
+        }
+      }
     }
-  }
-
-  try {
-    const material = await prisma.material.findFirst({ where: { id: materialId, teacherId: req.user!.id } });
-    if (!material) {
-      return res.status(404).json({ error: 'Material no encontrado' });
-    }
-
-    const students = await prisma.user.findMany({
-      where: { id: { in: studentIds as string[] }, role: 'STUDENT' },
-      select: { id: true }
-    });
-    if (students.length !== new Set(studentIds as string[]).size) {
-      return res.status(400).json({ error: 'Uno o más alumnos no son válidos' });
-    }
-
-    const assignments = await prisma.$transaction(
-      students.map((student) => prisma.materialAssignment.upsert({
-        where: { materialId_studentId: { materialId, studentId: student.id } },
-        update: { deadline: parsedDeadline, status: 'PENDING' },
-        create: { materialId, studentId: student.id, deadline: parsedDeadline }
-      }))
-    );
-
     res.status(201).json({ message: 'Material asignado correctamente', assignments });
   } catch (error) {
     console.error('Error al asignar material:', error);
@@ -264,8 +271,8 @@ router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, r
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const { title, description, type, level, category, url, formData } = req.body;
 
-    const material = await prisma.material.update({
-      where: { id },
+    const updated = await prisma.material.updateMany({
+      where: { id, teacherId: req.user!.id },
       data: {
         title,
         description,
@@ -277,6 +284,8 @@ router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, r
       }
     });
 
+    if (updated.count === 0) return res.status(404).json({ error: 'Material no encontrado' });
+    const material = await prisma.material.findUnique({ where: { id } });
     res.json(material);
   } catch (error) {
     console.error('Error al actualizar material:', error);
@@ -288,9 +297,8 @@ router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, r
 router.delete('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
   try {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    await prisma.material.delete({
-      where: { id }
-    });
+    const deleted = await prisma.material.deleteMany({ where: { id, teacherId: req.user!.id } });
+    if (deleted.count === 0) return res.status(404).json({ error: 'Material no encontrado' });
 
     res.json({ message: 'Material eliminado con éxito' });
   } catch (error) {

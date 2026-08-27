@@ -44,6 +44,43 @@ router.post('/', authenticateToken, requireTeacher, async (req: AuthRequest, res
   }
 });
 
+router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
+  const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const title = typeof req.body.title === 'string' ? req.body.title.trim() : '';
+  if (!title) return res.status(400).json({ error: 'El título es obligatorio' });
+
+  try {
+    const course = await prisma.course.updateMany({
+      where: { id: courseId, teacherId: req.user!.id },
+      data: { title }
+    });
+    if (course.count === 0) return res.status(404).json({ error: 'Clase no encontrada' });
+    res.json({ message: 'Clase actualizada correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al actualizar la clase' });
+  }
+});
+
+router.delete('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
+  const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  try {
+    const course = await prisma.course.findFirst({ where: { id: courseId, teacherId: req.user!.id } });
+    if (!course) return res.status(404).json({ error: 'Clase no encontrada' });
+    await prisma.$transaction(async (transaction) => {
+      await transaction.post.deleteMany({ where: { courseId } });
+      const assignments = await transaction.assignment.findMany({ where: { courseId }, select: { id: true } });
+      await transaction.submission.deleteMany({ where: { assignmentId: { in: assignments.map(assignment => assignment.id) } } });
+      await transaction.assignment.deleteMany({ where: { courseId } });
+      await transaction.enrollment.deleteMany({ where: { courseId } });
+      await transaction.course.delete({ where: { id: courseId } });
+    });
+    res.json({ message: 'Clase eliminada correctamente' });
+  } catch (error) {
+    console.error('Error al eliminar clase:', error);
+    res.status(500).json({ error: 'Error al eliminar la clase' });
+  }
+});
+
 // --- SUB-RUTAS DE CURSO ---
 
 const verifyCourseAccess = async (req: any, res: any, next: any) => {

@@ -39,6 +39,7 @@ const Login: React.FC = () => {
       }
 
       localStorage.setItem('token', data.token);
+      localStorage.setItem('userId', data.user.id);
       localStorage.setItem('userRole', data.user.role);
 
       if (data.user.role === 'TEACHER' || data.user.role === 'ADMIN') {

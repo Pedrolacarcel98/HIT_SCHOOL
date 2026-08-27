@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, Plus, FileText, Calendar } from 'lucide-react';
+import { Calendar, FileText, Pencil, Plus, Trash2, X } from 'lucide-react';
 
 const SKILL_CATEGORIES = [
   { id: 'GRAMMAR_VOCABULARY', label: 'Grammar and Vocabulary' },
@@ -9,6 +9,7 @@ const SKILL_CATEGORIES = [
   { id: 'LISTENING', label: 'Listening' },
   { id: 'MOCK_EXAM', label: 'Mock Exams' }
 ];
+const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const [assignments, setAssignments] = useState<any[]>([]);
@@ -21,11 +22,49 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const [newCategory, setNewCategory] = useState('GRAMMAR_VOCABULARY');
   const [newDueDate, setNewDueDate] = useState('');
   const [newMaterialId, setNewMaterialId] = useState('');
+  const [newRecipient, setNewRecipient] = useState(courseId);
+  const [editingAssignment, setEditingAssignment] = useState<any | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editCategory, setEditCategory] = useState('GRAMMAR_VOCABULARY');
+  const [editRecipient, setEditRecipient] = useState(courseId);
+  const [students, setStudents] = useState<any[]>([]);
 
   useEffect(() => {
     fetchAssignments();
     fetchMaterials();
+    fetchStudents();
   }, [courseId]);
+
+  const fetchStudents = async () => {
+    const token = localStorage.getItem('token');
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+    const res = await fetch(`${apiUrl}/api/students`, { headers: { Authorization: `Bearer ${token}` } });
+    if (res.ok) setStudents(await res.json());
+  };
+
+  const openEdit = (assignment: any) => {
+    setEditingAssignment(assignment);
+    setEditTitle(assignment.title);
+    setEditCategory(assignment.category);
+    setEditRecipient(assignment.studentId || assignment.courseId || courseId);
+  };
+
+  const saveEdit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingAssignment || !editTitle.trim()) return;
+    const recipient = editRecipient === courseId ? { courseId, studentId: null } : { courseId: null, studentId: editRecipient };
+    const res = await fetch(`${apiUrl}/api/assignments/${editingAssignment.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+      body: JSON.stringify({ title: editTitle.trim(), category: editCategory, ...recipient, materialId: editingAssignment.materialId || null, description: editingAssignment.description || '', dueDate: editingAssignment.dueDate || null })
+    });
+    if (res.ok) { setEditingAssignment(null); fetchAssignments(); }
+  };
+
+  const deleteAssignment = async (assignment: any) => {
+    if (!window.confirm(`¿Eliminar “${assignment.title}”?`)) return;
+    const res = await fetch(`${apiUrl}/api/assignments/${assignment.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+    if (res.ok) fetchAssignments();
+  };
 
   const fetchAssignments = async () => {
     try {
@@ -67,18 +106,20 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
       setFormError('');
       const token = localStorage.getItem('token');
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-      const res = await fetch(`${apiUrl}/api/courses/${courseId}/assignments`, {
+      const isIndividual = newRecipient !== courseId;
+      const res = await fetch(`${apiUrl}${isIndividual ? '/api/assignments' : `/api/courses/${courseId}/assignments`}`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           title: newTitle.trim(), 
           description: newDesc, 
           category: newCategory,
           dueDate: newDueDate || null,
-          materialId: newMaterialId || null
+          materialId: newMaterialId || null,
+          ...(isIndividual ? { studentId: newRecipient } : { courseId })
         }),
       });
 
@@ -88,6 +129,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
         setNewDesc('');
         setNewDueDate('');
         setNewMaterialId('');
+        setNewRecipient(courseId);
         fetchAssignments();
       } else {
         const data = await res.json().catch(() => ({}));
@@ -135,6 +177,13 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                 ))}
               </select>
             </div>
+            <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '500' }}>Destinatario</label>
+              <select value={newRecipient} onChange={(e) => setNewRecipient(e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}>
+                <option value={courseId}>Toda la clase</option>
+                {students.map(student => <option key={student.id} value={student.id}>{student.profile?.firstName} {student.profile?.lastName} ({student.email})</option>)}
+              </select>
+            </div>
           </div>
 
           <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
@@ -179,7 +228,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                 <p style={{ color: 'var(--text-muted)', fontStyle: 'italic', margin: 0, paddingLeft: '1rem' }}>Sin contenido</p>
               ) : (
                 group.items.map(item => (
-                  <div key={item.id} className="glass-panel" style={{ padding: '1rem', display: 'flex', alignItems: 'center', gap: '1rem', cursor: 'pointer', transition: 'background-color 0.2s' }}>
+                  <div key={item.id} className="glass-panel" style={{ padding: '1rem', display: 'flex', alignItems: 'center', gap: '1rem', transition: 'background-color 0.2s' }}>
                     <div style={{ background: 'var(--surface)', padding: '0.75rem', borderRadius: '50%', color: 'var(--primary)' }}>
                       <FileText size={20} />
                     </div>
@@ -191,6 +240,10 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                         </p>
                       )}
                     </div>
+                    <div style={{ display: 'flex', gap: '0.25rem' }}>
+                      <button title="Editar contenido" aria-label="Editar contenido" onClick={() => openEdit(item)} style={actionButtonStyle}><Pencil size={17} /></button>
+                      <button title="Eliminar contenido" aria-label="Eliminar contenido" onClick={() => deleteAssignment(item)} style={{ ...actionButtonStyle, color: '#9e2a2b' }}><Trash2 size={17} /></button>
+                    </div>
                   </div>
                 ))
               )}
@@ -198,8 +251,23 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
           </div>
         ))}
       </div>
+      {editingAssignment && <div style={modalBackdropStyle} onClick={() => setEditingAssignment(null)}>
+        <form className="glass-panel animate-fade-in" onSubmit={saveEdit} onClick={(event) => event.stopPropagation()} style={{ width: 'min(100%, 500px)', padding: '1.5rem' }}>
+          <button type="button" onClick={() => setEditingAssignment(null)} aria-label="Cerrar" style={{ ...actionButtonStyle, float: 'right' }}><X size={19} /></button>
+          <h2 style={{ margin: '0 0 1rem' }}>Editar contenido</h2>
+          <label style={labelStyle}>Título<input value={editTitle} onChange={(event) => setEditTitle(event.target.value)} required style={inputStyle} /></label>
+          <label style={labelStyle}>Categoría<select value={editCategory} onChange={(event) => setEditCategory(event.target.value)} style={inputStyle}>{SKILL_CATEGORIES.map(category => <option key={category.id} value={category.id}>{category.label}</option>)}</select></label>
+          <label style={labelStyle}>Destinatario<select value={editRecipient} onChange={(event) => setEditRecipient(event.target.value)} style={inputStyle}><option value={courseId}>Toda la clase</option>{students.map(student => <option key={student.id} value={student.id}>{student.profile?.firstName} {student.profile?.lastName} ({student.email})</option>)}</select></label>
+          <button className="btn-primary" type="submit">Guardar cambios</button>
+        </form>
+      </div>}
     </div>
   );
 };
+
+const actionButtonStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0.45rem', border: 'none', borderRadius: '6px', background: 'transparent', color: 'var(--primary-text)', cursor: 'pointer' };
+const inputStyle: React.CSSProperties = { width: '100%', marginTop: '0.35rem', padding: '0.7rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)', color: 'var(--text-main)' };
+const labelStyle: React.CSSProperties = { display: 'block', marginBottom: '0.9rem', fontSize: '0.88rem', fontWeight: 600 };
+const modalBackdropStyle: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 100, display: 'grid', placeItems: 'center', padding: '1rem', background: 'rgba(34, 49, 43, 0.35)' };
 
 export default ClassworkTab;

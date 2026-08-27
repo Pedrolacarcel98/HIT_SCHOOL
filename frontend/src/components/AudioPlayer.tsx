@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Play, Pause, RotateCcw, RotateCw, Volume2, VolumeX, FastForward } from 'lucide-react';
+import { Play, Pause, RotateCcw, RotateCw, Volume2, VolumeX } from 'lucide-react';
 
 interface AudioPlayerProps {
   src: string;
@@ -14,7 +14,6 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, title, autoPlay = false 
   const [duration, setDuration] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
-  const [volume, setVolume] = useState(1);
 
   useEffect(() => {
     const audio = audioRef.current;

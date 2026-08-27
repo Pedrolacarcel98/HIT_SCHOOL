@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle2, XCircle, RotateCcw, Award, Volume2 } from 'lucide-react';
+import { CheckCircle2, XCircle, RotateCcw, Award } from 'lucide-react';
 import AudioPlayer from './AudioPlayer';
 
 interface Question {
@@ -16,11 +16,14 @@ interface FormPlayerProps {
   title: string;
   description?: string;
   questions: Question[];
-  onFinish?: (score: number, total: number) => void;
+  onFinish?: (score: number, total: number, answers: { [key: string]: any }) => void;
+  readOnly?: boolean;
+  allowRetry?: boolean;
+  initialAnswers?: { [key: string]: any };
 }
 
-const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions = [] }) => {
-  const [answers, setAnswers] = useState<{ [key: string]: any }>({});
+const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions = [], onFinish, readOnly = false, allowRetry = true, initialAnswers = {} }) => {
+  const [answers, setAnswers] = useState<{ [key: string]: any }>(initialAnswers);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [score, setScore] = useState(0);
   const [totalPoints, setTotalPoints] = useState(0);
@@ -30,12 +33,12 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
   const [modalStep, setModalStep] = useState<'COMPLETED' | 'GRADE' | 'REVIEW'>('COMPLETED');
 
   const handleSelectOption = (questionId: string, optionIndex: number) => {
-    if (isSubmitted) return;
+    if (isSubmitted || readOnly) return;
     setAnswers({ ...answers, [questionId]: optionIndex });
   };
 
   const handleTextAnswer = (questionId: string, text: string) => {
-    if (isSubmitted) return;
+    if (isSubmitted || readOnly) return;
     setAnswers({ ...answers, [questionId]: text });
   };
 
@@ -68,6 +71,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
     setIsSubmitted(true);
     setModalStep('COMPLETED');
     setShowResultModal(true);
+    onFinish?.(earned, max, answers);
   };
 
   const handleReset = () => {
@@ -193,7 +197,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  <button
+                  {allowRetry && <button
                     type="button"
                     onClick={() => setModalStep('REVIEW')}
                     className="btn-primary"
@@ -209,9 +213,9 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                     }}
                   >
                     <CheckCircle2 size={16} /> Revisar Respuestas (Aciertos y Fallos)
-                  </button>
+                  </button>}
 
-                  <button
+                  {allowRetry && <button
                     type="button"
                     onClick={handleReset}
                     style={{
@@ -230,7 +234,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                     }}
                   >
                     <RotateCcw size={16} /> Reintentar Examen
-                  </button>
+                  </button>}
                 </div>
               </div>
             )}
@@ -245,7 +249,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                       Puntuación final: {score} / {totalPoints} ({percentage}%)
                     </span>
                   </div>
-                  <button
+                  {allowRetry && <button
                     type="button"
                     onClick={() => setModalStep('GRADE')}
                     style={{
@@ -262,7 +266,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                     }}
                   >
                     ← Volver a mi Calificación
-                  </button>
+                  </button>}
                 </div>
 
                 {/* Lista Resumida de Preguntas */}
@@ -456,7 +460,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                           type="radio"
                           name={`question-${q.id}`}
                           checked={isSelected}
-                          disabled={isSubmitted}
+                          disabled={isSubmitted || readOnly}
                           onChange={() => handleSelectOption(q.id, optIdx)}
                           style={{ accentColor: 'var(--primary)', cursor: 'pointer' }}
                         />
@@ -478,7 +482,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                 <div>
                   <input
                     type="text"
-                    disabled={isSubmitted}
+                    disabled={isSubmitted || readOnly}
                     value={userAnswer || ''}
                     onChange={(e) => handleTextAnswer(q.id, e.target.value)}
                     placeholder="Escribe tu respuesta aquí..."
@@ -505,7 +509,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
           );
         })}
 
-        {!isSubmitted && questions.length > 0 && (
+        {!readOnly && !isSubmitted && questions.length > 0 && (
           <button
             type="button"
             onClick={handleSubmit}

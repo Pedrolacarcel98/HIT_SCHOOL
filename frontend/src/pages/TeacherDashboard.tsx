@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Plus, BookOpen } from 'lucide-react';
+import { BookOpen, MoreVertical, Pencil, Plus, Trash2, X } from 'lucide-react';
 
 interface Course {
   id: string;
@@ -11,6 +11,11 @@ const TeacherDashboard: React.FC = () => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [newCourseTitle, setNewCourseTitle] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [editingCourse, setEditingCourse] = useState<Course | null>(null);
+  const [courseTitle, setCourseTitle] = useState('');
+  const [deletingCourse, setDeletingCourse] = useState<Course | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [courseError, setCourseError] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -59,10 +64,26 @@ const TeacherDashboard: React.FC = () => {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('userRole');
-    navigate('/login');
+  const handleUpdateCourse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCourse || !courseTitle.trim()) return;
+    const token = localStorage.getItem('token');
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+    const res = await fetch(`${apiUrl}/api/courses/${editingCourse.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ title: courseTitle.trim() })
+    });
+    if (res.ok) { setEditingCourse(null); fetchCourses(); }
+    else setCourseError('No se pudo actualizar la clase.');
+  };
+
+  const handleDeleteCourse = async () => {
+    if (!deletingCourse) return;
+    const token = localStorage.getItem('token');
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+    const res = await fetch(`${apiUrl}/api/courses/${deletingCourse.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+    if (res.ok) { setDeletingCourse(null); fetchCourses(); }
+    else setCourseError('No se pudo eliminar la clase.');
   };
 
   return (
@@ -118,6 +139,13 @@ const TeacherDashboard: React.FC = () => {
                 <BookOpen size={24} />
               </div>
               <h3 style={{ margin: 0, color: 'var(--text)', fontSize: '1.2rem' }}>{course.title}</h3>
+              <div style={{ marginLeft: 'auto', position: 'relative' }} onClick={(event) => event.stopPropagation()}>
+                <button title="Acciones de la clase" aria-label="Acciones de la clase" onClick={() => setOpenMenuId(openMenuId === course.id ? null : course.id)} style={iconButtonStyle}><MoreVertical size={20} /></button>
+                {openMenuId === course.id && <div style={{ position: 'absolute', right: 0, top: '2rem', zIndex: 10, width: '170px', padding: '0.35rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', boxShadow: 'var(--shadow-lg)' }}>
+                  <button onClick={() => { setEditingCourse(course); setCourseTitle(course.title); setOpenMenuId(null); }} style={menuButtonStyle}><Pencil size={15} /> Editar título</button>
+                  <button onClick={() => { setDeletingCourse(course); setOpenMenuId(null); }} style={{ ...menuButtonStyle, color: '#9e2a2b' }}><Trash2 size={15} /> Eliminar clase</button>
+                </div>}
+              </div>
             </div>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: 0 }}>Haz clic para gestionar el aula y el temario →</p>
           </div>
@@ -129,8 +157,28 @@ const TeacherDashboard: React.FC = () => {
           </div>
         )}
       </div>
+      {(editingCourse || deletingCourse) && <div style={modalBackdropStyle} onClick={() => { setEditingCourse(null); setDeletingCourse(null); }}>
+        <div className="glass-panel animate-fade-in" onClick={(event) => event.stopPropagation()} style={{ width: 'min(100%, 440px)', padding: '1.5rem' }}>
+          <button onClick={() => { setEditingCourse(null); setDeletingCourse(null); }} aria-label="Cerrar" style={{ ...iconButtonStyle, float: 'right' }}><X size={19} /></button>
+          {editingCourse ? <form onSubmit={handleUpdateCourse}>
+            <h2 style={{ margin: '0 0 1rem' }}>Editar título</h2>
+            <input value={courseTitle} onChange={(event) => setCourseTitle(event.target.value)} autoFocus required style={inputStyle} />
+            <button className="btn-primary" type="submit" style={{ marginTop: '1rem' }}>Guardar cambios</button>
+          </form> : <>
+            <h2 style={{ margin: '0 0 0.75rem' }}>Eliminar clase</h2>
+            <p style={{ color: 'var(--text-muted)' }}>Se eliminará “{deletingCourse?.title}” y su contenido. Esta acción no se puede deshacer.</p>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1.25rem' }}><button className="btn-secondary" onClick={() => setDeletingCourse(null)}>Cancelar</button><button className="btn-primary" onClick={handleDeleteCourse} style={{ background: '#9e2a2b' }}>Eliminar</button></div>
+          </>}
+        </div>
+      </div>}
+      {courseError && <div style={{ marginTop: '1rem', color: '#9e2a2b' }}>{courseError}</div>}
     </div>
   );
 };
+
+const iconButtonStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.35rem' };
+const menuButtonStyle: React.CSSProperties = { width: '100%', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 0.55rem', border: 'none', borderRadius: '6px', background: 'transparent', color: 'var(--text-main)', cursor: 'pointer', textAlign: 'left' };
+const inputStyle: React.CSSProperties = { width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', outline: 'none' };
+const modalBackdropStyle: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 100, display: 'grid', placeItems: 'center', padding: '1rem', background: 'rgba(34, 49, 43, 0.35)' };
 
 export default TeacherDashboard;

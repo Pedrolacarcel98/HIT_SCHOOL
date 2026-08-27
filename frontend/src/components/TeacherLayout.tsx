@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { BookOpen, Users, LogOut, GraduationCap, FolderArchive, CircleDollarSign, Menu, X } from 'lucide-react';
+import { BookOpen, Users, LogOut, GraduationCap, FolderArchive, CircleDollarSign, MessageCircle, Menu, X } from 'lucide-react';
 
 const TeacherLayout: React.FC = () => {
   const navigate = useNavigate();
@@ -34,6 +34,7 @@ const TeacherLayout: React.FC = () => {
 
   const handleLogout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('userId');
     localStorage.removeItem('userRole');
     navigate('/');
   };
@@ -43,6 +44,7 @@ const TeacherLayout: React.FC = () => {
     { label: 'Material de Clase', path: '/teacher/materials', icon: <FolderArchive size={20} /> },
     { label: 'Gestión de Alumnos', path: '/teacher/students', icon: <Users size={20} /> },
     { label: 'Control de Pagos', path: '/teacher/payments', icon: <CircleDollarSign size={20} /> },
+    { label: 'Chat Alumnos', path: '/teacher/chat', icon: <MessageCircle size={20} /> },
   ];
 
   return (

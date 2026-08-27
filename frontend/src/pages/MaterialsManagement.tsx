@@ -11,12 +11,11 @@ import {
   Play,
   Edit2,
   Trash2,
-  ExternalLink,
-  Eye,
-  Filter,
   X,
   Send
 } from 'lucide-react';
+
+const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 import AudioPlayer from '../components/AudioPlayer';
 import VideoPlayer from '../components/VideoPlayer';
 import DocumentViewer from '../components/DocumentViewer';
@@ -60,6 +59,7 @@ const MaterialsManagement: React.FC = () => {
   const [assigningMaterial, setAssigningMaterial] = useState<Material | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [currentAccessIds, setCurrentAccessIds] = useState<string[]>([]);
   const [studentSearch, setStudentSearch] = useState('');
   const [assignmentDeadline, setAssignmentDeadline] = useState('');
   const [assignmentLoading, setAssignmentLoading] = useState(false);
@@ -170,11 +170,20 @@ const MaterialsManagement: React.FC = () => {
     }
   };
 
-  const openAssignmentModal = (material: Material) => {
+  const openAssignmentModal = async (material: Material) => {
     setAssigningMaterial(material);
     setSelectedStudentIds([]);
+    setCurrentAccessIds([]);
     setStudentSearch('');
     setAssignmentDeadline('');
+    const token = localStorage.getItem('token');
+    const res = await fetch(`${apiUrl}/api/materials/${material.id}/assignments`, { headers: { Authorization: `Bearer ${token}` } });
+    if (res.ok) {
+      const access = await res.json() as { student: { id: string } }[];
+      const ids = access.map(item => item.student.id);
+      setCurrentAccessIds(ids);
+      setSelectedStudentIds(ids);
+    }
   };
 
   const handleAssignMaterial = async (event: React.FormEvent) => {
@@ -201,6 +210,15 @@ const MaterialsManagement: React.FC = () => {
       window.alert('Error de conexión al asignar el material');
     } finally {
       setAssignmentLoading(false);
+    }
+  };
+
+  const revokeAccess = async (studentId: string) => {
+    if (!assigningMaterial) return;
+    const res = await fetch(`${apiUrl}/api/materials/${assigningMaterial.id}/assignments/${studentId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+    if (res.ok) {
+      setCurrentAccessIds(ids => ids.filter(id => id !== studentId));
+      setSelectedStudentIds(ids => ids.filter(id => id !== studentId));
     }
   };
 
@@ -551,6 +569,8 @@ const MaterialsManagement: React.FC = () => {
                   title={viewingMaterial.title}
                   description={viewingMaterial.description}
                   questions={viewingMaterial.formData.questions || []}
+                  readOnly
+                  initialAnswers={Object.fromEntries((viewingMaterial.formData.questions || []).map((question: { id: string; correctAnswer: string | number }) => [question.id, question.correctAnswer]))}
                 />
               )}
             </div>
@@ -570,6 +590,14 @@ const MaterialsManagement: React.FC = () => {
             </div>
 
             <form onSubmit={handleAssignMaterial} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              <div style={{ padding: '0.9rem', border: '1px solid var(--primary-border)', borderRadius: '8px', background: 'var(--primary-subtle)' }}>
+                <strong style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text)' }}>Alumnos con acceso actual</strong>
+                {currentAccessIds.length === 0 ? <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Ningún alumno tiene acceso todavía.</span> : currentAccessIds.map(studentId => {
+                  const student = students.find(candidate => candidate.id === studentId);
+                  if (!student) return null;
+                  return <div key={student.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', padding: '0.35rem 0' }}><span style={{ color: 'var(--text)', fontSize: '0.88rem' }}>{student.profile?.firstName} {student.profile?.lastName} <small style={{ color: 'var(--text-muted)' }}>({student.email})</small></span><button type="button" onClick={() => revokeAccess(student.id)} style={{ border: 'none', background: 'transparent', color: '#9e2a2b', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}>Revocar</button></div>;
+                })}
+              </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Alumnos destinatarios</label>
                 <input type="search" value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} placeholder="Buscar alumno por nombre o email..." style={{ width: '100%', padding: '0.7rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }} />
@@ -578,7 +606,7 @@ const MaterialsManagement: React.FC = () => {
                     const selected = selectedStudentIds.includes(student.id);
                     return (
                       <label key={student.id} style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', padding: '0.7rem 0.8rem', borderBottom: '1px solid var(--border)', cursor: 'pointer', background: selected ? 'var(--primary-light)' : 'transparent' }}>
-                        <input type="checkbox" checked={selected} onChange={() => setSelectedStudentIds((ids) => selected ? ids.filter((id) => id !== student.id) : [...ids, student.id])} />
+                        <input type="checkbox" checked={selected} onChange={() => selected && currentAccessIds.includes(student.id) ? revokeAccess(student.id) : setSelectedStudentIds((ids) => selected ? ids.filter((id) => id !== student.id) : [...ids, student.id])} />
                         <span style={{ color: 'var(--text)', fontSize: '0.9rem' }}>{student.profile?.firstName} {student.profile?.lastName} <small style={{ color: 'var(--text-muted)' }}>({student.email})</small></span>
                       </label>
                     );
