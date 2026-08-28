@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Award, CircleDollarSign, FileText, GraduationCap, LogOut, MessageCircle, Menu, X } from 'lucide-react';
+import { Award, BookOpen, CircleDollarSign, GraduationCap, LogOut, MessageCircle, Menu, X } from 'lucide-react';
 
 const StudentLayout: React.FC = () => {
   const navigate = useNavigate();
@@ -28,8 +28,8 @@ const StudentLayout: React.FC = () => {
   };
 
   const navItems = [
-    { label: 'Material asignado', path: '/student/dashboard', icon: <FileText size={20} /> },
-    { label: 'Mis Pagos', path: '/student', icon: <CircleDollarSign size={20} /> },
+    { label: 'Mis Clases', path: '/student', icon: <BookOpen size={20} /> },
+    { label: 'Mis Pagos', path: '/student/payments', icon: <CircleDollarSign size={20} /> },
     { label: 'Calificaciones', path: '/student/grades', icon: <Award size={20} /> },
     { label: 'Chat con Profesor', path: '/student/chat', icon: <MessageCircle size={20} /> }
   ];
@@ -130,7 +130,8 @@ const StudentLayout: React.FC = () => {
 
           <nav style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1, overflowY: 'auto' }}>
             {navItems.map((item) => {
-              const isActive = location.pathname === item.path;
+              const isActive = location.pathname === item.path ||
+                (item.path === '/student' && (location.pathname === '/student/dashboard' || location.pathname.startsWith('/student/course')));
 
               return (
                 <button
@@ -193,7 +194,7 @@ const StudentLayout: React.FC = () => {
               <div style={{ flex: 1, overflow: 'hidden' }}>
                 <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: '600', color: 'var(--text-main)' }}>Alumno</p>
                 <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  Portal de pagos
+                  Panel de Alumno
                 </p>
               </div>
             </div>

@@ -1,4 +1,4 @@
-import { PaymentState, PrismaClient } from '@prisma/client';
+import { PaymentState, PrismaClient, Role } from '@prisma/client';
 
 export const ALLOWED_MONTHLY_FEES = [35, 65] as const;
 export const DEFAULT_VISIBLE_MONTH_COUNT = 3;
@@ -6,7 +6,7 @@ export const MAX_COURSE_DURATION_MONTHS = 60;
 
 export interface StudentBillingSnapshot {
   id: string;
-  role: 'STUDENT' | 'TEACHER' | 'ADMIN';
+  role: Role | string;
   createdAt: Date;
   courseDurationMonths: number | null;
   monthlyFee: number | null;

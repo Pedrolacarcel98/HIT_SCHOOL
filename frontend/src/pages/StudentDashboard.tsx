@@ -1,21 +1,39 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, FileText } from 'lucide-react';
-import { X } from 'lucide-react';
+import { BookOpen, FileText, Settings, X } from 'lucide-react';
 import FormPlayer from '../components/FormPlayer';
 import ExamReviewModal from '../components/ExamReviewModal';
+import SettingsModal from '../components/SettingsModal';
 import type { ReviewQuestion } from '../components/ExamReviewModal';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
-const parseSavedAnswers = (content?: string | null): Record<string, string | number> => {
-  if (!content) return {};
+interface ParsedExamData {
+  answers: Record<string, string | number>;
+  score?: number | null;
+  total?: number | null;
+}
+
+const parseSavedExam = (content?: string | null): ParsedExamData | null => {
+  if (!content) return null;
   try {
-    const parsed = JSON.parse(content) as { answers?: Record<string, string | number> };
-    return parsed.answers || {};
+    const parsed = JSON.parse(content);
+    if (parsed.answers || typeof parsed.score === 'number') {
+      return {
+        answers: parsed.answers || {},
+        score: typeof parsed.score === 'number' ? parsed.score : null,
+        total: typeof parsed.total === 'number' ? parsed.total : null
+      };
+    }
+    return null;
   } catch {
-    return {};
+    return null;
   }
+};
+
+const parseSavedAnswers = (content?: string | null): Record<string, string | number> => {
+  const parsed = parseSavedExam(content);
+  return parsed ? parsed.answers : {};
 };
 
 interface Course {
@@ -50,6 +68,7 @@ const StudentDashboard: React.FC = () => {
   const [viewingContent, setViewingContent] = useState<IndividualContent | null>(null);
   const [viewingMaterialAssignment, setViewingMaterialAssignment] = useState<AssignedMaterial | null>(null);
   const [reviewingContent, setReviewingContent] = useState<IndividualContent | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -115,13 +134,30 @@ const StudentDashboard: React.FC = () => {
 
   return (
     <div className="page-container animate-fade-in">
-      <header style={{ marginBottom: '2rem' }}>
-        <h1 style={{ margin: 0, fontSize: '1.8rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <BookOpen style={{ color: 'var(--primary)' }} /> Mis Clases
-        </h1>
-        <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)' }}>
-          Aquí verás todas las clases en las que estás matriculado.
-        </p>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '2rem' }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: '1.8rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <BookOpen style={{ color: 'var(--primary)' }} /> Mis Clases
+          </h1>
+          <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)' }}>
+            Aquí verás todas las clases en las que estás matriculado.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setIsSettingsOpen(true)}
+          className="btn-secondary"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.45rem',
+            padding: '0.55rem 0.95rem',
+            fontSize: '0.85rem'
+          }}
+        >
+          <Settings size={16} /> Cambiar Contraseña / Ajustes
+        </button>
       </header>
 
       {loading ? (
@@ -199,7 +235,17 @@ const StudentDashboard: React.FC = () => {
           <FormPlayer title={viewingMaterialAssignment.material.title} description={viewingMaterialAssignment.material.description || undefined} questions={(viewingMaterialAssignment.material.formData.questions || []) as any[]} onFinish={handleExamFinish} />
         </div>
       </div>}
-      {reviewingContent?.material?.type === 'FORM' && reviewingContent.material.formData && <ExamReviewModal title={reviewingContent.title} questions={reviewingContent.material.formData.questions as ReviewQuestion[] || []} answers={parseSavedAnswers(reviewingContent.submissions?.[0]?.content)} score={reviewingContent.submissions?.[0]?.grade} onClose={() => setReviewingContent(null)} />}
+      {reviewingContent?.material?.type === 'FORM' && reviewingContent.material.formData && (
+        <ExamReviewModal
+          title={reviewingContent.title}
+          questions={reviewingContent.material.formData.questions as ReviewQuestion[] || []}
+          answers={parseSavedAnswers(reviewingContent.submissions?.[0]?.content)}
+          score={reviewingContent.submissions?.[0]?.grade}
+          total={parseSavedExam(reviewingContent.submissions?.[0]?.content)?.total}
+          onClose={() => setReviewingContent(null)}
+        />
+      )}
+      {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
     </div>
   );
 };

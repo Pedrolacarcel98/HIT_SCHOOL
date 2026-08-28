@@ -5,24 +5,66 @@ import { authenticateToken, requireTeacher, AuthRequest } from '../middleware/au
 const router = Router();
 const prisma = new PrismaClient();
 
-// Listar todos los cursos del usuario
+// Listar todos los cursos del usuario (incluyendo datos del profesor para el alumno)
 router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.id;
     const role = req.user!.role;
 
     if (role === 'TEACHER') {
-      const courses = await prisma.course.findMany({ where: { teacherId: userId } });
+      const courses = await prisma.course.findMany({
+        where: { teacherId: userId },
+        include: {
+          teacher: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } }
+        }
+      });
       res.json(courses);
     } else {
       const enrollments = await prisma.enrollment.findMany({
         where: { studentId: userId },
-        include: { course: true }
+        include: {
+          course: {
+            include: {
+              teacher: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } }
+            }
+          }
+        }
       });
       res.json(enrollments.map(e => e.course));
     }
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener cursos' });
+  }
+});
+
+// Obtener detalle de un curso específico
+router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const userId = req.user!.id;
+    const role = req.user!.role;
+
+    const course = await prisma.course.findUnique({
+      where: { id: courseId },
+      include: {
+        teacher: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } },
+        enrollments: { select: { studentId: true } }
+      }
+    });
+
+    if (!course) return res.status(404).json({ error: 'Clase no encontrada' });
+
+    if (role === 'TEACHER' && course.teacherId !== userId) {
+      return res.status(403).json({ error: 'No tienes acceso a esta clase' });
+    }
+
+    if (role === 'STUDENT' && !course.enrollments.some(e => e.studentId === userId)) {
+      return res.status(403).json({ error: 'No estás matriculado en esta clase' });
+    }
+
+    res.json(course);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener la clase' });
   }
 });
 

@@ -12,6 +12,94 @@ const canChat = async (userId: string, role: string, partnerId: string) => {
     (role === 'TEACHER' || role === 'ADMIN') && partner.role === 'STUDENT';
 };
 
+// Listar contactos disponibles para el usuario
+router.get('/contacts', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const role = req.user!.role;
+
+    if (role === 'TEACHER' || role === 'ADMIN') {
+      const students = await prisma.user.findMany({
+        where: { role: 'STUDENT' },
+        select: {
+          id: true,
+          email: true,
+          profile: { select: { firstName: true, lastName: true, avatarUrl: true } }
+        },
+        orderBy: { email: 'asc' }
+      });
+
+      const contacts = students.map(s => ({
+        id: s.id,
+        name: s.profile ? `${s.profile.firstName} ${s.profile.lastName}`.trim() || s.email : s.email,
+        email: s.email,
+        avatarUrl: s.profile?.avatarUrl || null,
+        role: 'STUDENT'
+      }));
+
+      res.json(contacts);
+    } else {
+      const enrollments = await prisma.enrollment.findMany({
+        where: { studentId: userId },
+        include: {
+          course: {
+            include: {
+              teacher: {
+                select: {
+                  id: true,
+                  email: true,
+                  profile: { select: { firstName: true, lastName: true, avatarUrl: true } }
+                }
+              }
+            }
+          }
+        }
+      });
+
+      const teacherMap = new Map<string, any>();
+      enrollments.forEach(e => {
+        const t = e.course?.teacher;
+        if (t && !teacherMap.has(t.id)) {
+          teacherMap.set(t.id, {
+            id: t.id,
+            name: t.profile ? `${t.profile.firstName} ${t.profile.lastName}`.trim() || 'Profesor' : 'Profesor',
+            email: t.email,
+            avatarUrl: t.profile?.avatarUrl || null,
+            courseTitle: e.course.title,
+            role: 'TEACHER'
+          });
+        }
+      });
+
+      if (teacherMap.size === 0) {
+        const teachers = await prisma.user.findMany({
+          where: { role: { in: ['TEACHER', 'ADMIN'] } },
+          select: {
+            id: true,
+            email: true,
+            profile: { select: { firstName: true, lastName: true, avatarUrl: true } }
+          }
+        });
+        teachers.forEach(t => {
+          teacherMap.set(t.id, {
+            id: t.id,
+            name: t.profile ? `${t.profile.firstName} ${t.profile.lastName}`.trim() || 'Profesor' : 'Profesor',
+            email: t.email,
+            avatarUrl: t.profile?.avatarUrl || null,
+            courseTitle: 'Profesor de la academia',
+            role: 'TEACHER'
+          });
+        });
+      }
+
+      res.json(Array.from(teacherMap.values()));
+    }
+  } catch (error) {
+    console.error('Error al cargar contactos de chat:', error);
+    res.status(500).json({ error: 'Error al cargar contactos' });
+  }
+});
+
 router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const partnerId = typeof req.query.partnerId === 'string' ? req.query.partnerId : '';

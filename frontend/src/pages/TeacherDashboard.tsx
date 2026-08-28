@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, MoreVertical, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { BookOpen, GraduationCap, Laptop, MoreVertical, Pencil, Plus, Trash2, X } from 'lucide-react';
 
 interface Course {
   id: string;
@@ -86,28 +86,73 @@ const TeacherDashboard: React.FC = () => {
     else setCourseError('No se pudo eliminar la clase.');
   };
 
+  const [modalityFilter, setModalityFilter] = useState<'ALL' | 'PRESENCIAL' | 'ONLINE'>('ALL');
+
+  const filteredCourses = courses.filter(c => {
+    const isOnline = c.title.toLowerCase().includes('online') || c.title.toLowerCase().includes('particular') || c.title.toLowerCase().includes('individual');
+    const modality = isOnline ? 'ONLINE' : 'PRESENCIAL';
+    if (modalityFilter === 'PRESENCIAL') return modality === 'PRESENCIAL';
+    if (modalityFilter === 'ONLINE') return modality === 'ONLINE';
+    return true;
+  });
+
   return (
     <div className="page-container">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '1.8rem', color: 'var(--text-main)' }}>Mis Clases</h1>
-          <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)' }}>Crea y gestiona tus aulas virtuales</p>
+          <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)' }}>Crea y gestiona tus aulas virtuales presenciales y online</p>
         </div>
       </header>
 
-      <div style={{ marginBottom: '2rem' }}>
-        {!isCreating ? (
-          <button onClick={() => setIsCreating(true)} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.25rem' }}>
+      {/* Selector de Modalidad Presencial vs Online */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          {([
+            ['ALL', 'Todas las clases', null],
+            ['PRESENCIAL', 'Presencial (Academia)', <GraduationCap size={15} />],
+            ['ONLINE', 'Online / Particulares', <Laptop size={15} />]
+          ] as const).map(([val, label, icon]) => (
+            <button
+              key={val}
+              type="button"
+              onClick={() => setModalityFilter(val)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                padding: '0.5rem 0.95rem',
+                borderRadius: '16px',
+                border: modalityFilter === val ? '1px solid var(--primary)' : '1px solid var(--border)',
+                background: modalityFilter === val ? 'var(--primary-light)' : 'var(--surface)',
+                color: modalityFilter === val ? 'var(--primary-text)' : 'var(--text-muted)',
+                fontWeight: modalityFilter === val ? 700 : 500,
+                fontSize: '0.85rem',
+                cursor: 'pointer'
+              }}
+            >
+              {icon}
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {!isCreating && (
+          <button onClick={() => setIsCreating(true)} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.65rem 1.25rem' }}>
             <Plus size={18} /> Crear nueva clase
           </button>
-        ) : (
-          <form onSubmit={handleCreateCourse} className="glass-panel animate-fade-in" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', maxWidth: '600px', flexWrap: 'wrap' }}>
+        )}
+      </div>
+
+      <div style={{ marginBottom: '2rem' }}>
+        {isCreating && (
+          <form onSubmit={handleCreateCourse} className="glass-panel animate-fade-in" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', maxWidth: '650px', flexWrap: 'wrap' }}>
             <input
               type="text"
               value={newCourseTitle}
               onChange={(e) => setNewCourseTitle(e.target.value)}
-              placeholder="Nombre de la clase (ej. B2 First Cambridge)"
-              style={{ flex: '1 1 220px', minWidth: 0, padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', outline: 'none' }}
+              placeholder="Nombre de la clase (ej. B2 First Cambridge Presencial)"
+              style={{ flex: '1 1 240px', minWidth: 0, padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', outline: 'none' }}
               autoFocus
             />
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -119,41 +164,69 @@ const TeacherDashboard: React.FC = () => {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '1.25rem' }}>
-        {courses.map(course => (
-          <div 
-            key={course.id} 
-            className="glass-panel" 
-            style={{ cursor: 'pointer', transition: 'all 0.2s ease', padding: '1.5rem', border: '1px solid var(--border)' }}
-            onClick={() => navigate(`/teacher/course/${course.id}`)}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-4px)';
-              e.currentTarget.style.borderColor = 'var(--primary)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.borderColor = 'var(--border)';
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-              <div style={{ background: 'var(--primary)', padding: '0.75rem', borderRadius: '12px', color: 'white' }}>
-                <BookOpen size={24} />
+        {filteredCourses.map(course => {
+          const isOnline = course.title.toLowerCase().includes('online') || course.title.toLowerCase().includes('particular') || course.title.toLowerCase().includes('individual');
+
+          return (
+            <div 
+              key={course.id} 
+              className="glass-panel" 
+              style={{ cursor: 'pointer', transition: 'all 0.2s ease', padding: '1.5rem', border: '1px solid var(--border)' }}
+              onClick={() => navigate(`/teacher/course/${course.id}`)}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-4px)';
+                e.currentTarget.style.borderColor = 'var(--primary)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.borderColor = 'var(--border)';
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+                <div style={{
+                  background: isOnline ? '#eef2ff' : 'var(--primary-light)',
+                  padding: '0.75rem',
+                  borderRadius: '12px',
+                  color: isOnline ? '#4338ca' : 'var(--primary)'
+                }}>
+                  {isOnline ? <Laptop size={24} /> : <BookOpen size={24} />}
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, color: 'var(--text)', fontSize: '1.15rem' }}>{course.title}</h3>
+                  <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.25rem',
+                    marginTop: '2px',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    padding: '1px 7px',
+                    borderRadius: '10px',
+                    background: isOnline ? '#eef2ff' : '#f0fdf4',
+                    color: isOnline ? '#4338ca' : '#15803d',
+                    border: `1px solid ${isOnline ? '#c7d2fe' : '#bbf7d0'}`
+                  }}>
+                    {isOnline ? 'Online' : 'Presencial'}
+                  </span>
+                </div>
+                <div style={{ marginLeft: 'auto', position: 'relative' }} onClick={(event) => event.stopPropagation()}>
+                  <button title="Acciones de la clase" aria-label="Acciones de la clase" onClick={() => setOpenMenuId(openMenuId === course.id ? null : course.id)} style={iconButtonStyle}><MoreVertical size={20} /></button>
+                  {openMenuId === course.id && <div style={{ position: 'absolute', right: 0, top: '2rem', zIndex: 10, width: '170px', padding: '0.35rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', boxShadow: 'var(--shadow-lg)' }}>
+                    <button onClick={() => { setEditingCourse(course); setCourseTitle(course.title); setOpenMenuId(null); }} style={menuButtonStyle}><Pencil size={15} /> Editar título</button>
+                    <button onClick={() => { setDeletingCourse(course); setOpenMenuId(null); }} style={{ ...menuButtonStyle, color: '#9e2a2b' }}><Trash2 size={15} /> Eliminar clase</button>
+                  </div>}
+                </div>
               </div>
-              <h3 style={{ margin: 0, color: 'var(--text)', fontSize: '1.2rem' }}>{course.title}</h3>
-              <div style={{ marginLeft: 'auto', position: 'relative' }} onClick={(event) => event.stopPropagation()}>
-                <button title="Acciones de la clase" aria-label="Acciones de la clase" onClick={() => setOpenMenuId(openMenuId === course.id ? null : course.id)} style={iconButtonStyle}><MoreVertical size={20} /></button>
-                {openMenuId === course.id && <div style={{ position: 'absolute', right: 0, top: '2rem', zIndex: 10, width: '170px', padding: '0.35rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', boxShadow: 'var(--shadow-lg)' }}>
-                  <button onClick={() => { setEditingCourse(course); setCourseTitle(course.title); setOpenMenuId(null); }} style={menuButtonStyle}><Pencil size={15} /> Editar título</button>
-                  <button onClick={() => { setDeletingCourse(course); setOpenMenuId(null); }} style={{ ...menuButtonStyle, color: '#9e2a2b' }}><Trash2 size={15} /> Eliminar clase</button>
-                </div>}
-              </div>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', margin: 0 }}>Haz clic para gestionar el aula y el temario →</p>
             </div>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: 0 }}>Haz clic para gestionar el aula y el temario →</p>
-          </div>
-        ))}
-        {courses.length === 0 && !isCreating && (
+          );
+        })}
+        {filteredCourses.length === 0 && !isCreating && (
           <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem', gridColumn: '1 / -1' }}>
             <BookOpen size={40} style={{ color: 'var(--primary)', opacity: 0.5, marginBottom: '1rem' }} />
-            <p style={{ color: 'var(--text-muted)', margin: 0 }}>Aún no tienes ninguna clase creada. ¡Crea la primera para empezar!</p>
+            <p style={{ color: 'var(--text-muted)', margin: 0 }}>
+              {modalityFilter === 'ALL' ? 'Aún no tienes ninguna clase creada. ¡Crea la primera para empezar!' : `No hay clases en la categoría ${modalityFilter === 'PRESENCIAL' ? 'Presencial' : 'Online'}.`}
+            </p>
           </div>
         )}
       </div>

@@ -12,9 +12,10 @@ export interface ReviewQuestion {
 
 interface ExamReviewModalProps {
   title: string;
-  questions: ReviewQuestion[];
+  questions?: ReviewQuestion[];
   answers: Record<string, string | number>;
   score?: number | null;
+  total?: number | null;
   onClose: () => void;
 }
 
@@ -22,37 +23,101 @@ const isCorrect = (question: ReviewQuestion, answer: string | number | undefined
   ? String(answer || '').trim().toLowerCase() === String(question.correctAnswer).trim().toLowerCase()
   : answer !== undefined && Number(answer) === Number(question.correctAnswer);
 
-const ExamReviewModal: React.FC<ExamReviewModalProps> = ({ title, questions, answers, score, onClose }) => {
-  const total = questions.reduce((sum, question) => sum + (question.points || 1), 0);
-  const earned = questions.reduce((sum, question) => sum + (isCorrect(question, answers[question.id]) ? question.points || 1 : 0), 0);
-  const percentage = total ? Math.round((earned / total) * 100) : 0;
+const ExamReviewModal: React.FC<ExamReviewModalProps> = ({ title, questions = [], answers = {}, score, total: passedTotal, onClose }) => {
+  const calculatedTotal = questions.length > 0
+    ? questions.reduce((sum, question) => sum + (question.points || 1), 0)
+    : (passedTotal || Object.keys(answers).length || 1);
+
+  const calculatedEarned = questions.length > 0
+    ? questions.reduce((sum, question) => sum + (isCorrect(question, answers[question.id]) ? question.points || 1 : 0), 0)
+    : (score !== null && score !== undefined ? (score <= 10 && calculatedTotal > 10 ? Math.round((score / 10) * calculatedTotal) : score) : 0);
+
+  const percentage = calculatedTotal ? Math.round((calculatedEarned / calculatedTotal) * 100) : 0;
+  const gradeOutOfTen = calculatedTotal ? ((calculatedEarned / calculatedTotal) * 10).toFixed(1) : (score !== null && score !== undefined ? score.toFixed(1) : '-');
 
   return (
     <div style={backdropStyle} onClick={onClose}>
       <div className="glass-panel" onClick={(event) => event.stopPropagation()} style={modalStyle}>
         <header style={headerStyle}>
-          <h2 style={{ margin: 0, fontSize: '1.15rem', color: '#1f2937' }}>Corrección de Examen: {title}</h2>
-          <button type="button" onClick={onClose} aria-label="Cerrar revisión" style={closeStyle}><X size={19} /></button>
+          <div>
+            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase' }}>
+              REVISIÓN PEDAGÓGICA
+            </span>
+            <h2 style={{ margin: '0.15rem 0 0', fontSize: '1.2rem', color: 'var(--text-main)' }}>
+              Corrección: {title}
+            </h2>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Cerrar revisión" style={closeStyle}><X size={20} /></button>
         </header>
+
+        {/* Resumen de Puntuación */}
         <div style={scoreStyle}>
-          <span style={{ display: 'block', color: '#6b7280', fontSize: '0.75rem', fontWeight: 600 }}>Puntuación final</span>
-          <strong style={{ display: 'block', marginTop: '0.25rem', color: '#374151', fontSize: '1.15rem' }}>{score === null || score === undefined ? `${earned} / ${total}` : `${score.toFixed(1)} / 10`} ({percentage}%)</strong>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem', alignItems: 'center' }}>
+            <div>
+              <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600 }}>Aciertos</span>
+              <strong style={{ display: 'block', marginTop: '0.15rem', color: 'var(--text-main)', fontSize: '1.15rem' }}>
+                {calculatedEarned} / {calculatedTotal} ({percentage}%)
+              </strong>
+            </div>
+            <div style={{ width: '1px', height: '32px', background: 'var(--border)' }} />
+            <div>
+              <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600 }}>Calificación</span>
+              <strong style={{ display: 'block', marginTop: '0.15rem', color: parseFloat(gradeOutOfTen) >= 5 ? '#24583e' : '#9e2a2b', fontSize: '1.15rem' }}>
+                {gradeOutOfTen} / 10
+              </strong>
+            </div>
+          </div>
         </div>
+
+        {/* Listado de Preguntas */}
         <div style={listStyle}>
-          {questions.map((question, index) => {
-            const answer = answers[question.id];
-            const correct = isCorrect(question, answer);
-            const answerText = question.type === 'SHORT_ANSWER' ? String(answer || 'No respondida') : answer === undefined ? 'No respondida' : question.options?.[Number(answer)] || 'No respondida';
-            const correctText = question.type === 'SHORT_ANSWER' ? String(question.correctAnswer) : question.options?.[Number(question.correctAnswer)] || String(question.correctAnswer);
-            return <article key={question.id || index} style={{ ...questionStyle, borderColor: correct ? '#bfe0d0' : '#f7caca', borderLeftColor: correct ? '#4e9b75' : '#ef4444' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '0.45rem' }}><strong style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: correct ? '#24583e' : '#9e2a2b', fontSize: '0.88rem' }}>{correct ? <CheckCircle2 size={15} /> : <XCircle size={15} />} Pregunta {index + 1} ({correct ? `+${question.points || 1} pts` : '0 pts'})</strong><small style={{ color: '#6b7280' }}>{question.type === 'MULTIPLE_CHOICE' ? 'Opción Múltiple' : question.type === 'TRUE_FALSE' ? 'Verdadero/Falso' : 'Respuesta Corta'}</small></div>
-              <p style={{ margin: '0 0 0.6rem', color: '#1f2937', fontWeight: 600 }}>{question.questionText}</p>
-              <p style={{ margin: 0, color: correct ? '#24583e' : '#9e2a2b' }}>Tu respuesta: <strong>{answerText}</strong></p>
-              {!correct && <p style={{ margin: '0.3rem 0 0', color: '#24583e' }}>Respuesta correcta: <strong>{correctText}</strong></p>}
-            </article>;
-          })}
+          {questions.length > 0 ? (
+            questions.map((question, index) => {
+              const answer = answers[question.id];
+              const correct = isCorrect(question, answer);
+              const answerText = question.type === 'SHORT_ANSWER' ? String(answer || 'No respondida') : answer === undefined ? 'No respondida' : question.options?.[Number(answer)] || 'No respondida';
+              const correctText = question.type === 'SHORT_ANSWER' ? String(question.correctAnswer) : question.options?.[Number(question.correctAnswer)] || String(question.correctAnswer);
+
+              return (
+                <article key={question.id || index} style={{ ...questionStyle, borderColor: correct ? '#bfe0d0' : '#f7caca', borderLeftColor: correct ? '#22c55e' : '#ef4444' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '0.45rem' }}>
+                    <strong style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: correct ? '#24583e' : '#9e2a2b', fontSize: '0.88rem' }}>
+                      {correct ? <CheckCircle2 size={16} /> : <XCircle size={16} />} Pregunta {index + 1} ({correct ? `+${question.points || 1} pts` : '0 pts'})
+                    </strong>
+                    <small style={{ color: 'var(--text-muted)' }}>
+                      {question.type === 'MULTIPLE_CHOICE' ? 'Opción Múltiple' : question.type === 'TRUE_FALSE' ? 'Verdadero/Falso' : 'Respuesta Corta'}
+                    </small>
+                  </div>
+                  <p style={{ margin: '0 0 0.6rem', color: 'var(--text-main)', fontWeight: 600, fontSize: '0.92rem' }}>{question.questionText}</p>
+                  <p style={{ margin: 0, color: correct ? '#24583e' : '#9e2a2b', fontSize: '0.88rem' }}>Respuesta del alumno: <strong>{answerText}</strong></p>
+                  {!correct && <p style={{ margin: '0.3rem 0 0', color: '#24583e', fontSize: '0.88rem' }}>Respuesta correcta esperada: <strong>{correctText}</strong></p>}
+                </article>
+              );
+            })
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div style={{ padding: '0.75rem 1rem', background: 'var(--surface-alt)', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                Respuestas registradas en el intento:
+              </div>
+              {Object.entries(answers).map(([key, val], idx) => (
+                <div key={key} style={{ ...questionStyle, padding: '0.75rem 1rem' }}>
+                  <strong style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-main)', marginBottom: '0.25rem' }}>
+                    Pregunta {idx + 1}
+                  </strong>
+                  <span style={{ fontSize: '0.88rem', color: 'var(--text-main)' }}>
+                    Respuesta: <strong>{String(val)}</strong>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-        <footer style={footerStyle}><button type="button" onClick={onClose} className="btn-secondary">Volver a mis Calificaciones</button></footer>
+
+        <footer style={footerStyle}>
+          <button type="button" onClick={onClose} className="btn-secondary" style={{ padding: '0.5rem 1.25rem' }}>
+            Cerrar
+          </button>
+        </footer>
       </div>
     </div>
   );

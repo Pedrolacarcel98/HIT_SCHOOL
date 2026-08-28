@@ -11,6 +11,7 @@ enum Role {
   STUDENT
   TEACHER
   ADMIN
+  PARENT
 }
 
 enum Level {
@@ -45,6 +46,12 @@ model User {
   monthlyFee   Int?
   courseStartDate DateTime?
   createdAt    DateTime     @default(now())
+
+  // Relación familiar Padre ↔ Hijos
+  parentId     String?
+  parent       User?        @relation("FamilyRelation", fields: [parentId], references: [id], onDelete: SetNull)
+  children     User[]       @relation("FamilyRelation")
+
   profile      Profile?
   courses      Course[]     @relation("TeacherCourses")
   enrollments  Enrollment[]
@@ -73,12 +80,16 @@ model ChatMessage {
 }
 
 model Profile {
-  id        String  @id @default(uuid())
-  userId    String  @unique
+  id        String    @id @default(uuid())
+  userId    String    @unique
   firstName String
   lastName  String
   avatarUrl String?
-  user      User    @relation(fields: [userId], references: [id])
+  dni       String?   // DNI / NIE
+  phone     String?   // Teléfono de contacto / WhatsApp
+  birthDate DateTime? // Fecha de nacimiento
+  address   String?   // Dirección completa
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 enum SkillCategory {

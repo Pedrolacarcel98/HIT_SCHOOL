@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { BookOpen, Users, LogOut, GraduationCap, FolderArchive, CircleDollarSign, MessageCircle, Menu, X } from 'lucide-react';
+import { Award, BookOpen, Users, LogOut, GraduationCap, FolderArchive, CircleDollarSign, MessageCircle, Menu, X, Settings } from 'lucide-react';
+import SettingsModal from './SettingsModal';
 
 const TeacherLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -41,6 +43,7 @@ const TeacherLayout: React.FC = () => {
 
   const navItems = [
     { label: 'Mis Clases', path: '/teacher', icon: <BookOpen size={20} /> },
+    { label: 'Calificaciones', path: '/teacher/grades', icon: <Award size={20} /> },
     { label: 'Material de Clase', path: '/teacher/materials', icon: <FolderArchive size={20} /> },
     { label: 'Gestión de Alumnos', path: '/teacher/students', icon: <Users size={20} /> },
     { label: 'Control de Pagos', path: '/teacher/payments', icon: <CircleDollarSign size={20} /> },
@@ -199,6 +202,35 @@ const TeacherLayout: React.FC = () => {
               </div>
             </div>
             <button
+              onClick={() => setIsSettingsOpen(true)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.5rem',
+                padding: '0.6rem',
+                borderRadius: '8px',
+                border: '1px solid var(--border)',
+                background: 'transparent',
+                color: 'var(--text-main)',
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+                transition: 'all 0.2s ease',
+                minHeight: '40px'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'var(--primary)';
+                e.currentTarget.style.color = 'var(--primary)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--border)';
+                e.currentTarget.style.color = 'var(--text-main)';
+              }}
+            >
+              <Settings size={16} /> Ajustes de Cuenta
+            </button>
+
+            <button
               onClick={handleLogout}
               style={{
                 display: 'flex',
@@ -234,6 +266,8 @@ const TeacherLayout: React.FC = () => {
           <Outlet />
         </main>
       </div>
+
+      {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
 
       <style>{`
         @media (max-width: 900px) {

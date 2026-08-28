@@ -55,7 +55,7 @@ router.get('/teacher', authenticateToken, requireTeacher, async (req: AuthReques
       include: {
         course: { select: { title: true } },
         student: { select: { email: true, profile: { select: { firstName: true, lastName: true } } } },
-        material: { select: { title: true, type: true } },
+        material: { select: { id: true, title: true, type: true, url: true, formData: true, description: true } },
         submissions: {
           include: {
             student: { select: { email: true, profile: { select: { firstName: true, lastName: true } } } }
@@ -175,15 +175,24 @@ router.post('/submissions/:subId/grade', authenticateToken, requireTeacher, asyn
   const { grade, feedback } = req.body;
   
   try {
+    const parsedGrade = grade !== undefined && grade !== null && grade !== '' ? parseFloat(grade) : null;
+    if (parsedGrade !== null && (isNaN(parsedGrade) || parsedGrade < 0 || parsedGrade > 10)) {
+      return res.status(400).json({ error: 'La calificación debe ser un número entre 0 y 10.' });
+    }
+
     const submission = await prisma.submission.update({
       where: { id: subId },
       data: {
-        grade: grade !== undefined ? parseFloat(grade) : null,
-        feedback: feedback || null
+        grade: parsedGrade,
+        feedback: feedback !== undefined ? (feedback ? String(feedback).trim() : null) : undefined
+      },
+      include: {
+        student: { select: { email: true, profile: { select: { firstName: true, lastName: true } } } }
       }
     });
     res.json(submission);
   } catch (error) {
+    console.error('Error al calificar la tarea:', error);
     res.status(500).json({ error: 'Error al calificar la tarea' });
   }
 });

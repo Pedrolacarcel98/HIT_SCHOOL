@@ -3,6 +3,7 @@ import Login from './pages/Login';
 import TeacherLayout from './components/TeacherLayout';
 import StudentLayout from './components/StudentLayout';
 import TeacherDashboard from './pages/TeacherDashboard';
+import TeacherGrades from './pages/TeacherGrades';
 import StudentGrades from './pages/StudentGrades';
 import StudentsManagement from './pages/StudentsManagement';
 import MaterialsManagement from './pages/MaterialsManagement';
@@ -23,6 +24,7 @@ function App() {
         {/* Rutas de Profesor con Barra Lateral Global */}
         <Route path="/teacher" element={<TeacherLayout />}>
           <Route index element={<TeacherDashboard />} />
+          <Route path="grades" element={<TeacherGrades />} />
           <Route path="materials" element={<MaterialsManagement />} />
           <Route path="students" element={<StudentsManagement />} />
           <Route path="payments" element={<TeacherPayments />} />
@@ -31,8 +33,9 @@ function App() {
         </Route>
 
         <Route path="/student" element={<StudentLayout />}>
-          <Route index element={<StudentPayments />} />
+          <Route index element={<StudentDashboard />} />
           <Route path="dashboard" element={<StudentDashboard />} />
+          <Route path="payments" element={<StudentPayments />} />
           <Route path="course/:id" element={<StudentCourseView />} />
           <Route path="chat" element={<Chat role="STUDENT" />} />
           <Route path="grades" element={<StudentGrades />} />

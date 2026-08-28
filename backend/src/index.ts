@@ -29,14 +29,8 @@ app.get('/', (req, res) => {
   res.send('API de HitSchool funcionando correctamente');
 });
 
-// Endpoint de prueba de conexión a base de datos
-app.get('/api/users', async (req, res) => {
-  try {
-    const users = await prisma.user.findMany();
-    res.json(users);
-  } catch (error) {
-    res.status(500).json({ error: 'Error al conectar con la base de datos' });
-  }
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', service: 'hit_school_backend', timestamp: new Date() });
 });
 
 app.listen(port, () => {
