@@ -51,6 +51,67 @@ async function main() {
   console.log('Profesor de prueba creado:', teacher.email);
   console.log('Alumno de prueba creado:', student.email);
 
+  // Crear Tutor/Padre Marta Madre
+  const parentUser = await prisma.user.upsert({
+    where: { email: 'marpargut@gmail.com' },
+    update: {
+      role: 'PARENT'
+    },
+    create: {
+      email: 'marpargut@gmail.com',
+      passwordHash: hashedPassword, // 1234
+      role: 'PARENT',
+      profile: {
+        create: {
+          firstName: 'Marta',
+          lastName: 'Madre',
+          phone: '640788122'
+        }
+      }
+    }
+  });
+
+  // Vincular Laura Alumno a Marta Madre
+  await prisma.user.update({
+    where: { email: 'alumno@hitschool.com' },
+    data: { parentId: parentUser.id }
+  });
+
+  // Crear segundo alumno Marta Pardo Gutierrez vinculado a Marta Madre
+  const secondStudent = await prisma.user.upsert({
+    where: { email: 'marta02.pardo@gmail.com' },
+    update: {
+      monthlyFee: 35,
+      courseDurationMonths: 9,
+      parentId: parentUser.id
+    },
+    create: {
+      email: 'marta02.pardo@gmail.com',
+      passwordHash: hashedPassword, // 1234
+      role: 'STUDENT',
+      monthlyFee: 35,
+      courseDurationMonths: 9,
+      parentId: parentUser.id,
+      profile: {
+        create: {
+          firstName: 'Marta',
+          lastName: 'Pardo Gutierrez',
+          dni: '29563108N',
+          phone: '640788122'
+        }
+      }
+    }
+  });
+
+  await ensureStudentPaymentSchedule(prisma, {
+    id: secondStudent.id,
+    role: secondStudent.role,
+    createdAt: secondStudent.createdAt,
+    courseDurationMonths: secondStudent.courseDurationMonths,
+    monthlyFee: secondStudent.monthlyFee,
+    courseStartDate: secondStudent.courseStartDate
+  });
+
   await ensureStudentPaymentSchedule(prisma, {
     id: student.id,
     role: student.role,

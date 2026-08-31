@@ -96,10 +96,47 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res) => {
   }
 
   try {
-    await ensureStudentPaymentScheduleById(prisma, req.user.id);
+    let targetStudentId = req.user.id;
+
+    if (req.user.role === 'PARENT') {
+      const userEmail = (req.user as any)?.email || '';
+      const requestedStudentId = getQueryString(req.query.studentId);
+      if (requestedStudentId) {
+        const child = await prisma.user.findFirst({
+          where: {
+            id: requestedStudentId,
+            role: 'STUDENT',
+            OR: [
+              { parentId: req.user.id },
+              { parent: { email: { equals: userEmail, mode: 'insensitive' } } }
+            ]
+          }
+        });
+        if (!child) {
+          return res.status(403).json({ error: 'No tienes permisos para ver los pagos de este alumno.' });
+        }
+        targetStudentId = child.id;
+      } else {
+        const child = await prisma.user.findFirst({
+          where: {
+            role: 'STUDENT',
+            OR: [
+              { parentId: req.user.id },
+              { parent: { email: { equals: userEmail, mode: 'insensitive' } } }
+            ]
+          }
+        });
+        if (!child) {
+          return res.status(404).json({ error: 'No tienes ningún alumno asociado.' });
+        }
+        targetStudentId = child.id;
+      }
+    }
+
+    await ensureStudentPaymentScheduleById(prisma, targetStudentId);
 
     const student = await prisma.user.findUnique({
-      where: { id: req.user.id },
+      where: { id: targetStudentId },
       select: {
         id: true,
         email: true,
@@ -111,20 +148,21 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res) => {
         profile: {
           select: {
             firstName: true,
-            lastName: true
+            lastName: true,
+            dni: true
           }
         }
       }
     });
 
     if (!student || student.role !== 'STUDENT') {
-      return res.status(403).json({ error: 'Solo los alumnos pueden consultar esta vista.' });
+      return res.status(403).json({ error: 'Alumno no encontrado.' });
     }
 
     const payment = await prisma.paymentStatus.findUnique({
       where: {
         studentId_month_year: {
-          studentId: req.user.id,
+          studentId: targetStudentId,
           month: parsed.month,
           year: parsed.year
         }
@@ -204,9 +242,7 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
         }
       },
       orderBy: {
-        profile: {
-          firstName: 'asc'
-        }
+        createdAt: 'desc'
       }
     });
 
@@ -224,7 +260,8 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
         profile: {
           select: {
             firstName: true,
-            lastName: true
+            lastName: true,
+            dni: true
           }
         },
         paymentStatuses: {
@@ -244,9 +281,7 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
         }
       },
       orderBy: {
-        profile: {
-          firstName: 'asc'
-        }
+        createdAt: 'desc'
       }
     });
 
@@ -278,6 +313,7 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
         email: student.email,
         firstName: student.profile?.firstName ?? 'Alumno',
         lastName: student.profile?.lastName ?? '',
+        dni: student.profile?.dni ?? null,
         monthlyFee: student.monthlyFee,
         courseDurationMonths: student.courseDurationMonths,
         payments

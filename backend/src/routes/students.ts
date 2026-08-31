@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
-import { authenticateToken, requireTeacher } from '../middleware/auth';
+import { authenticateToken, requireTeacher, AuthRequest } from '../middleware/auth';
 import { ALLOWED_MONTHLY_FEES, ensureStudentPaymentSchedule } from '../services/payments';
+import { getChildrenForParent } from './auth';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -59,6 +60,119 @@ router.get('/parents', authenticateToken, requireTeacher, async (req, res) => {
   } catch (error) {
     console.error('Error al obtener tutores:', error);
     res.status(500).json({ error: 'Error al obtener lista de tutores/padres' });
+  }
+});
+
+// Endpoint para que un tutor obtenga la lista de sus alumnos/hijos asociados
+router.get('/children', authenticateToken, async (req: AuthRequest, res) => {
+  if (!req.user || req.user.role !== 'PARENT') {
+    return res.status(403).json({ error: 'Solo los tutores pueden consultar esta lista.' });
+  }
+  try {
+    const parentUser = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { id: true, email: true }
+    });
+    if (!parentUser) {
+      return res.status(404).json({ error: 'Tutor no encontrado' });
+    }
+    const children = await getChildrenForParent(prisma, parentUser.id, parentUser.email);
+    res.json(children);
+  } catch (error) {
+    console.error('Error al obtener hijos del tutor:', error);
+    res.status(500).json({ error: 'Error al obtener lista de alumnos asociados' });
+  }
+});
+
+// Obtener la evaluación final por competencias de un alumno
+router.get('/:id/evaluation', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const paramId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    let targetStudentId = paramId;
+
+    if (paramId === 'me' || req.user?.role === 'STUDENT') {
+      if (req.user?.role === 'PARENT') {
+        const queryStudentId = req.query.studentId as string;
+        if (queryStudentId) {
+          targetStudentId = queryStudentId;
+        } else {
+          const parentUser = await prisma.user.findUnique({ where: { id: req.user.id } });
+          if (parentUser) {
+            const children = await getChildrenForParent(prisma, parentUser.id, parentUser.email);
+            if (children.length > 0) targetStudentId = children[0].id;
+          }
+        }
+      } else {
+        targetStudentId = req.user!.id;
+      }
+    } else if (req.user?.role === 'PARENT') {
+      const parentUser = await prisma.user.findUnique({ where: { id: req.user.id } });
+      if (parentUser) {
+        const children = await getChildrenForParent(prisma, parentUser.id, parentUser.email);
+        const isChild = children.some(c => c.id === paramId);
+        if (!isChild) {
+          return res.status(403).json({ error: 'No tienes acceso a la evaluación de este alumno.' });
+        }
+      }
+    }
+
+    const evaluation = await prisma.finalEvaluation.findUnique({
+      where: { studentId: targetStudentId }
+    });
+
+    res.json(evaluation || null);
+  } catch (error) {
+    console.error('Error al obtener evaluación final:', error);
+    res.status(500).json({ error: 'Error al obtener la evaluación final' });
+  }
+});
+
+// Crear o actualizar la evaluación final por competencias de un alumno (Profesor)
+router.put('/:id/evaluation', authenticateToken, requireTeacher, async (req: AuthRequest, res) => {
+  const studentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const { grammar, reading, writing, listening, speaking, overallGrade, observations } = req.body;
+
+  try {
+    const student = await prisma.user.findUnique({
+      where: { id: studentId, role: 'STUDENT' }
+    });
+    if (!student) {
+      return res.status(404).json({ error: 'Alumno no encontrado' });
+    }
+
+    const parseGrade = (val: any) => {
+      if (val === null || val === undefined || val === '') return null;
+      const num = Number(val);
+      return isNaN(num) ? null : Math.max(0, Math.min(10, num));
+    };
+
+    const evaluation = await prisma.finalEvaluation.upsert({
+      where: { studentId },
+      create: {
+        studentId,
+        grammar: parseGrade(grammar),
+        reading: parseGrade(reading),
+        writing: parseGrade(writing),
+        listening: parseGrade(listening),
+        speaking: parseGrade(speaking),
+        overallGrade: parseGrade(overallGrade),
+        observations: observations ? String(observations).trim() : null
+      },
+      update: {
+        grammar: parseGrade(grammar),
+        reading: parseGrade(reading),
+        writing: parseGrade(writing),
+        listening: parseGrade(listening),
+        speaking: parseGrade(speaking),
+        overallGrade: parseGrade(overallGrade),
+        observations: observations ? String(observations).trim() : null
+      }
+    });
+
+    res.json(evaluation);
+  } catch (error) {
+    console.error('Error al guardar evaluación final:', error);
+    res.status(500).json({ error: 'Error al guardar la evaluación final' });
   }
 });
 

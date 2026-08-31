@@ -8,10 +8,39 @@ interface AuthRequest extends Request {
   user?: any;
 }
 
-// 1. Obtener tareas para el estudiante logueado
+// 1. Obtener tareas para el estudiante logueado (o el alumno seleccionado por el tutor)
 router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const studentId = req.user!.id;
+    let studentId = req.user!.id;
+
+    if (req.user!.role === 'PARENT') {
+      const userEmail = (req.user as any)?.email || '';
+      const requestedStudentId = req.query.studentId as string;
+      if (requestedStudentId) {
+        const child = await prisma.user.findFirst({
+          where: {
+            id: requestedStudentId,
+            role: 'STUDENT',
+            OR: [
+              { parentId: req.user!.id },
+              { parent: { email: { equals: userEmail, mode: 'insensitive' } } }
+            ]
+          }
+        });
+        if (child) studentId = child.id;
+      } else {
+        const child = await prisma.user.findFirst({
+          where: {
+            role: 'STUDENT',
+            OR: [
+              { parentId: req.user!.id },
+              { parent: { email: { equals: userEmail, mode: 'insensitive' } } }
+            ]
+          }
+        });
+        if (child) studentId = child.id;
+      }
+    }
 
     // Obtener los cursos en los que está el estudiante
     const enrollments = await prisma.enrollment.findMany({

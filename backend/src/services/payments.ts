@@ -23,8 +23,10 @@ const normalizeMonthDate = (year: number, month: number) => new Date(year, month
 const addMonths = (date: Date, offset: number) => new Date(date.getFullYear(), date.getMonth() + offset, 1, 12, 0, 0, 0);
 
 const startOfStudentBilling = (student: StudentBillingSnapshot) => {
-  const source = student.courseStartDate ?? student.createdAt;
-  return new Date(source.getFullYear(), source.getMonth(), 1, 12, 0, 0, 0);
+  const raw = student.courseStartDate ?? student.createdAt ?? new Date();
+  const source = new Date(raw);
+  const safeSource = isNaN(source.getTime()) ? new Date() : source;
+  return new Date(safeSource.getFullYear(), safeSource.getMonth(), 1, 12, 0, 0, 0);
 };
 
 export const getVisibleMonthTargets = (count = DEFAULT_VISIBLE_MONTH_COUNT, referenceDate = new Date()): MonthTarget[] => {
@@ -38,21 +40,25 @@ export const getVisibleMonthTargets = (count = DEFAULT_VISIBLE_MONTH_COUNT, refe
 };
 
 export const isPaymentOverdue = (
-  payment: { isPaid: boolean; dueDate: Date },
+  payment: { isPaid: boolean; dueDate: Date | string | null },
   referenceDate = new Date()
 ) => {
-  if (payment.isPaid) {
+  if (payment.isPaid || !payment.dueDate) {
     return false;
   }
 
-  const warningDate = new Date(payment.dueDate);
+  const dDate = new Date(payment.dueDate);
+  if (isNaN(dDate.getTime())) return false;
+
+  const warningDate = new Date(dDate);
   warningDate.setDate(warningDate.getDate() + 7);
 
-  return referenceDate.getTime() > warningDate.getTime();
+  const refDate = new Date(referenceDate);
+  return refDate.getTime() > warningDate.getTime();
 };
 
 export const getPaymentVisualStatus = (
-  payment: { isPaid: boolean; dueDate: Date },
+  payment: { isPaid: boolean; dueDate: Date | string | null },
   referenceDate = new Date()
 ): 'PAID' | 'PENDING' | 'OVERDUE' => {
   if (payment.isPaid) {
@@ -101,15 +107,18 @@ export const ensureStudentPaymentSchedule = async (
           isPaid: false
         }
       });
-    } else if (!existingPayment.isPaid && (existingPayment.amount !== student.monthlyFee || existingPayment.dueDate.getTime() !== dueDate.getTime())) {
-      await prisma.paymentStatus.update({
-        where: { id: existingPayment.id },
-        data: {
-          amount: student.monthlyFee,
-          dueDate,
-          status: PaymentState.PENDING
-        }
-      });
+    } else if (!existingPayment.isPaid) {
+      const existingTime = existingPayment.dueDate ? new Date(existingPayment.dueDate).getTime() : 0;
+      if (existingPayment.amount !== student.monthlyFee || existingTime !== dueDate.getTime()) {
+        await prisma.paymentStatus.update({
+          where: { id: existingPayment.id },
+          data: {
+            amount: student.monthlyFee,
+            dueDate,
+            status: PaymentState.PENDING
+          }
+        });
+      }
     }
 
     payments.push({ month, year });
@@ -149,9 +158,13 @@ export const isMonthWithinStudentSchedule = (
     return false;
   }
 
+  const raw = student.courseStartDate ?? student.createdAt ?? new Date();
+  const source = new Date(raw);
+  const safeSource = isNaN(source.getTime()) ? new Date() : source;
+
   const startMonth = new Date(
-    (student.courseStartDate ?? student.createdAt).getFullYear(),
-    (student.courseStartDate ?? student.createdAt).getMonth(),
+    safeSource.getFullYear(),
+    safeSource.getMonth(),
     1,
     12,
     0,

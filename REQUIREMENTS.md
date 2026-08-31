@@ -45,7 +45,7 @@ Documento maestro de especificación de requisitos funcionales y seguimiento de 
 - [x] Matriculación de alumnos en una o varias clases mediante modal selector interactivo.
 - [x] Edición y actualización de datos de alumnos (nombre, apellidos, email, cuota mensual, duración).
 - [x] Eliminación segura de alumnos con borrado en cascada.
-- [/] Ficha extendida del alumno:
+- [x] Ficha extendida del alumno:
   - [x] Nombre, Apellidos, Email.
   - [x] DNI / NIE.
   - [x] Teléfono de contacto / WhatsApp.
@@ -53,7 +53,7 @@ Documento maestro de especificación de requisitos funcionales y seguimiento de 
   - [x] Dirección completa.
   - [x] Vinculación a Padre/Tutor pagador (para menores o hermanos con cuenta familiar).
 - [x] Asignación de cuota mensual y duración de curso en meses.
-- [ ] Acceso y descarga de facturas/recibos en PDF desde la ficha.
+- [ ] Acceso y descarga de facturas/recibos en PDF desde la ficha del alumno (disponible en /payments).
 
 ### 1.5 Repositorio Central de Contenidos
 - [x] Catálogo centralizado de recursos didácticos (`/teacher/materials`).
@@ -72,7 +72,7 @@ Documento maestro de especificación de requisitos funcionales y seguimiento de 
 
 ### 1.7 Comunicación y Notificaciones
 - [x] Chat privado directo Profesor ↔ Alumno con historial persistente, edición y borrado de mensajes.
-- [ ] Canal de comunicación privado Profesor ↔ Padres/Tutores.
+- [x] Canal de comunicación privado Profesor ↔ Padres/Tutores (hilos independientes por alumno).
 - [x] Tablón de anuncios (*Stream*) por clase para publicaciones y avisos grupales.
 - [/] Notificaciones automáticas:
   - [x] Webhook a n8n al crear nuevo alumno.
@@ -83,7 +83,7 @@ Documento maestro de especificación de requisitos funcionales y seguimiento de 
 ### 1.8 Control de Calificaciones y Progreso
 - [x] Panel de calificaciones por clase para el profesor (`GradesTab.tsx`).
 - [x] Panel global de calificaciones para el estudiante (`/student/grades`).
-- [x] Desglose y categorización por destrezas (*Skills*).
+- [x] Desglose y categorización por destrezas (*Skills*: Grammar, Reading, Writing, Listening, Speaking y Nota Global).
 - [x] Visualización y edición de observaciones cualitativas por alumno (modal interactivo para el profesor y botón de visualización de comentarios para el alumno).
 
 ---
@@ -93,7 +93,7 @@ Documento maestro de especificación de requisitos funcionales y seguimiento de 
 ### 2.1 Control de Pagos
 - [x] Consulta clara de mensualidades, cuotas abonadas y pendientes (`/student`).
 - [x] Indicador visual de estado de cuota (*Pagado, Pendiente, Impago*).
-- [ ] Descarga directa de facturas y recibos en formato PDF.
+- [x] Descarga directa de facturas y recibos en formato PDF (deshabilitado hasta registrar pago).
 
 ### 2.2 Material y Tareas
 - [x] Visualización de clases matriculadas y acceso al aula virtual (`/student/dashboard` y `/student/course/:id`).
@@ -122,9 +122,9 @@ Documento maestro de especificación de requisitos funcionales y seguimiento de 
 - [x] Rol de usuario `PARENT` en base de datos (`Role.PARENT`).
 - [x] Modelo relacional Padre ↔ Hijos (`1 Padre : N Alumnos` / Hermanos).
 - [x] Alta rápida de alumnos vinculados a padre existente o creación simultánea de Padre + Hijo.
-- [ ] Portal del Padre / Tutor (`/parent`):
-  - **Selector de Hijos:** Conmutador para alternar entre sus hijos (Juan, Sofía, etc.).
-  - **Progreso y Calificaciones:** Expediente de cada hijo con tareas entregadas, pendientes, notas y feedback del profesor.
-  - **Aulas Virtuales:** Visualización en modo solo lectura de las clases y avisos de sus hijos.
-  - **Centro de Pagos Familiar:** Gestión de cuotas unificadas o individuales de todos los hijos en un único panel de cobros con descarga de facturas a nombre del padre.
-- [ ] Canal de comunicación / Chat exclusivo Profesor ↔ Padre.
+- [x] Portal del Padre / Tutor (`/student` / Panel Adaptado):
+  - [x] **Selector de Hijos:** Conmutador en Sidebar para alternar entre sus hijos (Laura, Marta, etc.).
+  - [x] **Progreso y Calificaciones:** Expediente de cada hijo con tareas entregadas, pendientes, notas, evaluación final por competencias (Grammar, Reading, Writing, Listening, Speaking) y feedback del profesor.
+  - [x] **Aulas Virtuales:** Visualización en modo solo lectura de las clases y avisos del tablón de sus hijos.
+  - [x] **Centro de Pagos Familiar:** Gestión de cuotas de los hijos con descarga de facturas en PDF.
+- [x] Canal de comunicación / Chat exclusivo Profesor ↔ Padre (hilos de conversación independientes por hijo).

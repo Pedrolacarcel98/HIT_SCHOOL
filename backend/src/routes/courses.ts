@@ -5,7 +5,7 @@ import { authenticateToken, requireTeacher, AuthRequest } from '../middleware/au
 const router = Router();
 const prisma = new PrismaClient();
 
-// Listar todos los cursos del usuario (incluyendo datos del profesor para el alumno)
+// Listar todos los cursos del usuario (incluyendo datos del profesor para el alumno/tutor)
 router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -20,8 +20,38 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       });
       res.json(courses);
     } else {
+      let targetStudentId = userId;
+      if (role === 'PARENT') {
+        const userEmail = (req.user as any)?.email || '';
+        const requestedStudentId = req.query.studentId as string;
+        if (requestedStudentId) {
+          const child = await prisma.user.findFirst({
+            where: {
+              id: requestedStudentId,
+              role: 'STUDENT',
+              OR: [
+                { parentId: userId },
+                { parent: { email: { equals: userEmail, mode: 'insensitive' } } }
+              ]
+            }
+          });
+          if (child) targetStudentId = child.id;
+        } else {
+          const child = await prisma.user.findFirst({
+            where: {
+              role: 'STUDENT',
+              OR: [
+                { parentId: userId },
+                { parent: { email: { equals: userEmail, mode: 'insensitive' } } }
+              ]
+            }
+          });
+          if (child) targetStudentId = child.id;
+        }
+      }
+
       const enrollments = await prisma.enrollment.findMany({
-        where: { studentId: userId },
+        where: { studentId: targetStudentId },
         include: {
           course: {
             include: {
@@ -132,6 +162,29 @@ const verifyCourseAccess = async (req: any, res: any, next: any) => {
   if (req.user!.role === 'TEACHER') {
     const course = await prisma.course.findUnique({ where: { id: courseId } });
     if (course?.teacherId !== userId) return res.status(403).json({ error: 'No tienes acceso a este curso' });
+  } else if (req.user!.role === 'PARENT') {
+    const userEmail = (req.user as any)?.email || '';
+    const requestedStudentId = req.query.studentId as string;
+    let childIds: string[] = [];
+    if (requestedStudentId) {
+      childIds = [requestedStudentId];
+    } else {
+      const children = await prisma.user.findMany({
+        where: {
+          role: 'STUDENT',
+          OR: [
+            { parentId: userId },
+            { parent: { email: { equals: userEmail, mode: 'insensitive' } } }
+          ]
+        },
+        select: { id: true }
+      });
+      childIds = children.map(c => c.id);
+    }
+    const enrollment = await prisma.enrollment.findFirst({
+      where: { courseId, studentId: { in: childIds } }
+    });
+    if (!enrollment) return res.status(403).json({ error: 'No tienes acceso a este curso' });
   } else {
     const enrollment = await prisma.enrollment.findUnique({
       where: { studentId_courseId: { studentId: userId, courseId } }

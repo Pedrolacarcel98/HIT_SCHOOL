@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Lock, ArrowRight, GraduationCap, Briefcase, ArrowLeft } from 'lucide-react';
+import { User, Lock, ArrowRight, GraduationCap, Briefcase, Users, ArrowLeft } from 'lucide-react';
 
 const Login: React.FC = () => {
-  const [roleMode, setRoleMode] = useState<'NONE' | 'STUDENT' | 'TEACHER'>('NONE');
+  const [roleMode, setRoleMode] = useState<'NONE' | 'STUDENT' | 'TEACHER' | 'PARENT'>('NONE');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -28,11 +28,12 @@ const Login: React.FC = () => {
         return;
       }
       
-      // Chequeo de seguridad: si elige profesor pero su rol es de alumno, no debería dejarle.
+      // Chequeo de seguridad: si elige un rol pero su cuenta es de otro tipo, no debería dejarle.
       // Aquí el backend devuelve el rol real. Si coincide, genial.
       if (
         (roleMode === 'TEACHER' && data.user.role !== 'TEACHER' && data.user.role !== 'ADMIN') ||
-        (roleMode === 'STUDENT' && data.user.role !== 'STUDENT')
+        (roleMode === 'STUDENT' && data.user.role !== 'STUDENT') ||
+        (roleMode === 'PARENT' && data.user.role !== 'PARENT')
       ) {
          setError('Tu cuenta no se corresponde con este tipo de perfil.');
          return;
@@ -41,6 +42,8 @@ const Login: React.FC = () => {
       localStorage.setItem('token', data.token);
       localStorage.setItem('userId', data.user.id);
       localStorage.setItem('userRole', data.user.role);
+      localStorage.setItem('userEmail', data.user.email);
+      localStorage.removeItem('selectedStudentId');
 
       if (data.user.role === 'TEACHER' || data.user.role === 'ADMIN') {
         navigate('/teacher');
@@ -71,6 +74,9 @@ const Login: React.FC = () => {
              <button onClick={() => setRoleMode('STUDENT')} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.65rem', padding: '1rem', fontSize: '1rem' }}>
                <GraduationCap size={24} style={{ color: 'var(--primary)' }}/> Soy Alumno
              </button>
+             <button onClick={() => setRoleMode('PARENT')} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.65rem', padding: '1rem', fontSize: '1rem' }}>
+               <Users size={24} style={{ color: 'var(--primary)' }}/> Soy Tutor / Padre
+             </button>
              <button onClick={() => setRoleMode('TEACHER')} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.65rem', padding: '1rem', fontSize: '1rem' }}>
                <Briefcase size={24} style={{ color: 'var(--primary)' }}/> Soy Profesor
              </button>
@@ -81,7 +87,7 @@ const Login: React.FC = () => {
               <ArrowLeft size={16} /> Volver
             </button>
             <h3 style={{ marginBottom: '0.5rem', color: 'var(--primary-text)', textAlign: 'center', fontWeight: '700' }}>
-              Acceso {roleMode === 'TEACHER' ? 'Profesor' : 'Alumno'}
+              Acceso {roleMode === 'TEACHER' ? 'Profesor' : roleMode === 'PARENT' ? 'Tutor / Padre' : 'Alumno'}
             </h3>
             <div>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', fontSize: '0.9rem', color: 'var(--text-main)' }}>Correo Electrónico</label>

@@ -3,6 +3,7 @@ import { CalendarDays, CheckCircle2, Clock3, FileText, Search, X, ExternalLink, 
 import DocumentViewer from './DocumentViewer';
 import FormPlayer from './FormPlayer';
 import ExamReviewModal from './ExamReviewModal';
+import { useParent } from '../context/ParentContext';
 import type { ReviewQuestion } from './ExamReviewModal';
 
 interface AssignedMaterial {
@@ -55,6 +56,8 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const [statusFilter, setStatusFilter] = useState<'ALL' | AssignedMaterial['status']>('ALL');
   const [viewingMaterial, setViewingMaterial] = useState<AssignedMaterial | null>(null);
   const [reviewingMaterial, setReviewingMaterial] = useState<AssignedMaterial | null>(null);
+  const { selectedStudentId } = useParent();
+  const userRole = localStorage.getItem('userRole');
 
   // Formulario de Entrega
   const [deliveryType, setDeliveryType] = useState<'TEXT' | 'LINK' | 'SIMPLE'>('TEXT');
@@ -65,9 +68,11 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
 
   const fetchAssignedMaterials = async () => {
     try {
+      setLoading(true);
       const token = localStorage.getItem('token');
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-      const res = await fetch(`${apiUrl}/api/assignments/me`, {
+      const studentParam = selectedStudentId ? `?studentId=${selectedStudentId}` : '';
+      const res = await fetch(`${apiUrl}/api/assignments/me${studentParam}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -107,7 +112,7 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
 
   useEffect(() => {
     fetchAssignedMaterials();
-  }, [courseId]);
+  }, [courseId, selectedStudentId]);
 
   const filteredMaterials = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
@@ -288,7 +293,7 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                     className="btn-primary"
                     style={{ padding: '0.55rem 0.9rem', fontSize: '0.84rem' }}
                   >
-                    {material.status === 'COMPLETED' ? (isExam ? 'Ver Examen' : 'Ver Entrega') : 'Realizar Tarea'}
+                    {material.status === 'COMPLETED' ? (isExam ? 'Ver Examen' : 'Ver Entrega') : (userRole === 'PARENT' ? 'Ver Detalle' : 'Realizar Tarea')}
                   </button>
                 </div>
               </article>
@@ -461,6 +466,10 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                             <Clock3 size={15} /> Tu profesor revisará y calificará esta entrega próximamente.
                           </div>
                         )}
+                      </div>
+                    ) : userRole === 'PARENT' ? (
+                      <div style={{ padding: '1rem 1.25rem', background: '#eaf4ef', borderRadius: '8px', border: '1px solid #bfe0d0', color: '#24583e', fontSize: '0.88rem', fontWeight: 600 }}>
+                        🛡️ Vista del Tutor (Modo Solo Lectura): Esta tarea está pendiente de entrega por parte del alumno.
                       </div>
                     ) : (
                       /* Caso B: Formulario interactivo para enviar la entrega */

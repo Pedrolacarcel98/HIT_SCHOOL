@@ -4,20 +4,22 @@ import { ArrowLeft, MessageSquare, BookOpen, Award } from 'lucide-react';
 import StudentStreamTab from '../components/StudentStreamTab';
 import StudentClassworkTab from '../components/StudentClassworkTab';
 import StudentGradesTab from '../components/StudentGradesTab';
+import { useParent } from '../context/ParentContext';
 
 const StudentCourseView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'stream' | 'classwork' | 'grades'>('stream');
   const [course, setCourse] = useState<any>(null);
+  const { selectedStudentId } = useParent();
 
   useEffect(() => {
     const fetchCourseDetails = async () => {
       try {
         const token = localStorage.getItem('token');
         const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-        // El endpoint GET /api/courses incluye los cursos del alumno si es un estudiante
-        const res = await fetch(`${apiUrl}/api/courses`, {
+        const studentParam = selectedStudentId ? `?studentId=${selectedStudentId}` : '';
+        const res = await fetch(`${apiUrl}/api/courses${studentParam}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
@@ -34,7 +36,7 @@ const StudentCourseView: React.FC = () => {
       }
     };
     fetchCourseDetails();
-  }, [id, navigate]);
+  }, [id, navigate, selectedStudentId]);
 
   if (!course) return <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>Cargando aula...</div>;
 

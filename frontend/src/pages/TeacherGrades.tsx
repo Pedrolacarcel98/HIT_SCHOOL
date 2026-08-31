@@ -31,6 +31,18 @@ interface StudentData {
   courseDurationMonths?: number | null;
 }
 
+interface FinalEvaluationData {
+  id?: string;
+  studentId?: string;
+  grammar?: number | null;
+  reading?: number | null;
+  writing?: number | null;
+  listening?: number | null;
+  speaking?: number | null;
+  overallGrade?: number | null;
+  observations?: string | null;
+}
+
 interface CourseData {
   id: string;
   title: string;
@@ -143,6 +155,95 @@ const TeacherGrades: React.FC = () => {
   const [isSavingGrade, setIsSavingGrade] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [reviewingExam, setReviewingExam] = useState<{ title: string; questions?: ReviewQuestion[]; answers: Record<string, any>; score: number | null; total?: number | null } | null>(null);
+
+  // Evaluación Final por Competencias
+  const [currentEvaluation, setCurrentEvaluation] = useState<FinalEvaluationData | null>(null);
+  const [isEvaluationModalOpen, setIsEvaluationModalOpen] = useState(false);
+  const [evaluationForm, setEvaluationForm] = useState({
+    grammar: '',
+    reading: '',
+    writing: '',
+    listening: '',
+    speaking: '',
+    overallGrade: '',
+    observations: ''
+  });
+  const [isSavingEvaluation, setIsSavingEvaluation] = useState(false);
+
+  useEffect(() => {
+    if (selectedStudentForDossier) {
+      const fetchEvaluation = async () => {
+        try {
+          const token = localStorage.getItem('token');
+          const res = await fetch(`${apiUrl}/api/students/${selectedStudentForDossier.id}/evaluation`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setCurrentEvaluation(data);
+          } else {
+            setCurrentEvaluation(null);
+          }
+        } catch (err) {
+          console.error('Error al obtener evaluación final:', err);
+        }
+      };
+      fetchEvaluation();
+    } else {
+      setCurrentEvaluation(null);
+    }
+  }, [selectedStudentForDossier?.id]);
+
+  const openEvaluationModal = () => {
+    if (currentEvaluation) {
+      setEvaluationForm({
+        grammar: currentEvaluation.grammar !== null && currentEvaluation.grammar !== undefined ? String(currentEvaluation.grammar) : '',
+        reading: currentEvaluation.reading !== null && currentEvaluation.reading !== undefined ? String(currentEvaluation.reading) : '',
+        writing: currentEvaluation.writing !== null && currentEvaluation.writing !== undefined ? String(currentEvaluation.writing) : '',
+        listening: currentEvaluation.listening !== null && currentEvaluation.listening !== undefined ? String(currentEvaluation.listening) : '',
+        speaking: currentEvaluation.speaking !== null && currentEvaluation.speaking !== undefined ? String(currentEvaluation.speaking) : '',
+        overallGrade: currentEvaluation.overallGrade !== null && currentEvaluation.overallGrade !== undefined ? String(currentEvaluation.overallGrade) : '',
+        observations: currentEvaluation.observations || ''
+      });
+    } else {
+      setEvaluationForm({
+        grammar: '',
+        reading: '',
+        writing: '',
+        listening: '',
+        speaking: '',
+        overallGrade: '',
+        observations: ''
+      });
+    }
+    setIsEvaluationModalOpen(true);
+  };
+
+  const handleSaveEvaluation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStudentForDossier) return;
+    try {
+      setIsSavingEvaluation(true);
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${apiUrl}/api/students/${selectedStudentForDossier.id}/evaluation`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(evaluationForm)
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setCurrentEvaluation(updated);
+        setIsEvaluationModalOpen(false);
+      }
+    } catch (err) {
+      console.error('Error al guardar evaluación final:', err);
+    } finally {
+      setIsSavingEvaluation(false);
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -668,6 +769,97 @@ const TeacherGrades: React.FC = () => {
                     >
                       <X size={20} />
                     </button>
+                  </div>
+
+                  {/* Sección de Evaluación Final por Competencias */}
+                  <div
+                    style={{
+                      padding: '1.25rem',
+                      borderRadius: '12px',
+                      background: 'var(--surface-alt)',
+                      border: '1px solid var(--border)',
+                      marginBottom: '1.5rem'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                        <div style={{ background: 'var(--primary-light)', padding: '0.5rem', borderRadius: '8px', color: 'var(--primary)' }}>
+                          <Award size={20} />
+                        </div>
+                        <div>
+                          <h3 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--text-main)' }}>Evaluación Final / Competencias</h3>
+                          <p style={{ margin: '0.1rem 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Desglose de las 4 destrezas principales (0-10)</p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={openEvaluationModal}
+                        className="btn-primary"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.85rem', fontSize: '0.82rem' }}
+                      >
+                        <Edit3 size={15} />
+                        {currentEvaluation ? 'Editar Evaluación Final' : 'Asignar Notas Finales'}
+                      </button>
+                    </div>
+
+                    {currentEvaluation ? (
+                      <div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: '0.65rem', marginBottom: '0.85rem' }}>
+                          <div style={{ padding: '0.65rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>GRAMMAR</span>
+                            <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>
+                              {currentEvaluation.grammar !== null && currentEvaluation.grammar !== undefined ? `${currentEvaluation.grammar} / 10` : '-'}
+                            </strong>
+                          </div>
+
+                          <div style={{ padding: '0.65rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>READING</span>
+                            <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>
+                              {currentEvaluation.reading !== null && currentEvaluation.reading !== undefined ? `${currentEvaluation.reading} / 10` : '-'}
+                            </strong>
+                          </div>
+
+                          <div style={{ padding: '0.65rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>WRITING</span>
+                            <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>
+                              {currentEvaluation.writing !== null && currentEvaluation.writing !== undefined ? `${currentEvaluation.writing} / 10` : '-'}
+                            </strong>
+                          </div>
+
+                          <div style={{ padding: '0.65rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>LISTENING</span>
+                            <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>
+                              {currentEvaluation.listening !== null && currentEvaluation.listening !== undefined ? `${currentEvaluation.listening} / 10` : '-'}
+                            </strong>
+                          </div>
+
+                          <div style={{ padding: '0.65rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>SPEAKING</span>
+                            <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>
+                              {currentEvaluation.speaking !== null && currentEvaluation.speaking !== undefined ? `${currentEvaluation.speaking} / 10` : '-'}
+                            </strong>
+                          </div>
+
+                          <div style={{ padding: '0.65rem', background: 'var(--primary-light)', borderRadius: '8px', border: '1px solid var(--primary-border)', textAlign: 'center' }}>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--primary-text)', display: 'block', fontWeight: 700 }}>NOTA GLOBAL</span>
+                            <strong style={{ fontSize: '1.1rem', color: 'var(--primary-text)' }}>
+                              {currentEvaluation.overallGrade !== null && currentEvaluation.overallGrade !== undefined ? `${currentEvaluation.overallGrade} / 10` : '-'}
+                            </strong>
+                          </div>
+                        </div>
+
+                        {currentEvaluation.observations && (
+                          <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--text-main)', fontStyle: 'italic', background: 'var(--surface)', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                            💬 Observaciones: "{currentEvaluation.observations}"
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ padding: '0.75rem 0.9rem', background: '#fef7e8', borderRadius: '8px', border: '1px solid #fae0b0', color: '#8d5b12', fontSize: '0.85rem' }}>
+                        ⚠️ Pendiente de evaluación final.
+                      </div>
+                    )}
                   </div>
 
                   {/* Listado de Entregas del Alumno */}
@@ -1293,6 +1485,177 @@ const TeacherGrades: React.FC = () => {
           total={reviewingExam.total}
           onClose={() => setReviewingExam(null)}
         />
+      )}
+
+      {/* =========================================================================
+          MODAL DE EVALUACIÓN FINAL POR COMPETENCIAS
+         ========================================================================= */}
+      {isEvaluationModalOpen && selectedStudentForDossier && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
+          <div className="glass-panel animate-fade-in" style={{ width: '100%', maxWidth: '520px', padding: '2rem', background: 'var(--surface)', position: 'relative' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
+              <div>
+                <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 700, textTransform: 'uppercase' }}>
+                  EVALUACIÓN DOCENTE
+                </span>
+                <h3 style={{ margin: '0.2rem 0 0', fontSize: '1.2rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Award style={{ color: 'var(--primary)' }} /> Evaluación Final / Competencias
+                </h3>
+                <p style={{ margin: '0.2rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                  {selectedStudentForDossier.fullName}
+                </p>
+              </div>
+              <button type="button" onClick={() => setIsEvaluationModalOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEvaluation} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.3rem' }}>
+                    Grammar
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="10"
+                    value={evaluationForm.grammar}
+                    onChange={e => setEvaluationForm({ ...evaluationForm, grammar: e.target.value })}
+                    placeholder="0 - 10"
+                    style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', outline: 'none' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.3rem' }}>
+                    Reading
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="10"
+                    value={evaluationForm.reading}
+                    onChange={e => setEvaluationForm({ ...evaluationForm, reading: e.target.value })}
+                    placeholder="0 - 10"
+                    style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', outline: 'none' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.3rem' }}>
+                    Writing
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="10"
+                    value={evaluationForm.writing}
+                    onChange={e => setEvaluationForm({ ...evaluationForm, writing: e.target.value })}
+                    placeholder="0 - 10"
+                    style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', outline: 'none' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.3rem' }}>
+                    Listening
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="10"
+                    value={evaluationForm.listening}
+                    onChange={e => setEvaluationForm({ ...evaluationForm, listening: e.target.value })}
+                    placeholder="0 - 10"
+                    style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', outline: 'none' }}
+                  />
+                </div>
+
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.3rem' }}>
+                    Speaking
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="10"
+                    value={evaluationForm.speaking}
+                    onChange={e => setEvaluationForm({ ...evaluationForm, speaking: e.target.value })}
+                    placeholder="0 - 10"
+                    style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', outline: 'none' }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--primary)' }}>
+                    Nota Global
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const vals = [
+                        evaluationForm.grammar,
+                        evaluationForm.reading,
+                        evaluationForm.writing,
+                        evaluationForm.listening,
+                        evaluationForm.speaking
+                      ]
+                        .map(Number)
+                        .filter(n => !isNaN(n) && n > 0);
+                      if (vals.length > 0) {
+                        const avg = (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
+                        setEvaluationForm({ ...evaluationForm, overallGrade: avg });
+                      }
+                    }}
+                    style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }}
+                  >
+                    ⚡ Calcular Media Automática
+                  </button>
+                </div>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="10"
+                  value={evaluationForm.overallGrade}
+                  onChange={e => setEvaluationForm({ ...evaluationForm, overallGrade: e.target.value })}
+                  placeholder="Ej. 8.5"
+                  style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--primary-border)', background: 'var(--primary-light)', fontWeight: 700, color: 'var(--primary-text)', outline: 'none' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.3rem' }}>
+                  Observaciones y Feedback del Profesor
+                </label>
+                <textarea
+                  rows={3}
+                  value={evaluationForm.observations}
+                  onChange={e => setEvaluationForm({ ...evaluationForm, observations: e.target.value })}
+                  placeholder="Comentarios sobre la evolución, recomendaciones de estudio..."
+                  style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', outline: 'none', resize: 'vertical' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+                <button type="button" onClick={() => setIsEvaluationModalOpen(false)} style={{ padding: '0.55rem 1rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', fontWeight: 600 }}>
+                  Cancelar
+                </button>
+                <button type="submit" disabled={isSavingEvaluation} className="btn-primary" style={{ padding: '0.55rem 1.25rem' }}>
+                  {isSavingEvaluation ? 'Guardando...' : 'Guardar Evaluación Final'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

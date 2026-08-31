@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Award, CheckCircle2, Clock3, ExternalLink, FileText, MessageSquare, X } from 'lucide-react';
 import ExamReviewModal from '../components/ExamReviewModal';
+import { useParent } from '../context/ParentContext';
 
 interface Question {
   id: string;
@@ -25,6 +26,16 @@ interface Attempt {
   total?: number | null;
 }
 
+interface FinalEvaluationData {
+  grammar?: number | null;
+  reading?: number | null;
+  writing?: number | null;
+  listening?: number | null;
+  speaking?: number | null;
+  overallGrade?: number | null;
+  observations?: string | null;
+}
+
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 const parseAttempt = (content?: string | null): Attempt | null => {
@@ -46,21 +57,40 @@ const parseAttempt = (content?: string | null): Attempt | null => {
 
 const StudentGrades: React.FC = () => {
   const [assignments, setAssignments] = useState<AssignmentGrade[]>([]);
+  const [evaluation, setEvaluation] = useState<FinalEvaluationData | null>(null);
   const [loading, setLoading] = useState(true);
   const [reviewing, setReviewing] = useState<{ title: string; questions?: any[]; answers: Record<string, any>; score: number | null; total?: number | null } | null>(null);
   const [document, setDocument] = useState<AssignmentGrade | null>(null);
+  const { selectedStudentId } = useParent();
 
   useEffect(() => {
-    const loadGrades = async () => {
+    const loadGradesAndEvaluation = async () => {
       try {
-        const response = await fetch(`${apiUrl}/api/assignments/me`, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
-        if (response.ok) setAssignments(await response.json());
+        setLoading(true);
+        const studentParam = selectedStudentId ? `?studentId=${selectedStudentId}` : '';
+        const token = localStorage.getItem('token');
+        const headers = { Authorization: `Bearer ${token}` };
+
+        const [resAssignments, resEvaluation] = await Promise.all([
+          fetch(`${apiUrl}/api/assignments/me${studentParam}`, { headers }),
+          fetch(`${apiUrl}/api/students/me/evaluation${studentParam}`, { headers })
+        ]);
+
+        if (resAssignments.ok) setAssignments(await resAssignments.json());
+        if (resEvaluation.ok) {
+          const evalData = await resEvaluation.json();
+          setEvaluation(evalData);
+        } else {
+          setEvaluation(null);
+        }
+      } catch (err) {
+        console.error(err);
       } finally {
         setLoading(false);
       }
     };
-    loadGrades();
-  }, []);
+    loadGradesAndEvaluation();
+  }, [selectedStudentId]);
 
   const openDocument = (assignment: AssignmentGrade) => {
     const submittedUrl = assignment.submissions?.[0]?.content;
@@ -75,6 +105,80 @@ const StudentGrades: React.FC = () => {
         <h1 style={{ margin: 0, fontSize: '1.8rem', display: 'flex', alignItems: 'center', gap: '0.7rem' }}><Award style={{ color: 'var(--primary)' }} /> Calificaciones</h1>
         <p style={{ margin: '0.3rem 0 0', color: 'var(--text-muted)' }}>Consulta tus resultados de clases y asignaciones directas.</p>
       </header>
+
+      {/* Tarjeta Destacada de Calificaciones Finales / Evaluaciones por Competencias */}
+      <div className="glass-panel animate-fade-in" style={{ padding: '1.5rem', marginBottom: '1.5rem', border: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+          <div style={{ background: 'var(--primary-light)', padding: '0.5rem', borderRadius: '10px', color: 'var(--primary)' }}>
+            <Award size={22} />
+          </div>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--text-main)' }}>Calificaciones Finales / Evaluaciones</h2>
+            <p style={{ margin: '0.15rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              Evaluación docente por competencias lingüísticas
+            </p>
+          </div>
+        </div>
+
+        {evaluation ? (
+          <div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(95px, 1fr))', gap: '0.85rem', marginBottom: '1rem' }}>
+              <div style={{ padding: '0.85rem', background: 'var(--surface-alt)', borderRadius: '10px', border: '1px solid var(--border)', textAlign: 'center' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>GRAMMAR</span>
+                <strong style={{ fontSize: '1.2rem', color: 'var(--primary)' }}>
+                  {evaluation.grammar !== null && evaluation.grammar !== undefined ? `${evaluation.grammar} / 10` : '-'}
+                </strong>
+              </div>
+
+              <div style={{ padding: '0.85rem', background: 'var(--surface-alt)', borderRadius: '10px', border: '1px solid var(--border)', textAlign: 'center' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>READING</span>
+                <strong style={{ fontSize: '1.2rem', color: 'var(--primary)' }}>
+                  {evaluation.reading !== null && evaluation.reading !== undefined ? `${evaluation.reading} / 10` : '-'}
+                </strong>
+              </div>
+
+              <div style={{ padding: '0.85rem', background: 'var(--surface-alt)', borderRadius: '10px', border: '1px solid var(--border)', textAlign: 'center' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>WRITING</span>
+                <strong style={{ fontSize: '1.2rem', color: 'var(--primary)' }}>
+                  {evaluation.writing !== null && evaluation.writing !== undefined ? `${evaluation.writing} / 10` : '-'}
+                </strong>
+              </div>
+
+              <div style={{ padding: '0.85rem', background: 'var(--surface-alt)', borderRadius: '10px', border: '1px solid var(--border)', textAlign: 'center' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>LISTENING</span>
+                <strong style={{ fontSize: '1.2rem', color: 'var(--primary)' }}>
+                  {evaluation.listening !== null && evaluation.listening !== undefined ? `${evaluation.listening} / 10` : '-'}
+                </strong>
+              </div>
+
+              <div style={{ padding: '0.85rem', background: 'var(--surface-alt)', borderRadius: '10px', border: '1px solid var(--border)', textAlign: 'center' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>SPEAKING</span>
+                <strong style={{ fontSize: '1.2rem', color: 'var(--primary)' }}>
+                  {evaluation.speaking !== null && evaluation.speaking !== undefined ? `${evaluation.speaking} / 10` : '-'}
+                </strong>
+              </div>
+
+              <div style={{ padding: '0.85rem', background: 'var(--primary-light)', borderRadius: '10px', border: '1px solid var(--primary-border)', textAlign: 'center' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--primary-text)', display: 'block', fontWeight: 700 }}>NOTA GLOBAL</span>
+                <strong style={{ fontSize: '1.2rem', color: 'var(--primary-text)' }}>
+                  {evaluation.overallGrade !== null && evaluation.overallGrade !== undefined ? `${evaluation.overallGrade} / 10` : '-'}
+                </strong>
+              </div>
+            </div>
+
+            {evaluation.observations && (
+              <div style={{ padding: '0.85rem 1rem', background: 'var(--surface-alt)', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '0.9rem', color: 'var(--text-main)', fontStyle: 'italic' }}>
+                💬 Observaciones del profesor: "{evaluation.observations}"
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ padding: '0.85rem 1rem', background: '#fef7e8', borderRadius: '8px', border: '1px solid #fae0b0', color: '#8d5b12', fontSize: '0.88rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Clock3 size={18} /> Pendiente de evaluación final
+          </div>
+        )}
+      </div>
+
       <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
         {loading ? <p style={emptyStyle}>Cargando calificaciones...</p> : assignments.length === 0 ? <p style={emptyStyle}>Aún no hay tareas o exámenes registrados.</p> : assignments.map(assignment => {
           const submission = assignment.submissions?.[0];

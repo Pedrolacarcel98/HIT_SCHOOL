@@ -19,7 +19,7 @@ const TeacherLayout: React.FC = () => {
     }
 
     if (role !== 'TEACHER' && role !== 'ADMIN') {
-      navigate(role === 'STUDENT' ? '/student' : '/');
+      navigate(role === 'PARENT' ? '/student/payments' : role === 'STUDENT' ? '/student' : '/');
     }
   }, [navigate]);
 
@@ -38,6 +38,7 @@ const TeacherLayout: React.FC = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('userId');
     localStorage.removeItem('userRole');
+    localStorage.removeItem('userEmail');
     navigate('/');
   };
 

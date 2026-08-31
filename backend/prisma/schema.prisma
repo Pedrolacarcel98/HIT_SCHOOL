@@ -64,12 +64,14 @@ model User {
   createdAssignments Assignment[] @relation("TeacherAssignments")
   sentChatMessages ChatMessage[] @relation("SentChatMessages")
   receivedChatMessages ChatMessage[] @relation("ReceivedChatMessages")
+  finalEvaluation FinalEvaluation? @relation("StudentFinalEvaluation")
 }
 
 model ChatMessage {
   id          String   @id @default(uuid())
   senderId    String
   recipientId String
+  studentId   String?
   content     String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -77,6 +79,7 @@ model ChatMessage {
   recipient   User     @relation("ReceivedChatMessages", fields: [recipientId], references: [id], onDelete: Cascade)
 
   @@index([senderId, recipientId, createdAt])
+  @@index([studentId, createdAt])
 }
 
 model Profile {
@@ -215,4 +218,19 @@ model PaymentStatus {
 
   @@unique([studentId, month, year])
   @@index([studentId, dueDate])
+}
+
+model FinalEvaluation {
+  id           String   @id @default(uuid())
+  studentId    String   @unique
+  grammar      Float?
+  reading      Float?
+  writing      Float?
+  listening    Float?
+  speaking     Float?
+  overallGrade Float?
+  observations String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  student      User     @relation("StudentFinalEvaluation", fields: [studentId], references: [id], onDelete: Cascade)
 }

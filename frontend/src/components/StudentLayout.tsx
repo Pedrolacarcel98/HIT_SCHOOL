@@ -1,20 +1,28 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Award, BookOpen, CircleDollarSign, GraduationCap, LogOut, MessageCircle, Menu, X } from 'lucide-react';
+import { Award, BookOpen, CircleDollarSign, GraduationCap, LogOut, MessageCircle, Menu, X, Users, Settings } from 'lucide-react';
+import { useParent } from '../context/ParentContext';
+import SettingsModal from './SettingsModal';
 
 const StudentLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const { parentName, childrenList, selectedStudentId, setSelectedStudentId, refreshParentData } = useParent();
+
+  const userRole = localStorage.getItem('userRole');
 
   useEffect(() => {
     const token = localStorage.getItem('token');
     const role = localStorage.getItem('userRole');
 
-    if (!token || role !== 'STUDENT') {
+    if (!token || (role !== 'STUDENT' && role !== 'PARENT')) {
       navigate('/');
+    } else if (role === 'PARENT') {
+      refreshParentData();
     }
-  }, [navigate]);
+  }, [navigate, refreshParentData]);
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -24,6 +32,8 @@ const StudentLayout: React.FC = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('userId');
     localStorage.removeItem('userRole');
+    localStorage.removeItem('userEmail');
+    localStorage.removeItem('selectedStudentId');
     navigate('/');
   };
 
@@ -74,7 +84,7 @@ const StudentLayout: React.FC = () => {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <span style={{ fontSize: '0.72rem', color: 'var(--primary)', fontWeight: '700', textTransform: 'uppercase', background: 'var(--primary-light)', padding: '0.2rem 0.5rem', borderRadius: '6px' }}>
-            Alumno
+            {userRole === 'PARENT' ? 'Tutor' : 'Alumno'}
           </span>
         </div>
       </header>
@@ -107,7 +117,7 @@ const StudentLayout: React.FC = () => {
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--text-main)' }}>HitSchool</h3>
                 <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Panel Alumno
+                  {userRole === 'PARENT' ? 'Panel Tutor' : 'Panel Alumno'}
                 </span>
               </div>
             </div>
@@ -189,15 +199,84 @@ const StudentLayout: React.FC = () => {
                   flexShrink: 0
                 }}
               >
-                <GraduationCap size={18} />
+                {userRole === 'PARENT' ? <Users size={18} /> : <GraduationCap size={18} />}
               </div>
               <div style={{ flex: 1, overflow: 'hidden' }}>
-                <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: '600', color: 'var(--text-main)' }}>Alumno</p>
+                <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: '600', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {userRole === 'PARENT' ? parentName : 'Alumno'}
+                </p>
                 <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  Panel de Alumno
+                  {userRole === 'PARENT' ? 'Panel de Tutor' : 'Panel de Alumno'}
                 </p>
               </div>
             </div>
+
+            {userRole === 'PARENT' && childrenList.length > 0 && (
+              <div style={{ padding: '0 0.25rem' }}>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+                  Alumno / Hijo activo:
+                </label>
+                <select
+                  value={selectedStudentId}
+                  onChange={(e) => setSelectedStudentId(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.45rem 0.5rem',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--surface-alt)',
+                    color: 'var(--text-main)',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {childrenList.map((child) => {
+                    const childName = child.profile?.firstName || child.profile?.lastName
+                      ? `${child.profile?.firstName || ''} ${child.profile?.lastName || ''}`.trim()
+                      : child.email;
+                    return (
+                      <option key={child.id} value={child.id}>
+                        🎓 {childName}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            )}
+
+            {userRole === 'PARENT' && (
+              <button
+                onClick={() => setIsSettingsOpen(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem',
+                  padding: '0.6rem',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border)',
+                  background: 'transparent',
+                  color: 'var(--text-main)',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  transition: 'all 0.2s ease',
+                  minHeight: '40px'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--primary)';
+                  e.currentTarget.style.color = 'var(--primary)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--border)';
+                  e.currentTarget.style.color = 'var(--text-main)';
+                }}
+              >
+                <Settings size={16} /> Ajustes de Cuenta
+              </button>
+            )}
+
             <button
               onClick={handleLogout}
               style={{
@@ -224,7 +303,7 @@ const StudentLayout: React.FC = () => {
                 e.currentTarget.style.borderColor = 'var(--border)';
               }}
             >
-              <LogOut size={16} /> Cerrar Sesion
+              <LogOut size={16} /> Cerrar Sesión
             </button>
           </div>
         </aside>
@@ -233,6 +312,8 @@ const StudentLayout: React.FC = () => {
           <Outlet />
         </main>
       </div>
+
+      {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
 
       <style>{`
         @media (max-width: 900px) {

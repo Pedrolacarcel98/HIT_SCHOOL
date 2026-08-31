@@ -8,21 +8,62 @@ const router = Router();
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 
+// Helper para obtener todos los hijos (alumnos) asociados a un tutor por parentId o email
+export const getChildrenForParent = async (prisma: PrismaClient, parentId: string, parentEmail: string) => {
+  const children = await prisma.user.findMany({
+    where: {
+      role: 'STUDENT',
+      OR: [
+        { parentId },
+        { parent: { email: { equals: parentEmail.trim().toLowerCase(), mode: 'insensitive' } } }
+      ]
+    },
+    select: {
+      id: true,
+      email: true,
+      role: true,
+      monthlyFee: true,
+      courseDurationMonths: true,
+      courseStartDate: true,
+      createdAt: true,
+      profile: true,
+      parentId: true,
+      enrollments: {
+        select: {
+          courseId: true,
+          course: {
+            select: {
+              id: true,
+              title: true
+            }
+          }
+        }
+      }
+    },
+    orderBy: { createdAt: 'desc' }
+  });
+
+  // Asegurar la sincronización de parentId en la base de datos si faltaba
+  for (const child of children) {
+    if (!child.parentId) {
+      await prisma.user.update({
+        where: { id: child.id },
+        data: { parentId }
+      }).catch(() => {});
+    }
+  }
+
+  return children;
+};
+
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
   try {
     const user = await prisma.user.findUnique({
-      where: { email },
+      where: { email: email.trim().toLowerCase() },
       include: {
-        profile: true,
-        children: {
-          select: {
-            id: true,
-            email: true,
-            profile: true
-          }
-        }
+        profile: true
       }
     });
     if (!user) {
@@ -35,10 +76,15 @@ router.post('/login', async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user.id, role: user.role },
+      { id: user.id, role: user.role, email: user.email },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
+
+    let children: any[] = [];
+    if (user.role === 'PARENT') {
+      children = await getChildrenForParent(prisma, user.id, user.email);
+    }
 
     res.json({
       token,
@@ -47,7 +93,7 @@ router.post('/login', async (req, res) => {
         email: user.email,
         role: user.role,
         profile: user.profile,
-        children: user.children
+        children
       }
     });
   } catch (error) {
@@ -79,33 +125,21 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res) => {
             email: true,
             profile: true
           }
-        },
-        children: {
-          select: {
-            id: true,
-            email: true,
-            role: true,
-            monthlyFee: true,
-            courseDurationMonths: true,
-            profile: true,
-            enrollments: {
-              select: {
-                courseId: true,
-                course: {
-                  select: {
-                    id: true,
-                    title: true
-                  }
-                }
-              }
-            }
-          }
         }
       }
     });
 
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
-    res.json(user);
+
+    let children: any[] = [];
+    if (user.role === 'PARENT') {
+      children = await getChildrenForParent(prisma, user.id, user.email);
+    }
+
+    res.json({
+      ...user,
+      children
+    });
   } catch (error) {
     console.error('Error al obtener perfil:', error);
     res.status(500).json({ error: 'Error al obtener perfil de usuario' });

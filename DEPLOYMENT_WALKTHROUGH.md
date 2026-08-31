@@ -104,7 +104,8 @@ Sigue esta lista de verificación para comprobar que todo funciona al 100%:
 
 ### 1. Inicio de Sesión y Roles
 - Ve a [http://localhost:5173](http://localhost:5173).
-- Selecciona **"Soy Profesor"** e introduce `profesor@hitschool.com` / `1234`.
+- Selecciona el rol correspondiente (**"Soy Alumno"**, **"Soy Tutor / Padre"** o **"Soy Profesor"**).
+- Introduce las credenciales (ej. `profesor@hitschool.com` / `1234` para Profesor, o `alumno@hitschool.com` / `1234` para Alumno).
 - Comprueba que la barra lateral persistente aparece a la izquierda con:
   - 📖 **Mis Clases**
   - 📁 **Material de Clase**

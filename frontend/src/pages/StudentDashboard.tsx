@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, FileText, Settings, X } from 'lucide-react';
+import { BookOpen, FileText, X } from 'lucide-react';
 import FormPlayer from '../components/FormPlayer';
 import ExamReviewModal from '../components/ExamReviewModal';
-import SettingsModal from '../components/SettingsModal';
+import { useParent } from '../context/ParentContext';
 import type { ReviewQuestion } from '../components/ExamReviewModal';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -68,11 +68,15 @@ const StudentDashboard: React.FC = () => {
   const [viewingContent, setViewingContent] = useState<IndividualContent | null>(null);
   const [viewingMaterialAssignment, setViewingMaterialAssignment] = useState<AssignedMaterial | null>(null);
   const [reviewingContent, setReviewingContent] = useState<IndividualContent | null>(null);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const { selectedStudent, selectedStudentId } = useParent();
+  const userRole = localStorage.getItem('userRole');
+
+  const activeStudentName = selectedStudent?.profile?.firstName || 'Alumno';
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    if (!token || localStorage.getItem('userRole') !== 'STUDENT') {
+    const role = localStorage.getItem('userRole');
+    if (!token || (role !== 'STUDENT' && role !== 'PARENT')) {
       navigate('/');
     }
   }, [navigate]);
@@ -80,17 +84,19 @@ const StudentDashboard: React.FC = () => {
   useEffect(() => {
     const fetchCourses = async () => {
       try {
+        setLoading(true);
         const token = localStorage.getItem('token');
-        const res = await fetch(`${apiUrl}/api/courses`, {
+        const studentParam = selectedStudentId ? `?studentId=${selectedStudentId}` : '';
+        const res = await fetch(`${apiUrl}/api/courses${studentParam}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) setCourses(await res.json());
-        const assignmentsResponse = await fetch(`${apiUrl}/api/assignments/me`, { headers: { Authorization: `Bearer ${token}` } });
+        const assignmentsResponse = await fetch(`${apiUrl}/api/assignments/me${studentParam}`, { headers: { Authorization: `Bearer ${token}` } });
         if (assignmentsResponse.ok) {
           const assignments = await assignmentsResponse.json();
           setIndividualContent(assignments.filter((assignment: IndividualContent & { courseId?: string }) => !assignment.courseId));
         }
-        const materialsResponse = await fetch(`${apiUrl}/api/materials/assigned-to-me`, { headers: { Authorization: `Bearer ${token}` } });
+        const materialsResponse = await fetch(`${apiUrl}/api/materials/assigned-to-me${studentParam}`, { headers: { Authorization: `Bearer ${token}` } });
         if (materialsResponse.ok) setAssignedMaterials(await materialsResponse.json());
       } catch (err) {
         console.error(err);
@@ -99,7 +105,7 @@ const StudentDashboard: React.FC = () => {
       }
     };
     fetchCourses();
-  }, []);
+  }, [selectedStudentId]);
 
   const handleExamFinish = async (score: number, total: number, answers: { [key: string]: any }) => {
     if (!viewingContent && !viewingMaterialAssignment) return;
@@ -140,24 +146,9 @@ const StudentDashboard: React.FC = () => {
             <BookOpen style={{ color: 'var(--primary)' }} /> Mis Clases
           </h1>
           <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)' }}>
-            Aquí verás todas las clases en las que estás matriculado.
+            {userRole === 'PARENT' ? `Clases matriculadas de ${activeStudentName}` : 'Aquí verás todas las clases en las que estás matriculado.'}
           </p>
         </div>
-
-        <button
-          type="button"
-          onClick={() => setIsSettingsOpen(true)}
-          className="btn-secondary"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.45rem',
-            padding: '0.55rem 0.95rem',
-            fontSize: '0.85rem'
-          }}
-        >
-          <Settings size={16} /> Cambiar Contraseña / Ajustes
-        </button>
       </header>
 
       {loading ? (
@@ -193,7 +184,9 @@ const StudentDashboard: React.FC = () => {
           {courses.length === 0 && (
             <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem', gridColumn: '1 / -1' }}>
               <BookOpen size={40} style={{ color: 'var(--primary)', opacity: 0.5, marginBottom: '1rem' }} />
-              <p style={{ color: 'var(--text-muted)', margin: 0 }}>Aún no estás matriculado en ninguna clase.</p>
+              <p style={{ color: 'var(--text-muted)', margin: 0 }}>
+                {userRole === 'PARENT' ? `Aún no hay clases matriculadas para ${activeStudentName}.` : 'Aún no estás matriculado en ninguna clase.'}
+              </p>
             </div>
           )}
         </div>
@@ -226,13 +219,25 @@ const StudentDashboard: React.FC = () => {
       {viewingContent?.material?.type === 'FORM' && viewingContent.material.formData && <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: '0.75rem 1rem 0', background: 'rgba(255,255,255,0.2)' }}>
         <div style={{ width: '100%', maxWidth: '980px', height: 'calc(100vh - 0.75rem)', overflowY: 'auto', background: 'var(--background)', borderRadius: '12px 12px 0 0', padding: '1rem' }}>
           <button onClick={() => setViewingContent(null)} aria-label="Cerrar examen" style={{ display: 'flex', marginLeft: 'auto', border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={22} /></button>
-          <FormPlayer title={viewingContent.title} description={viewingContent.description} questions={viewingContent.material.formData.questions as never[] || []} onFinish={handleExamFinish} />
+          {userRole === 'PARENT' ? (
+            <div style={{ padding: '2rem', textAlign: 'center', color: '#24583e', background: '#eaf4ef', borderRadius: '10px', border: '1px solid #bfe0d0', margin: '2rem 0', fontWeight: 600 }}>
+              🛡️ Vista del Tutor (Modo Solo Lectura): Los exámenes interactivos deben ser realizados directamente por el alumno desde su propia cuenta.
+            </div>
+          ) : (
+            <FormPlayer title={viewingContent.title} description={viewingContent.description} questions={viewingContent.material.formData.questions as never[] || []} onFinish={handleExamFinish} />
+          )}
         </div>
       </div>}
       {viewingMaterialAssignment?.material.type === 'FORM' && viewingMaterialAssignment.material.formData && <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: '0.75rem 1rem 0', background: 'rgba(255,255,255,0.2)' }}>
         <div style={{ width: '100%', maxWidth: '980px', height: 'calc(100vh - 0.75rem)', overflowY: 'auto', background: 'var(--background)', borderRadius: '12px 12px 0 0', padding: '1rem' }}>
           <button onClick={() => setViewingMaterialAssignment(null)} aria-label="Cerrar examen" style={{ display: 'flex', marginLeft: 'auto', border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={22} /></button>
-          <FormPlayer title={viewingMaterialAssignment.material.title} description={viewingMaterialAssignment.material.description || undefined} questions={(viewingMaterialAssignment.material.formData.questions || []) as any[]} onFinish={handleExamFinish} />
+          {userRole === 'PARENT' ? (
+            <div style={{ padding: '2rem', textAlign: 'center', color: '#24583e', background: '#eaf4ef', borderRadius: '10px', border: '1px solid #bfe0d0', margin: '2rem 0', fontWeight: 600 }}>
+              🛡️ Vista del Tutor (Modo Solo Lectura): Los exámenes interactivos deben ser realizados directamente por el alumno desde su propia cuenta.
+            </div>
+          ) : (
+            <FormPlayer title={viewingMaterialAssignment.material.title} description={viewingMaterialAssignment.material.description || undefined} questions={(viewingMaterialAssignment.material.formData.questions || []) as any[]} onFinish={handleExamFinish} />
+          )}
         </div>
       </div>}
       {reviewingContent?.material?.type === 'FORM' && reviewingContent.material.formData && (
@@ -245,7 +250,6 @@ const StudentDashboard: React.FC = () => {
           onClose={() => setReviewingContent(null)}
         />
       )}
-      {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
     </div>
   );
 };

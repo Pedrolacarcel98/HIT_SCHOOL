@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Clock3, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock3, FileText, XCircle } from 'lucide-react';
+import { useParent } from '../context/ParentContext';
+import { generateInvoicePDF } from '../utils/invoice';
 
 interface StudentPaymentResponse {
   month: number;
@@ -19,6 +21,7 @@ interface StudentPaymentResponse {
     profile?: {
       firstName: string;
       lastName: string;
+      dni?: string | null;
     };
   };
 }
@@ -39,6 +42,7 @@ interface MonthlyPaymentCard {
 const StudentPayments: React.FC = () => {
   const [payments, setPayments] = useState<MonthlyPaymentCard[]>([]);
   const [loading, setLoading] = useState(true);
+  const { selectedStudentId } = useParent();
 
   const monthsToShow = useMemo<MonthTarget[]>(() => {
     const now = new Date();
@@ -63,11 +67,12 @@ const StudentPayments: React.FC = () => {
         setLoading(true);
         const token = localStorage.getItem('token');
         const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+        const studentParam = selectedStudentId ? `&studentId=${selectedStudentId}` : '';
 
         const results = await Promise.all(
           monthsToShow.map(async ({ month, year }) => {
             try {
-              const res = await fetch(`${apiUrl}/api/payments/me?month=${month}&year=${year}`, {
+              const res = await fetch(`${apiUrl}/api/payments/me?month=${month}&year=${year}${studentParam}`, {
                 headers: { Authorization: `Bearer ${token}` }
               });
 
@@ -109,7 +114,25 @@ const StudentPayments: React.FC = () => {
     };
 
     fetchPayments();
-  }, [monthsToShow]);
+  }, [monthsToShow, selectedStudentId]);
+
+  const handleDownloadInvoice = (card: MonthlyPaymentCard) => {
+    if (!card.data) return;
+    const firstName = card.data.student.profile?.firstName || 'Alumno';
+    const lastName = card.data.student.profile?.lastName || '';
+    const studentName = `${firstName} ${lastName}`.trim();
+
+    generateInvoicePDF({
+      studentName,
+      studentDni: card.data.student.profile?.dni || null,
+      studentEmail: card.data.student.email,
+      month: card.month,
+      year: card.year,
+      monthLabel: card.label,
+      amount: card.data.amount || 35,
+      paidAt: card.data.paidAt
+    });
+  };
 
   return (
     <div className="page-container">
@@ -170,22 +193,49 @@ const StudentPayments: React.FC = () => {
                       </p>
                     </div>
 
-                    {payment.data.visualStatus === 'PAID' ? (
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#24583e', background: 'var(--primary-light)', padding: '0.4rem 0.85rem', borderRadius: '20px', border: '1px solid var(--primary-border)', fontWeight: 700 }}>
-                        <CheckCircle2 size={18} />
-                        Pagado
-                      </div>
-                    ) : payment.data.visualStatus === 'OVERDUE' ? (
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#9e2a2b', background: '#fdf0f0', padding: '0.4rem 0.85rem', borderRadius: '20px', border: '1px solid #f7caca', fontWeight: 700 }}>
-                        <XCircle size={18} />
-                        Impago
-                      </div>
-                    ) : (
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#8d5b12', background: '#fef7e8', padding: '0.4rem 0.85rem', borderRadius: '20px', border: '1px solid #fae0b0', fontWeight: 700 }}>
-                        <XCircle size={18} />
-                        Pendiente
-                      </div>
-                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                      {(() => {
+                        const isPaid = payment.data.visualStatus === 'PAID' || payment.data.isPaid || payment.data.status === 'PAID';
+                        return (
+                          <button
+                            type="button"
+                            disabled={!isPaid}
+                            onClick={() => isPaid && handleDownloadInvoice(payment)}
+                            className="btn-secondary"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.45rem',
+                              padding: '0.45rem 0.85rem',
+                              fontSize: '0.85rem',
+                              borderRadius: '8px',
+                              opacity: isPaid ? 1 : 0.5,
+                              cursor: isPaid ? 'pointer' : 'not-allowed'
+                            }}
+                            title={isPaid ? 'Descargar Factura Oficial en PDF' : 'Factura disponible únicamente tras registrar el pago'}
+                          >
+                            <FileText size={16} /> Factura PDF
+                          </button>
+                        );
+                      })()}
+
+                      {payment.data.visualStatus === 'PAID' ? (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#24583e', background: 'var(--primary-light)', padding: '0.4rem 0.85rem', borderRadius: '20px', border: '1px solid var(--primary-border)', fontWeight: 700 }}>
+                          <CheckCircle2 size={18} />
+                          Pagado
+                        </div>
+                      ) : payment.data.visualStatus === 'OVERDUE' ? (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#9e2a2b', background: '#fdf0f0', padding: '0.4rem 0.85rem', borderRadius: '20px', border: '1px solid #f7caca', fontWeight: 700 }}>
+                          <XCircle size={18} />
+                          Impago
+                        </div>
+                      ) : (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#8d5b12', background: '#fef7e8', padding: '0.4rem 0.85rem', borderRadius: '20px', border: '1px solid #fae0b0', fontWeight: 700 }}>
+                          <XCircle size={18} />
+                          Pendiente
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ) : null}
               </div>

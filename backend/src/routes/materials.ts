@@ -54,15 +54,48 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// Obtener los materiales asignados al alumno autenticado
+// Obtener los materiales asignados al alumno autenticado (o al alumno seleccionado por el tutor)
 router.get('/assigned-to-me', authenticateToken, async (req: AuthRequest, res: Response) => {
-  if (req.user?.role !== 'STUDENT') {
-    return res.status(403).json({ error: 'Solo los alumnos pueden consultar sus asignaciones' });
-  }
-
   try {
+    let studentId = req.user?.id;
+
+    if (req.user?.role === 'PARENT') {
+      const userEmail = (req.user as any)?.email || '';
+      const requestedStudentId = req.query.studentId as string;
+      if (requestedStudentId) {
+        const child = await prisma.user.findFirst({
+          where: {
+            id: requestedStudentId,
+            role: 'STUDENT',
+            OR: [
+              { parentId: req.user.id },
+              { parent: { email: { equals: userEmail, mode: 'insensitive' } } }
+            ]
+          }
+        });
+        if (child) studentId = child.id;
+      } else {
+        const child = await prisma.user.findFirst({
+          where: {
+            role: 'STUDENT',
+            OR: [
+              { parentId: req.user.id },
+              { parent: { email: { equals: userEmail, mode: 'insensitive' } } }
+            ]
+          }
+        });
+        if (child) studentId = child.id;
+      }
+    } else if (req.user?.role !== 'STUDENT') {
+      return res.status(403).json({ error: 'Solo los alumnos y tutores pueden consultar sus asignaciones' });
+    }
+
+    if (!studentId) {
+      return res.json([]);
+    }
+
     const assignments = await prisma.materialAssignment.findMany({
-      where: { studentId: req.user.id },
+      where: { studentId },
       orderBy: { assignedAt: 'desc' },
       include: {
         material: {

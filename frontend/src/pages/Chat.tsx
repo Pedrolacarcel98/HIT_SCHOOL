@@ -1,21 +1,28 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { GraduationCap, MessageCircle, Pencil, Search, Send, Trash2, UserRound, Users, X } from 'lucide-react';
+import { useParent } from '../context/ParentContext';
 
 type ChatRole = 'TEACHER' | 'STUDENT';
 
 interface ContactUser {
   id: string;
+  contactKey?: string;
   name: string;
   email: string;
   avatarUrl?: string | null;
   courseTitle?: string;
-  role: 'TEACHER' | 'STUDENT';
+  role: 'TEACHER' | 'STUDENT' | 'PARENT';
+  studentName?: string;
+  studentId?: string;
+  subtitle?: string;
 }
 
 interface ChatMessage {
   id: string;
   senderId: string;
-  senderRole: ChatRole;
+  senderRole: 'TEACHER' | 'STUDENT' | 'PARENT';
+  senderName?: string;
+  studentId?: string;
   content: string;
   createdAt: string;
   updatedAt?: string;
@@ -36,10 +43,28 @@ const getCurrentUserId = () => {
   }
 };
 
-const getInitials = (name: string) => name.split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase() || '?';
+const getInitials = (name: string) =>
+  name
+    .replace(/[\(\)]/g, '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(part => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || '?';
+
+const getDisplayName = (contact?: { name: string; role: string } | null, viewerRole?: string | null) => {
+  if (!contact) return 'Usuario';
+  if (contact.role === 'TEACHER' && viewerRole !== 'TEACHER' && viewerRole !== 'ADMIN') {
+    return 'Profesor';
+  }
+  return contact.name;
+};
 
 const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
   const currentUserId = getCurrentUserId();
+  const userRole = localStorage.getItem('userRole');
   const [contacts, setContacts] = useState<ContactUser[]>([]);
   const [selectedContactId, setSelectedContactId] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -49,19 +74,21 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { selectedStudent, selectedStudentId } = useParent();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // 1. Cargar lista de contactos (Alumnos para Profesor, Profesores para Alumno)
+  // 1. Cargar lista de contactos (Alumnos para Profesor, Profesores para Alumno/Tutor)
   useEffect(() => {
     const loadContacts = async () => {
       try {
         setLoading(true);
         setError('');
         const token = localStorage.getItem('token');
-        const res = await fetch(`${apiUrl}/api/chat/contacts`, {
+        const studentParam = (userRole === 'PARENT' && selectedStudentId) ? `?studentId=${selectedStudentId}` : '';
+        const res = await fetch(`${apiUrl}/api/chat/contacts${studentParam}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
 
@@ -75,9 +102,11 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
         // Seleccionar automáticamente el primer contacto disponible si no hay ninguno seleccionado
         if (data.length > 0) {
           setSelectedContactId(prev => {
-            const exists = data.some(c => c.id === prev);
-            return exists ? prev : data[0].id;
+            const exists = data.some(c => (c.contactKey || c.id) === prev || c.id === prev);
+            return exists ? prev : (data[0].contactKey || data[0].id);
           });
+        } else {
+          setSelectedContactId('');
         }
       } catch (err) {
         console.error(err);
@@ -88,11 +117,27 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
     };
 
     loadContacts();
-  }, [role]);
+  }, [role, selectedStudentId, userRole]);
 
   const selectedContact = useMemo(() => {
-    return contacts.find(c => c.id === selectedContactId) || null;
+    return contacts.find(c => (c.contactKey || c.id) === selectedContactId) || contacts.find(c => c.id === selectedContactId) || null;
   }, [contacts, selectedContactId]);
+
+  const targetStudentIdForChat = useMemo(() => {
+    if (selectedContact?.studentId) {
+      return selectedContact.studentId;
+    }
+    if (userRole === 'PARENT') {
+      return selectedStudentId;
+    }
+    if (userRole === 'STUDENT') {
+      return currentUserId;
+    }
+    if (selectedContact?.role === 'STUDENT') {
+      return selectedContact.id;
+    }
+    return '';
+  }, [selectedContact, selectedStudentId, userRole, currentUserId]);
 
   const filteredContacts = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
@@ -100,7 +145,9 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
     return contacts.filter(c => 
       c.name.toLowerCase().includes(q) || 
       c.email.toLowerCase().includes(q) ||
-      (c.courseTitle && c.courseTitle.toLowerCase().includes(q))
+      (c.courseTitle && c.courseTitle.toLowerCase().includes(q)) ||
+      (c.studentName && c.studentName.toLowerCase().includes(q)) ||
+      (c.subtitle && c.subtitle.toLowerCase().includes(q))
     );
   }, [contacts, searchTerm]);
 
@@ -114,7 +161,8 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
     try {
       if (!silent) setError('');
       const token = localStorage.getItem('token');
-      const res = await fetch(`${apiUrl}/api/chat?partnerId=${encodeURIComponent(selectedContact.id)}`, {
+      const studentParam = targetStudentIdForChat ? `&studentId=${encodeURIComponent(targetStudentIdForChat)}` : '';
+      const res = await fetch(`${apiUrl}/api/chat?partnerId=${encodeURIComponent(selectedContact.id)}${studentParam}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -146,7 +194,7 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
     }, 3500);
 
     return () => clearInterval(interval);
-  }, [selectedContact?.id]);
+  }, [selectedContact?.id, selectedContact?.contactKey, targetStudentIdForChat]);
 
   useEffect(() => {
     scrollToBottom();
@@ -159,13 +207,21 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
 
     try {
       const token = localStorage.getItem('token');
+      const payload: Record<string, any> = editingMessageId
+        ? { content }
+        : {
+            recipientId: selectedContact.id,
+            content,
+            studentId: targetStudentIdForChat || undefined
+          };
+
       const res = await fetch(`${apiUrl}/api/chat${editingMessageId ? `/${editingMessageId}` : ''}`, {
         method: editingMessageId ? 'PUT' : 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify(editingMessageId ? { content } : { recipientId: selectedContact.id, content })
+        body: JSON.stringify(payload)
       });
 
       if (!res.ok) {
@@ -214,17 +270,25 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
     }
   };
 
+  const activeStudentName = selectedStudent?.profile?.firstName || 'Alumno';
+
   return (
     <div className="page-container animate-fade-in">
       <header style={{ marginBottom: '1.5rem' }}>
         <h1 style={{ margin: 0, fontSize: '1.8rem', display: 'flex', alignItems: 'center', gap: '0.7rem' }}>
           <MessageCircle style={{ color: 'var(--primary)' }} />
-          {role === 'TEACHER' ? 'Chat Alumnos' : 'Chat con Profesor'}
+          {role === 'TEACHER'
+            ? 'Chat Alumnos'
+            : userRole === 'PARENT'
+              ? `Chat con Profesor de ${activeStudentName}`
+              : 'Chat con Profesor'}
         </h1>
         <p style={{ margin: '0.3rem 0 0', color: 'var(--text-muted)' }}>
           {role === 'TEACHER' 
             ? 'Canal directo y privado con tus alumnos matriculados.' 
-            : 'Canal directo y privado con tu profesor asignado.'}
+            : userRole === 'PARENT'
+              ? `Canal directo y privado con el profesor asignado a ${activeStudentName}.`
+              : 'Canal directo y privado con tu profesor asignado.'}
         </p>
       </header>
 
@@ -257,7 +321,7 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
                   id="chat-search"
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  placeholder={role === 'TEACHER' ? 'Buscar alumno...' : 'Buscar profesor...'}
+                  placeholder={role === 'TEACHER' ? 'Buscar alumno o tutor...' : 'Buscar profesor...'}
                   style={{
                     width: '100%',
                     padding: '0.6rem 0.65rem 0.6rem 2.2rem',
@@ -283,12 +347,13 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
                 </p>
               ) : (
                 filteredContacts.map(contact => {
-                  const isSelected = selectedContactId === contact.id;
+                  const contactKey = contact.contactKey || contact.id;
+                  const isSelected = selectedContactId === contactKey || selectedContactId === contact.id;
 
                   return (
                     <button
-                      key={contact.id}
-                      onClick={() => setSelectedContactId(contact.id)}
+                      key={contactKey}
+                      onClick={() => setSelectedContactId(contactKey)}
                       style={{
                         width: '100%',
                         display: 'flex',
@@ -305,13 +370,25 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
                         transition: 'all 0.15s ease'
                       }}
                     >
-                      <Avatar name={contact.name} />
+                      <Avatar name={getDisplayName(contact, userRole)} />
                       <div style={{ minWidth: 0, flex: 1 }}>
-                        <strong style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.92rem', color: isSelected ? 'var(--primary-text)' : 'var(--text-main)' }}>
-                          {contact.name}
-                        </strong>
-                        <small style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-muted)', fontSize: '0.78rem' }}>
-                          {contact.courseTitle || contact.email}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                          <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.92rem', color: isSelected ? 'var(--primary-text)' : 'var(--text-main)' }}>
+                            {getDisplayName(contact, userRole)}
+                          </strong>
+                          {contact.role === 'PARENT' && (
+                            <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '1px 5px', borderRadius: '8px', background: '#eaf4ef', color: '#24583e', border: '1px solid #bfe0d0' }}>
+                              TUTOR
+                            </span>
+                          )}
+                          {contact.role === 'STUDENT' && role === 'TEACHER' && (
+                            <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '1px 5px', borderRadius: '8px', background: 'var(--surface-alt)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
+                              Alumno
+                            </span>
+                          )}
+                        </div>
+                        <small style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: '2px' }}>
+                          {contact.subtitle || contact.courseTitle || contact.email}
                         </small>
                       </div>
                     </button>
@@ -335,33 +412,64 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
           }}>
             {selectedContact ? (
               <>
-                <Avatar name={selectedContact.name} />
+                <Avatar name={getDisplayName(selectedContact, userRole)} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                     <strong style={{ fontSize: '1.05rem', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {selectedContact.name}
+                      {getDisplayName(selectedContact, userRole)}
                     </strong>
-                    <span style={{
-                      fontSize: '0.72rem',
-                      fontWeight: 700,
-                      textTransform: 'uppercase',
-                      padding: '2px 8px',
-                      borderRadius: '10px',
-                      background: selectedContact.role === 'TEACHER' ? 'var(--primary-light)' : 'var(--surface-alt)',
-                      color: selectedContact.role === 'TEACHER' ? 'var(--primary-text)' : 'var(--text-muted)',
-                      border: '1px solid var(--border)'
-                    }}>
-                      {selectedContact.role === 'TEACHER' ? 'Profesor' : 'Alumno'}
-                    </span>
+                    {selectedContact.role === 'PARENT' && (
+                      <span style={{
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: '10px',
+                        background: '#eaf4ef',
+                        color: '#24583e',
+                        border: '1px solid #bfe0d0'
+                      }}>
+                        TUTOR
+                      </span>
+                    )}
+                    {selectedContact.role === 'STUDENT' && (
+                      <span style={{
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: '10px',
+                        background: 'var(--surface-alt)',
+                        color: 'var(--text-muted)',
+                        border: '1px solid var(--border)'
+                      }}>
+                        Alumno
+                      </span>
+                    )}
+                    {userRole === 'PARENT' && selectedContact.role === 'TEACHER' && (
+                      <span style={{
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: '10px',
+                        background: 'var(--primary-light)',
+                        color: 'var(--primary-text)',
+                        border: '1px solid var(--primary-border)'
+                      }}>
+                        Profesor de {activeStudentName}
+                      </span>
+                    )}
                   </div>
                   <small style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.82rem', marginTop: '1px' }}>
-                    {selectedContact.courseTitle ? `${selectedContact.courseTitle} · ${selectedContact.email}` : selectedContact.email}
+                    {selectedContact.role === 'PARENT'
+                      ? `${selectedContact.email} ${selectedContact.studentName ? `· Tutor legal de ${selectedContact.studentName}` : ''}`
+                      : userRole === 'PARENT'
+                        ? `${selectedContact.name} — Profesor de ${activeStudentName}`
+                        : (selectedContact.courseTitle ? `${selectedContact.courseTitle} · ${selectedContact.email}` : selectedContact.email)}
                   </small>
                 </div>
               </>
             ) : (
               <span style={{ color: 'var(--text-muted)', fontSize: '0.92rem' }}>
-                {loading ? 'Cargando conversación...' : (role === 'TEACHER' ? 'Selecciona un alumno para comenzar.' : 'Selecciona un profesor para comenzar.')}
+                {loading ? 'Cargando conversación...' : (role === 'TEACHER' ? 'Selecciona un alumno o tutor para comenzar.' : (userRole === 'PARENT' ? `${activeStudentName} no tiene profesor asignado.` : 'Selecciona un profesor para comenzar.'))}
               </span>
             )}
           </div>
@@ -376,15 +484,23 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
             flexDirection: 'column',
             gap: '0.85rem'
           }}>
-            {messages.length === 0 && selectedContact && (
+            {contacts.length === 0 && userRole === 'PARENT' ? (
+              <div style={{ margin: 'auto', textAlign: 'center', color: 'var(--text-muted)', padding: '2rem', maxWidth: '420px' }}>
+                <MessageCircle size={48} style={{ color: 'var(--primary)', opacity: 0.35, marginBottom: '0.75rem' }} />
+                <h4 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.1rem' }}>Sin profesor asignado</h4>
+                <p style={{ margin: '0.4rem 0 0', fontSize: '0.88rem', lineHeight: '1.45' }}>
+                  {activeStudentName} no está matriculado/a en ninguna clase con profesor asignado.
+                </p>
+              </div>
+            ) : messages.length === 0 && selectedContact ? (
               <div style={{ margin: 'auto', textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>
                 <MessageCircle size={42} style={{ color: 'var(--primary)', opacity: 0.35, marginBottom: '0.75rem' }} />
                 <h4 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.1rem' }}>No hay mensajes anteriores</h4>
                 <p style={{ margin: '0.35rem 0 0', fontSize: '0.88rem' }}>
-                  Envía el primer mensaje para iniciar la conversación con {selectedContact.name}.
+                  Envía el primer mensaje para iniciar la conversación con {getDisplayName(selectedContact, userRole)}.
                 </p>
               </div>
-            )}
+            ) : null}
 
             {messages.map(message => {
               const isMine = message.senderId === currentUserId;
@@ -398,7 +514,7 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
                     gap: '0.6rem'
                   }}
                 >
-                  {!isMine && <Avatar name={selectedContact?.name || 'Usuario'} />}
+                  {!isMine && <Avatar name={getDisplayName(selectedContact, userRole)} />}
                   
                   <div style={{
                     maxWidth: 'min(82%, 600px)',
@@ -477,8 +593,14 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
                   handleSubmit(e);
                 }
               }}
-              disabled={!selectedContact}
-              placeholder={selectedContact ? `Escribe un mensaje a ${selectedContact.name}... (Enter para enviar)` : 'Selecciona una conversación'}
+              disabled={!selectedContact || contacts.length === 0}
+              placeholder={
+                contacts.length === 0 && userRole === 'PARENT'
+                  ? `${activeStudentName} no tiene profesor asignado`
+                  : selectedContact
+                    ? `Escribe un mensaje a ${getDisplayName(selectedContact)}... (Enter para enviar)`
+                    : 'Selecciona una conversación'
+              }
               rows={2}
               style={{
                 flex: 1,
@@ -492,7 +614,8 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
                 color: 'var(--text-main)',
                 fontSize: '0.92rem',
                 outline: 'none',
-                lineHeight: '1.4'
+                lineHeight: '1.4',
+                opacity: (!selectedContact || contacts.length === 0) ? 0.6 : 1
               }}
             />
 
@@ -517,7 +640,7 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
 
             <button
               type="submit"
-              disabled={!selectedContact || !draft.trim()}
+              disabled={!selectedContact || !draft.trim() || contacts.length === 0}
               className="btn-primary"
               title={editingMessageId ? 'Guardar cambios' : 'Enviar mensaje'}
               aria-label={editingMessageId ? 'Guardar cambios' : 'Enviar mensaje'}
@@ -527,7 +650,7 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
                 padding: 0,
                 borderRadius: '8px',
                 flexShrink: 0,
-                opacity: (!selectedContact || !draft.trim()) ? 0.5 : 1
+                opacity: (!selectedContact || !draft.trim() || contacts.length === 0) ? 0.5 : 1
               }}
             >
               <Send size={18} />

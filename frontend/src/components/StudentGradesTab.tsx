@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Award, FileText, CheckCircle2, Clock3, ExternalLink, MessageSquare, X } from 'lucide-react';
 import ExamReviewModal from './ExamReviewModal';
+import { useParent } from '../context/ParentContext';
 
 interface ParsedExamData {
   answers: Record<string, string | number>;
@@ -27,25 +28,39 @@ const parseSavedExam = (content?: string | null): ParsedExamData | null => {
 
 const StudentGradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const [completedAssignments, setCompletedAssignments] = useState<any[]>([]);
+  const [evaluation, setEvaluation] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [viewingFeedback, setViewingFeedback] = useState<{ title: string; feedback: string } | null>(null);
   const [reviewingExam, setReviewingExam] = useState<{ title: string; questions?: any[]; answers: Record<string, any>; score: number | null; total?: number | null } | null>(null);
+  const { selectedStudentId } = useParent();
 
   useEffect(() => {
-    const fetchAssignments = async () => {
+    const fetchAssignmentsAndEvaluation = async () => {
       try {
+        setLoading(true);
         const token = localStorage.getItem('token');
         const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-        const res = await fetch(`${apiUrl}/api/assignments/me`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const assignments = await res.json();
+        const studentParam = selectedStudentId ? `?studentId=${selectedStudentId}` : '';
+        const headers = { 'Authorization': `Bearer ${token}` };
+
+        const [resAssignments, resEvaluation] = await Promise.all([
+          fetch(`${apiUrl}/api/assignments/me${studentParam}`, { headers }),
+          fetch(`${apiUrl}/api/students/me/evaluation${studentParam}`, { headers })
+        ]);
+
+        if (resAssignments.ok) {
+          const assignments = await resAssignments.json();
           // Filtrar por curso y solo las que tengan entregas
           const courseCompleted = assignments.filter((a: any) => 
             a.courseId === courseId && a.submissions && a.submissions.length > 0
           );
           setCompletedAssignments(courseCompleted);
+        }
+
+        if (resEvaluation.ok) {
+          setEvaluation(await resEvaluation.json());
+        } else {
+          setEvaluation(null);
         }
       } catch (err) {
         console.error(err);
@@ -53,8 +68,8 @@ const StudentGradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
         setLoading(false);
       }
     };
-    fetchAssignments();
-  }, [courseId]);
+    fetchAssignmentsAndEvaluation();
+  }, [courseId, selectedStudentId]);
 
   if (loading) {
     return <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>Cargando calificaciones...</div>;
@@ -71,6 +86,70 @@ const StudentGradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
             <h2 style={{ margin: 0, fontSize: '1.4rem', color: 'var(--text-main)' }}>Calificaciones</h2>
             <p style={{ margin: '0.2rem 0 0', color: 'var(--text-muted)' }}>Registro de tus tareas completadas, notas y feedback del profesor</p>
           </div>
+        </div>
+
+        {/* Tarjeta Destacada de Evaluación Final por Competencias */}
+        <div style={{ padding: '1.25rem', borderRadius: '12px', background: 'var(--surface-alt)', border: '1px solid var(--border)', marginBottom: '1.5rem' }}>
+          <h3 style={{ margin: '0 0 0.85rem', fontSize: '1.05rem', color: 'var(--text-main)' }}>
+            Calificaciones Finales / Evaluaciones
+          </h3>
+          {evaluation ? (
+            <div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: '0.75rem', marginBottom: '0.85rem' }}>
+                <div style={{ padding: '0.65rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>GRAMMAR</span>
+                  <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>
+                    {evaluation.grammar !== null && evaluation.grammar !== undefined ? `${evaluation.grammar} / 10` : '-'}
+                  </strong>
+                </div>
+
+                <div style={{ padding: '0.65rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>READING</span>
+                  <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>
+                    {evaluation.reading !== null && evaluation.reading !== undefined ? `${evaluation.reading} / 10` : '-'}
+                  </strong>
+                </div>
+
+                <div style={{ padding: '0.65rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>WRITING</span>
+                  <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>
+                    {evaluation.writing !== null && evaluation.writing !== undefined ? `${evaluation.writing} / 10` : '-'}
+                  </strong>
+                </div>
+
+                <div style={{ padding: '0.65rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>LISTENING</span>
+                  <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>
+                    {evaluation.listening !== null && evaluation.listening !== undefined ? `${evaluation.listening} / 10` : '-'}
+                  </strong>
+                </div>
+
+                <div style={{ padding: '0.65rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>SPEAKING</span>
+                  <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>
+                    {evaluation.speaking !== null && evaluation.speaking !== undefined ? `${evaluation.speaking} / 10` : '-'}
+                  </strong>
+                </div>
+
+                <div style={{ padding: '0.65rem', background: 'var(--primary-light)', borderRadius: '8px', border: '1px solid var(--primary-border)', textAlign: 'center' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--primary-text)', display: 'block', fontWeight: 700 }}>NOTA GLOBAL</span>
+                  <strong style={{ fontSize: '1.1rem', color: 'var(--primary-text)' }}>
+                    {evaluation.overallGrade !== null && evaluation.overallGrade !== undefined ? `${evaluation.overallGrade} / 10` : '-'}
+                  </strong>
+                </div>
+              </div>
+
+              {evaluation.observations && (
+                <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--text-main)', fontStyle: 'italic', background: 'var(--surface)', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                  💬 Observaciones: "{evaluation.observations}"
+                </p>
+              )}
+            </div>
+          ) : (
+            <div style={{ padding: '0.75rem 0.9rem', background: '#fef7e8', borderRadius: '8px', border: '1px solid #fae0b0', color: '#8d5b12', fontSize: '0.85rem' }}>
+              ⚠️ Pendiente de evaluación final.
+            </div>
+          )}
         </div>
         
         {completedAssignments.length === 0 ? (

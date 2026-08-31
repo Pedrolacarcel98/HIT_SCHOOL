@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Check, CircleDollarSign, LoaderCircle, X } from 'lucide-react';
+import { AlertTriangle, Check, CircleDollarSign, FileText, LoaderCircle, X } from 'lucide-react';
+import { generateInvoicePDF } from '../utils/invoice';
 
 interface StudentPaymentItem {
   month: number;
@@ -21,6 +22,7 @@ interface PaymentStudent {
   email: string;
   firstName: string;
   lastName: string;
+  dni?: string | null;
   monthlyFee: number | null;
   courseDurationMonths: number | null;
   payments: StudentPaymentItem[];
@@ -41,6 +43,22 @@ const TeacherPayments: React.FC = () => {
     const date = new Date(year, month - 1, 1);
     const raw = date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
     return raw.charAt(0).toUpperCase() + raw.slice(1).replace(' de ', ' ');
+  };
+
+  const handleDownloadInvoice = (student: PaymentStudent, payment: StudentPaymentItem) => {
+    const studentName = `${student.firstName} ${student.lastName}`.trim();
+    const monthName = monthLabel(payment.month, payment.year);
+
+    generateInvoicePDF({
+      studentName,
+      studentDni: student.dni || null,
+      studentEmail: student.email,
+      month: payment.month,
+      year: payment.year,
+      monthLabel: monthName,
+      amount: payment.amount || student.monthlyFee || 35,
+      paidAt: payment.paidAt
+    });
   };
 
   const fetchPayments = async () => {
@@ -282,7 +300,31 @@ const TeacherPayments: React.FC = () => {
                                 )}
                               </div>
 
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                                {(() => {
+                                  const isPaid = payment.visualStatus === 'PAID' || payment.isPaid || payment.status === 'PAID';
+                                  return (
+                                    <button
+                                      type="button"
+                                      disabled={!isPaid}
+                                      onClick={() => isPaid && handleDownloadInvoice(student, payment)}
+                                      className="btn-secondary"
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '0.35rem',
+                                        padding: '0.35rem 0.65rem',
+                                        fontSize: '0.8rem',
+                                        borderRadius: '6px',
+                                        opacity: isPaid ? 1 : 0.5,
+                                        cursor: isPaid ? 'pointer' : 'not-allowed'
+                                      }}
+                                      title={isPaid ? 'Descargar Factura Oficial en PDF' : 'Factura disponible únicamente tras registrar el pago'}
+                                    >
+                                      <FileText size={14} /> Factura
+                                    </button>
+                                  );
+                                })()}
                                 <span style={{ color: styles.color, fontWeight: 700 }}>{styles.label}</span>
                                 <button
                                   disabled={isUpdating || !payment.isApplicable}
