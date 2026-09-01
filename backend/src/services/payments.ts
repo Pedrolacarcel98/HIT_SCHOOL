@@ -58,14 +58,19 @@ export const isPaymentOverdue = (
 };
 
 export const getPaymentVisualStatus = (
-  payment: { isPaid: boolean; dueDate: Date | string | null },
+  payment: { isPaid: boolean; month: number; year: number },
   referenceDate = new Date()
 ): 'PAID' | 'PENDING' | 'OVERDUE' => {
   if (payment.isPaid) {
     return 'PAID';
   }
 
-  return isPaymentOverdue(payment, referenceDate) ? 'OVERDUE' : 'PENDING';
+  const currentYear = referenceDate.getFullYear();
+  const currentMonth = referenceDate.getMonth() + 1;
+
+  return payment.year < currentYear || (payment.year === currentYear && payment.month < currentMonth)
+    ? 'OVERDUE'
+    : 'PENDING';
 };
 
 export const ensureStudentPaymentSchedule = async (

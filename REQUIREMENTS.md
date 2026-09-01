@@ -10,7 +10,7 @@ Documento maestro de especificación de requisitos funcionales y seguimiento de 
 ### 1.1 Gestión de Tareas y Calificaciones
 - [x] Creación y asignación de tareas por clase con título, descripción, fecha límite y categoría de destreza (*Reading, Listening, Writing, etc.*).
 - [x] Soporte para tareas sin fecha límite explícita (fecha opcional).
-- [/] Visualización estructurada y ordenada para el alumno (clasificada por categorías Core de destreza; pendiente añadir numeración explícita de pasos de actividad).
+- [x] Visualización estructurada y ordenada para el alumno (clasificada por categorías Core de destreza y tareas estructuradas con pasos numerados, materiales vinculados y progreso individual).
 - [x] Recepción, corrección y revisión de entregas de alumnos (exámenes interactivos se corrigen automáticamente y tareas manuales cuentan con modal de evaluación con calificación numérica sobre 10 y feedback cualitativo).
 - [x] **Centro Maestro de Calificaciones del Profesor (`/teacher/grades`):**
   - Vista general por alumnos con buscador, media de calificaciones y expediente académico completo.
@@ -29,15 +29,17 @@ Documento maestro de especificación de requisitos funcionales y seguimiento de 
 ### 1.3 Motor de Exámenes y Cuestionarios
 - [x] Creación de cuestionarios interactivos desde modal (*Form Builder*) con autocorrección.
 - [x] Soporte de pistas de audio por pregunta para simulacros de *Listening*.
-- [/] Soporte multiformato de preguntas:
+- [x] Soporte multiformato de preguntas:
   - [x] Opción múltiple (*Multiple Choice*).
   - [x] Verdadero / Falso (*True/False*).
   - [x] Respuesta corta (*Short Answer* con normalización case-insensitive).
-  - [ ] Completar espacios (*Fill in the blanks* interactivo).
-  - [ ] Preguntas con imágenes adjuntas en el enunciado.
+  - [x] Completar espacios (*Fill in the blanks* interactivo) mediante texto con soluciones entre paréntesis y validación opcional sensible a mayúsculas.
+  - [x] Preguntas con imágenes adjuntas en el enunciado, disponibles en editor, vista previa, resolución y revisión.
 - [x] Soporte de destrezas lingüísticas (*Writing, Speaking, Listening, Reading, Grammar & Vocabulary, Mock Exams*).
 - [x] Calificación manual por el profesor y feedback detallado desde el panel de calificaciones con botones rápidos y modal interactivo.
 - [x] Revisión pedagógica del examen para el alumno con desglose de respuestas correctas, fallos y puntuación total.
+- [x] Observaciones pedagógicas editables por el profesor en exámenes autocorregidos, visibles para alumno y tutor.
+- [x] Exámenes de tareas estructuradas con intento único, autocorrección y registro automático en Calificaciones.
 
 ### 1.4 Gestión de Alumnos y Ficha de Usuario
 - [x] Alta y registro de estudiantes desde panel de administración con generación automática de credenciales (`hitXXXX`).
@@ -63,7 +65,7 @@ Documento maestro de especificación de requisitos funcionales y seguimiento de 
 
 ### 1.6 Control de Pagos y Facturación
 - [x] Matriz visual de estado de cobro por estudiante (Mes actual y 2 meses anteriores) en `/teacher/payments`.
-- [x] Indicadores automáticos de estado: **Pagado**, **Pendiente** e **Impago / Overdue** (alerta visual automática pasados 7 días del vencimiento).
+- [x] Indicadores automáticos de estado: **Pagado**, **Pendiente** e **Impago** (las cuotas no abonadas del mes actual son pendientes y las de meses anteriores son impago).
 - [x] Marcado y desmarcado de pagos con un solo clic (*Toggle Switch*).
 - [x] Generación y sincronización automática del calendario de pagos según la duración del curso del alumno.
 - [ ] Pagos agrupados por familia/tutor (un solo padre/tutor paga las cuotas de 2 o más hermanos con desglose unificado).
@@ -85,6 +87,7 @@ Documento maestro de especificación de requisitos funcionales y seguimiento de 
 - [x] Panel global de calificaciones para el estudiante (`/student/grades`).
 - [x] Desglose y categorización por destrezas (*Skills*: Grammar, Reading, Writing, Listening, Speaking y Nota Global).
 - [x] Visualización y edición de observaciones cualitativas por alumno (modal interactivo para el profesor y botón de visualización de comentarios para el alumno).
+- [x] Sección de tareas estructuradas en Mis Clases: pasos numerados, vinculación individual de recursos y asignación a clase completa o alumno concreto.
 
 ---
 
@@ -105,11 +108,13 @@ Documento maestro de especificación de requisitos funcionales y seguimiento de 
   - [x] Envío y marcado de tareas como completadas.
   - [x] Adjunto de enlaces a documentos en la nube (PDFs, Google Docs, grabaciones de audio/video, Drive).
   - [x] Editor de texto para entrega de redacciones (*Writing* / respuestas abiertas) con contador de caracteres.
+  - [x] Tareas estructuradas visibles debajo de las clases, con secuencia de pasos, apertura de recursos y barra de progreso individual.
 
 ### 2.3 Calificaciones y Progreso
 - [x] Panel de calificaciones con notas numéricas sobre 10.
 - [x] Modal interactivo de revisión de exámenes corregidos (respuestas del alumno vs respuestas correctas).
 - [x] Acceso directo al documento o material evaluado.
+- [x] Exámenes incluidos en tareas estructuradas con intento único, corrección y acceso a la revisión guardada.
 
 ### 2.4 Comunicación
 - [x] Chat privado directo con el profesor asignado.

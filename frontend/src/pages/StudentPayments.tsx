@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Clock3, FileText, XCircle } from 'lucide-react';
 import { useParent } from '../context/ParentContext';
 import { generateInvoicePDF } from '../utils/invoice';
+import { getPaymentVisualStatus } from '../utils/paymentStatus';
 
 interface StudentPaymentResponse {
   month: number;
@@ -195,7 +196,8 @@ const StudentPayments: React.FC = () => {
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                       {(() => {
-                        const isPaid = payment.data.visualStatus === 'PAID' || payment.data.isPaid || payment.data.status === 'PAID';
+                        const visualStatus = getPaymentVisualStatus(payment.data.isPaid, payment.month, payment.year);
+                        const isPaid = visualStatus === 'PAID';
                         return (
                           <button
                             type="button"
@@ -219,18 +221,18 @@ const StudentPayments: React.FC = () => {
                         );
                       })()}
 
-                      {payment.data.visualStatus === 'PAID' ? (
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#24583e', background: 'var(--primary-light)', padding: '0.4rem 0.85rem', borderRadius: '20px', border: '1px solid var(--primary-border)', fontWeight: 700 }}>
+                      {getPaymentVisualStatus(payment.data.isPaid, payment.month, payment.year) === 'PAID' ? (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#047857', background: '#d1fae5', padding: '0.4rem 0.85rem', borderRadius: '20px', fontWeight: 700 }}>
                           <CheckCircle2 size={18} />
                           Pagado
                         </div>
-                      ) : payment.data.visualStatus === 'OVERDUE' ? (
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#9e2a2b', background: '#fdf0f0', padding: '0.4rem 0.85rem', borderRadius: '20px', border: '1px solid #f7caca', fontWeight: 700 }}>
+                      ) : getPaymentVisualStatus(payment.data.isPaid, payment.month, payment.year) === 'OVERDUE' ? (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#b91c1c', background: '#fee2e2', padding: '0.4rem 0.85rem', borderRadius: '20px', fontWeight: 700 }}>
                           <XCircle size={18} />
                           Impago
                         </div>
                       ) : (
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#8d5b12', background: '#fef7e8', padding: '0.4rem 0.85rem', borderRadius: '20px', border: '1px solid #fae0b0', fontWeight: 700 }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#b45309', background: '#fef3c7', padding: '0.4rem 0.85rem', borderRadius: '20px', fontWeight: 700 }}>
                           <XCircle size={18} />
                           Pendiente
                         </div>

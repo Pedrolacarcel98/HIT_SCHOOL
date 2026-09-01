@@ -26,6 +26,18 @@ interface AssignedMaterial {
   submittedAt?: string | null;
 }
 
+interface StructuredTask {
+  id: string;
+  title: string;
+  assignmentType: 'CLASS' | 'INDIVIDUAL';
+  steps: Array<{
+    id: string;
+    order: number;
+    title: string;
+    material?: { id: string; title: string; type: string; url?: string | null } | null;
+  }>;
+}
+
 interface ParsedExamData {
   answers: Record<string, string | number>;
   score?: number | null;
@@ -51,6 +63,7 @@ const parseSavedExam = (content?: string | null): ParsedExamData | null => {
 
 const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const [assignedMaterials, setAssignedMaterials] = useState<AssignedMaterial[]>([]);
+  const [structuredTasks, setStructuredTasks] = useState<StructuredTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | AssignedMaterial['status']>('ALL');
@@ -103,6 +116,10 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
           };
         }));
       }
+      const structuredTasksResponse = await fetch(`${apiUrl}/api/structured-tasks/course/${courseId}${studentParam}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (structuredTasksResponse.ok) setStructuredTasks(await structuredTasksResponse.json());
     } catch (err) {
       console.error(err);
     } finally {
@@ -300,6 +317,39 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
             );
           })}
         </div>
+      )}
+
+      {structuredTasks.length > 0 && (
+        <section style={{ marginTop: '2rem' }}>
+          <h2 style={{ margin: '0 0 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-main)', fontSize: '1.2rem' }}>
+            <FileText size={20} style={{ color: 'var(--primary)' }} /> Tareas Estructuradas
+          </h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+            {structuredTasks.map((task) => (
+              <article key={task.id} className="glass-panel" style={{ padding: '1rem 1.15rem', border: '1px solid var(--primary-border)' }}>
+                <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+                  <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1rem' }}>{task.title}</h3>
+                  <span style={{ padding: '0.2rem 0.55rem', borderRadius: '12px', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.72rem', fontWeight: 700 }}>{task.steps.length} pasos</span>
+                </header>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {task.steps.map((step) => (
+                    <div key={step.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', padding: '0.65rem 0.75rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', color: 'var(--text-main)', fontSize: '0.9rem' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '25px', height: '25px', borderRadius: '50%', background: 'var(--primary-light)', color: 'var(--primary-text)', fontWeight: 700, fontSize: '0.78rem' }}>{step.order}</span>
+                        {step.title}
+                      </div>
+                      {step.material && (
+                        <button type="button" onClick={() => step.material?.url && window.open(step.material.url, '_blank', 'noopener,noreferrer')} disabled={!step.material.url} style={{ padding: '0.25rem 0.55rem', borderRadius: '10px', border: '1px solid var(--primary-border)', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.74rem', fontWeight: 700, cursor: step.material.url ? 'pointer' : 'default', opacity: step.material.url ? 1 : 0.6 }}>
+                          [ {step.material.type} ] {step.material.title}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
       )}
 
       {/* Modal Principal de Tarea / Entrega */}

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Check, CircleDollarSign, FileText, LoaderCircle, X } from 'lucide-react';
 import { generateInvoicePDF } from '../utils/invoice';
+import { getPaymentVisualStatus } from '../utils/paymentStatus';
 
 interface StudentPaymentItem {
   month: number;
@@ -92,12 +93,12 @@ const TeacherPayments: React.FC = () => {
   }, []);
 
   const totalOverdue = useMemo(
-    () => students.reduce((acc, student) => acc + student.payments.filter((payment) => payment.isApplicable && payment.visualStatus === 'OVERDUE').length, 0),
+    () => students.reduce((acc, student) => acc + student.payments.filter((payment) => payment.isApplicable && getPaymentVisualStatus(payment.isPaid, payment.month, payment.year) === 'OVERDUE').length, 0),
     [students]
   );
 
   const totalPaid = useMemo(
-    () => students.reduce((acc, student) => acc + student.payments.filter((payment) => payment.isApplicable && payment.visualStatus === 'PAID').length, 0),
+    () => students.reduce((acc, student) => acc + student.payments.filter((payment) => payment.isApplicable && getPaymentVisualStatus(payment.isPaid, payment.month, payment.year) === 'PAID').length, 0),
     [students]
   );
 
@@ -143,7 +144,7 @@ const TeacherPayments: React.FC = () => {
                 ...item,
                 isPaid: !payment.isPaid,
                 status: !payment.isPaid ? 'PAID' : 'PENDING',
-                visualStatus: !payment.isPaid ? 'PAID' : (item.isOverdue ? 'OVERDUE' : 'PENDING'),
+                visualStatus: getPaymentVisualStatus(!payment.isPaid, item.month, item.year),
                 paidAt: !payment.isPaid ? new Date().toISOString() : null,
                 updatedAt: new Date().toISOString()
               };
@@ -160,15 +161,15 @@ const TeacherPayments: React.FC = () => {
   };
 
   const getStatusStyles = (payment: StudentPaymentItem) => {
-    if (payment.visualStatus === 'PAID') {
-      return { color: '#24583e', background: '#eaf4ef', border: '#bfe0d0', label: 'Pagado', icon: <Check size={16} /> };
+    if (getPaymentVisualStatus(payment.isPaid, payment.month, payment.year) === 'PAID') {
+      return { color: '#047857', background: '#d1fae5', border: '#a7f3d0', label: 'Pagado', icon: <Check size={16} /> };
     }
 
-    if (payment.visualStatus === 'OVERDUE') {
-      return { color: '#9e2a2b', background: '#fdf0f0', border: '#f7caca', label: 'Impago', icon: <AlertTriangle size={16} /> };
+    if (getPaymentVisualStatus(payment.isPaid, payment.month, payment.year) === 'OVERDUE') {
+      return { color: '#b91c1c', background: '#fee2e2', border: '#fecaca', label: 'Impago', icon: <AlertTriangle size={16} /> };
     }
 
-    return { color: '#8d5b12', background: '#fef7e8', border: '#fae0b0', label: 'Pendiente', icon: <X size={16} /> };
+    return { color: '#b45309', background: '#fef3c7', border: '#fde68a', label: 'Pendiente', icon: <X size={16} /> };
   };
 
   return (
@@ -302,7 +303,7 @@ const TeacherPayments: React.FC = () => {
 
                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
                                 {(() => {
-                                  const isPaid = payment.visualStatus === 'PAID' || payment.isPaid || payment.status === 'PAID';
+                                  const isPaid = getPaymentVisualStatus(payment.isPaid, payment.month, payment.year) === 'PAID';
                                   return (
                                     <button
                                       type="button"
@@ -325,7 +326,10 @@ const TeacherPayments: React.FC = () => {
                                     </button>
                                   );
                                 })()}
-                                <span style={{ color: styles.color, fontWeight: 700 }}>{styles.label}</span>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: styles.color, background: styles.background, border: `1px solid ${styles.border}`, borderRadius: '20px', padding: '0.35rem 0.65rem', fontWeight: 700 }}>
+                                  {styles.icon}
+                                  {styles.label}
+                                </span>
                                 <button
                                   disabled={isUpdating || !payment.isApplicable}
                                   onClick={() => togglePayment(student.id, payment)}

@@ -65,6 +65,8 @@ model User {
   sentChatMessages ChatMessage[] @relation("SentChatMessages")
   receivedChatMessages ChatMessage[] @relation("ReceivedChatMessages")
   finalEvaluation FinalEvaluation? @relation("StudentFinalEvaluation")
+  structuredTasks StructuredTask[] @relation("AssignedStructuredTasks")
+  structuredTaskStepProgress StructuredTaskStepProgress[]
 }
 
 model ChatMessage {
@@ -112,6 +114,7 @@ model Course {
   enrollments Enrollment[]
   assignments Assignment[]
   posts       Post[]
+  structuredTasks StructuredTask[]
 }
 
 model Post {
@@ -139,6 +142,7 @@ model Assignment {
   courseId    String?
   studentId   String?
   materialId  String?
+  structuredTaskStepId String? @unique
   title       String
   description String?
   dueDate     DateTime?
@@ -148,6 +152,7 @@ model Assignment {
   course      Course?        @relation(fields: [courseId], references: [id])
   student     User?          @relation("StudentAssignments", fields: [studentId], references: [id])
   material    Material?      @relation(fields: [materialId], references: [id])
+  structuredTaskStep StructuredTaskStep? @relation(fields: [structuredTaskStepId], references: [id], onDelete: SetNull)
   submissions Submission[]
 }
 
@@ -156,12 +161,16 @@ model Submission {
   assignmentId String
   studentId    String
   content      String?
+  structuredTaskId String?
+  formId       String?
 
   grade        Float?
   feedback     String?
   submittedAt  DateTime   @default(now())
   assignment   Assignment @relation(fields: [assignmentId], references: [id])
   student      User       @relation(fields: [studentId], references: [id])
+
+  @@unique([assignmentId, studentId])
 }
 
 model Material {
@@ -179,6 +188,54 @@ model Material {
   updatedAt   DateTime      @updatedAt
   materialAssignments MaterialAssignment[]
   assignments Assignment[]
+  structuredTaskSteps StructuredTaskStep[]
+}
+
+enum StructuredTaskAssignmentType {
+  CLASS
+  INDIVIDUAL
+}
+
+model StructuredTask {
+  id                    String                       @id @default(uuid())
+  title                 String
+  courseId              String
+  assignmentType        StructuredTaskAssignmentType @default(CLASS)
+  assignedStudentId     String?
+  createdAt             DateTime                     @default(now())
+  updatedAt             DateTime                     @updatedAt
+  course                Course                       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  assignedStudent       User?                        @relation("AssignedStructuredTasks", fields: [assignedStudentId], references: [id], onDelete: SetNull)
+  steps                 StructuredTaskStep[]
+
+  @@index([courseId])
+  @@index([assignedStudentId])
+}
+
+model StructuredTaskStep {
+  id               String         @id @default(uuid())
+  taskId           String
+  order            Int
+  title            String
+  materialId       String?
+  task             StructuredTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  material         Material?      @relation(fields: [materialId], references: [id], onDelete: SetNull)
+  progress         StructuredTaskStepProgress[]
+  assignment       Assignment?
+
+  @@index([taskId, order])
+}
+
+model StructuredTaskStepProgress {
+  id        String             @id @default(uuid())
+  stepId    String
+  studentId String
+  completedAt DateTime         @default(now())
+  step      StructuredTaskStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  student   User               @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([stepId, studentId])
+  @@index([studentId])
 }
 
 enum MaterialAssignmentStatus {

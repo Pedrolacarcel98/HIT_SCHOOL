@@ -15,13 +15,14 @@
 
 ## 2. Fase Actual & Progreso Global
 
-- **Fase Actual:** Fase 2 — Consolidación de Módulos Core, Corrección de Desconexiones y Cierre de Requisitos Pendientes.
-- **Progreso Global Estimado:** **92% de requisitos base completados / operativos**.
+- **Fase Actual:** Fase 2 — Consolidación de Módulos Core, tareas estructuradas y cierre de requisitos pendientes.
+- **Progreso Global Estimado:** **96% de requisitos base implementados**.
   - 🟢 **Gestión de Clases y Aulas (Estilo Google Classroom):** 95% Completado.
-  - 🟢 **Biblioteca Multimedia & Exámenes Interactivos:** 95% Completado.
+  - 🟢 **Biblioteca Multimedia & Exámenes Interactivos:** 100% Implementado.
   - 🟢 **Gestión de Alumnos, Ficha Extendida y Cuentas Familiares:** 95% Completado.
-  - 🟢 **Control Visual de Pagos y Mensualidades:** 90% Completado.
-  - 🟢 **Calificaciones y Feedback del Profesor:** 95% Completado.
+  - 🟢 **Control Visual de Pagos y Mensualidades:** 95% Implementado.
+  - 🟢 **Calificaciones y Feedback del Profesor:** 100% Implementado.
+  - 🟢 **Tareas Estructuradas, Recursos y Progreso Individual:** 100% en código; pendiente sincronización del esquema PostgreSQL.
   - 🟢 **Ajustes de Cuenta y Cambio de Contraseña:** 100% Completado.
   - 🟢 **Seguridad Backend en Endpoints:** 100% Completado.
   - 🟢 **Generación y Descarga de Facturas / Recibos en PDF:** 30% (Paso 5 Siguiente).
@@ -34,27 +35,22 @@
 ### 3.1 Base de Datos (`schema.prisma` & PostgreSQL)
 1. **Ficha Extendida y Rol Familiar:** Completado. Añadidos `PARENT` a `Role`, relación `parent` ↔ `children` en `User`, y `dni`, `phone`, `birthDate`, `address` a `Profile`.
 2. **Entidad de Facturación / Recibos:** Preparada para generación PDF en frontend/backend (Paso 5).
+3. **Tareas Estructuradas y Progreso:** Añadidos `StructuredTask`, `StructuredTaskStep` y `StructuredTaskStepProgress`, además de relaciones de `Assignment` y `Submission` para los exámenes incluidos en pasos. Requiere ejecutar `prisma db push` contra PostgreSQL para crear las tablas y restricciones.
 
 ### 3.2 Desconexiones y Gaps Detectados entre Frontend y Backend
 
 1. **Navegación y Enrutamiento del Alumno:** *(Solucionado en Paso 1)*.
 2. **Corrección y Calificación Manual del Profesor:** *(Solucionado en Paso 2)*.
 3. **Chat y Comunicación en Directo (Alumno ↔ Profesor):** *(Solucionado: endpoint /contacts, auto-selección de profesor, polling de mensajes y textos contextuales)*.
-4. **Entrega de Tareas no interactivas por el Alumno (`StudentClassworkTab.tsx`):**
-   - **Problema:** Para tareas normales (ej. Writing, ejercicios en PDF), el alumno solo tiene un botón "Marcar como Completada" que envía un texto fijo hardcoded (`'Entregado por el alumno'`). No puede adjuntar archivos (PDF, audio) ni escribir su redacción.
-   - **Solución:** Añadir modal de entrega con campo de texto enriquecido / URL / archivo adjunto.
-5. **Avisos del Tablón y Notificaciones a Padres/Alumnos:**
+4. **Avisos del Tablón y Notificaciones a Padres/Alumnos:**
    - **Problema:** Crear un anuncio en `StreamTab.tsx` solo guarda el post en base de datos; no dispara webhook de n8n para avisar a alumnos/padres por email.
    - **Solución:** Integrar disparo de notificación al crear anuncios importantes en el tablón.
-6. **Seguridad en Endpoint de Depuración:**
-   - **Problema:** `GET /api/users` en `backend/src/index.ts` expone la lista de todos los usuarios con sus hashes de contraseña sin autenticación.
-   - **Solución:** Eliminado o protegido bajo `authenticateToken` y `requireTeacher`.
 
 ---
 
 ## 4. Registro de Sesión
 
-- **Sesión actual:** Implementación de Ficha Extendida del Alumno, Seguridad Backend, Arquitectura de Cuentas Familiares (Padres & Hermanos) y Modal de Ajustes / Cambio de Contraseña.
+- **Sesión actual:** Pagos, feedback de exámenes autocorregidos, preguntas con imágenes y huecos, y tareas estructuradas asignables con progreso individual.
 - **Acciones realizadas:**
   - En `schema.prisma`: Añadido rol `PARENT`, relación autoreferencial `parentId` en `User` y campos extendidos (`dni`, `phone`, `birthDate`, `address`) en `Profile`.
   - En `backend/src/index.ts`: Eliminado el endpoint no autenticado `/api/users` y añadido healthcheck `/api/health`.
@@ -64,6 +60,10 @@
   - En `frontend/src/pages/StudentsManagement.tsx`: Creado panel completo de gestión de alumnos con ficha extendida, cálculo automático de edad, visualización de expediente modal y asignación de tutores.
   - En `TeacherLayout.tsx` y `StudentDashboard.tsx`: Integrado botón y acceso a `SettingsModal`.
   - **n8n Workflow Automation**: Actualizado el flujo `nuevo-alumno` importando un JSON generado con versión `2.3` del nodo `IF`. Se procesan ramas en paralelo utilizando referencias absolutas (`$('Webhook').item.json.body`) para enviar credenciales separadas a alumno y padre.
+  - En pagos: unificada la regla de estados en los tres paneles: pagado si `isPaid`, pendiente si es el mes actual e impago si la cuota no abonada pertenece a un mes anterior; factura disponible solo para pagos abonados.
+  - En exámenes: añadidos imágenes por pregunta, preguntas de completar espacios con sintaxis de paréntesis, validación sensible a mayúsculas opcional y revisión compatible con ambos formatos.
+  - En calificaciones: habilitado feedback pedagógico para exámenes autocorregidos, con persistencia en `Submission.feedback` y actualización inmediata de los tres paneles.
+  - En tareas estructuradas: creadas tareas con pasos, materiales por paso, asignación a clase o alumno, recursos interactivos, progreso individual y exámenes de intento único registrados como entregas estándar.
 
 ---
 
@@ -73,8 +73,9 @@
 2. [x] **Paso 2 (Completado):** Implementar en `GradesTab.tsx` y en el Centro Maestro `TeacherGrades.tsx` la interfaz interactiva para calificar tareas, feedback cualitativo y doble vista (alumnos/clases) con macro-división Presencial vs Online.
 3. [x] **Paso 3 (Completado):** Implementar modal de entrega interactivo de tareas para el alumno en `StudentClassworkTab.tsx`.
 4. [x] **Paso 4 (Completado):** Eliminar endpoint inseguro `/api/users`, añadir campos de ficha extendida (`dni`, `phone`, `birthDate`, `address`), soporte de tutores/padres y modal de cambio de contraseña `SettingsModal`.
-5. [ ] **Paso 5 (Siguiente):** Integrar módulo de generación y descarga de recibos/facturas en PDF.
-6. [ ] **Paso 6 (Fase Futura):** Desarrollar la interfaz y las vistas en Frontend del Portal familiar dedicado (`/parent`).
+5. [/] **Paso 5 (En curso):** Consolidar generación y descarga de recibos/facturas en PDF, incluyendo acceso desde la ficha del alumno.
+6. [/] **Paso 6 (En curso):** Consolidar las vistas familiares; selector de hijos, pagos, calificaciones y tareas estructuradas ya están integrados en el panel adaptado.
+7. [ ] **Paso 7 (Siguiente):** Ejecutar `prisma db push` con PostgreSQL activo, reiniciar backend y validar el flujo completo de tareas estructuradas/exámenes con cuentas de profesor, alumno y tutor.
 
 ---
 
@@ -82,4 +83,6 @@
 
 - **Decisión:** Mantener compatibilidad total con Docker Compose y n8n para todas las integraciones de notificación externa.
 - **Decisión:** Centralizar la gestión de estado de pagos y avisos automáticos en el servicio de backend para asegurar coherencia entre profesor y alumno.
+- **Decisión:** Las tareas estructuradas y su progreso se persisten en PostgreSQL. Los exámenes estructurados crean una `Assignment` y una única `Submission` estándar para reutilizar Calificaciones, revisiones y feedback.
+- **Bloqueo / Dependencia:** Las tablas y restricciones nuevas de tareas estructuradas requieren aplicar `npx prisma db push` con la base PostgreSQL levantada. El comando quedó preparado y solicitó confirmación de las restricciones únicas.
 - **Bloqueo / Dependencia:** Definir si los recibos en PDF se generarán directamente en backend (con bibliotecas como `pdfkit` o `puppeteer`) o mediante plantilla HTML cliente descargable.

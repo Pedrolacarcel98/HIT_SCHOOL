@@ -5,10 +5,13 @@ import AudioPlayer from './AudioPlayer';
 interface Question {
   id: string;
   questionText: string;
+  blankText?: string;
   audioUrl?: string;
-  type: 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'SHORT_ANSWER';
+  imageUrl?: string;
+  type: 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'SHORT_ANSWER' | 'FILL_IN_THE_BLANKS';
   options?: string[];
   correctAnswer: string | number; // index or string
+  caseSensitive?: boolean;
   points: number;
 }
 
@@ -21,6 +24,18 @@ interface FormPlayerProps {
   allowRetry?: boolean;
   initialAnswers?: { [key: string]: any };
 }
+
+const getBlankAnswers = (questionText: string) => Array.from(questionText.matchAll(/\(([^)]+)\)/g), (match) => match[1]);
+
+const getBlankText = (question: Question) => question.blankText || question.questionText;
+
+const isTextCorrect = (answer: string, expected: string, caseSensitive = false) => {
+  const normalizedAnswer = answer.trim();
+  const normalizedExpected = expected.trim();
+  return caseSensitive
+    ? normalizedAnswer === normalizedExpected
+    : normalizedAnswer.toLowerCase() === normalizedExpected.toLowerCase();
+};
 
 const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions = [], onFinish, readOnly = false, allowRetry = true, initialAnswers = {} }) => {
   const [answers, setAnswers] = useState<{ [key: string]: any }>(initialAnswers);
@@ -42,6 +57,13 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
     setAnswers({ ...answers, [questionId]: text });
   };
 
+  const handleBlankAnswer = (questionId: string, blankIndex: number, text: string) => {
+    if (isSubmitted || readOnly) return;
+    const currentAnswers = Array.isArray(answers[questionId]) ? [...answers[questionId]] : [];
+    currentAnswers[blankIndex] = text;
+    setAnswers({ ...answers, [questionId]: currentAnswers });
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     let earned = 0;
@@ -57,10 +79,13 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
           earned += qPoints;
         }
       } else if (q.type === 'SHORT_ANSWER') {
-        if (
-          userAnswer &&
-          String(userAnswer).trim().toLowerCase() === String(q.correctAnswer).trim().toLowerCase()
-        ) {
+        if (userAnswer && isTextCorrect(String(userAnswer), String(q.correctAnswer))) {
+          earned += qPoints;
+        }
+      } else if (q.type === 'FILL_IN_THE_BLANKS') {
+        const expectedAnswers = getBlankAnswers(getBlankText(q));
+        const blankAnswers = Array.isArray(userAnswer) ? userAnswer : [];
+        if (expectedAnswers.length > 0 && expectedAnswers.every((expected, index) => isTextCorrect(String(blankAnswers[index] || ''), expected, q.caseSensitive))) {
           earned += qPoints;
         }
       }
@@ -273,8 +298,10 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                 <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem', paddingRight: '0.5rem' }}>
                   {questions.map((q, idx) => {
                     const userAnswer = answers[q.id];
-                    const isCorrect = (q.type === 'SHORT_ANSWER' && String(userAnswer || '').trim().toLowerCase() === String(q.correctAnswer).trim().toLowerCase()) ||
-                      (q.type !== 'SHORT_ANSWER' && Number(userAnswer) === Number(q.correctAnswer));
+                    const isCorrect = q.type === 'FILL_IN_THE_BLANKS'
+                      ? getBlankAnswers(getBlankText(q)).every((expected, index) => isTextCorrect(String((Array.isArray(userAnswer) ? userAnswer[index] : '') || ''), expected, q.caseSensitive))
+                      : (q.type === 'SHORT_ANSWER' && isTextCorrect(String(userAnswer || ''), String(q.correctAnswer))) ||
+                        (q.type !== 'SHORT_ANSWER' && Number(userAnswer) === Number(q.correctAnswer));
 
                     let userSelectedText = 'No respondida';
                     let correctText = '';
@@ -286,6 +313,9 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                       if (q.options?.[Number(q.correctAnswer)]) {
                         correctText = q.options[Number(q.correctAnswer)];
                       }
+                    } else if (q.type === 'FILL_IN_THE_BLANKS') {
+                      userSelectedText = Array.isArray(userAnswer) ? userAnswer.join(' | ') : 'No respondida';
+                      correctText = getBlankAnswers(getBlankText(q)).join(' | ');
                     } else {
                       userSelectedText = userAnswer || 'No respondida';
                       correctText = String(q.correctAnswer);
@@ -308,7 +338,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                             Pregunta {idx + 1} ({isCorrect ? `+${q.points || 1} pts` : '0 pts'})
                           </span>
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                            {q.type === 'MULTIPLE_CHOICE' ? 'Opción Múltiple' : q.type === 'TRUE_FALSE' ? 'Verdadero/Falso' : 'Respuesta Corta'}
+                            {q.type === 'MULTIPLE_CHOICE' ? 'Opción Múltiple' : q.type === 'TRUE_FALSE' ? 'Verdadero/Falso' : q.type === 'FILL_IN_THE_BLANKS' ? 'Completar espacios' : 'Respuesta Corta'}
                           </span>
                         </div>
 
@@ -381,8 +411,10 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
         {questions.map((q, idx) => {
           const userAnswer = answers[q.id];
           const isCorrect = isSubmitted && (
-            (q.type === 'SHORT_ANSWER' && String(userAnswer || '').trim().toLowerCase() === String(q.correctAnswer).trim().toLowerCase()) ||
-            (q.type !== 'SHORT_ANSWER' && Number(userAnswer) === Number(q.correctAnswer))
+            q.type === 'FILL_IN_THE_BLANKS'
+              ? getBlankAnswers(getBlankText(q)).every((expected, index) => isTextCorrect(String((Array.isArray(userAnswer) ? userAnswer[index] : '') || ''), expected, q.caseSensitive))
+              : (q.type === 'SHORT_ANSWER' && isTextCorrect(String(userAnswer || ''), String(q.correctAnswer))) ||
+                (q.type !== 'SHORT_ANSWER' && Number(userAnswer) === Number(q.correctAnswer))
           );
 
           return (
@@ -404,9 +436,19 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                 </span>
               </div>
 
-              <h4 style={{ margin: '0 0 1rem', color: 'var(--text)', fontSize: '1.1rem', fontWeight: '500' }}>
-                {q.questionText}
-              </h4>
+              {q.type !== 'FILL_IN_THE_BLANKS' && (
+                <h4 style={{ margin: '0 0 1rem', color: 'var(--text)', fontSize: '1.1rem', fontWeight: '500' }}>
+                  {q.questionText}
+                </h4>
+              )}
+
+              {q.imageUrl && (
+                <img
+                  src={q.imageUrl}
+                  alt={`Imagen de apoyo para la pregunta ${idx + 1}`}
+                  style={{ display: 'block', maxWidth: '100%', maxHeight: '320px', margin: '0 0 1.25rem', objectFit: 'contain', borderRadius: '8px', border: '1px solid var(--border)' }}
+                />
+              )}
 
               {/* Reproductor de Audio asociado a la pregunta (Listening) */}
               {q.audioUrl && (
@@ -501,6 +543,38 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                   {isSubmitted && !isCorrect && (
                     <p style={{ margin: '0.5rem 0 0', color: '#ef4444', fontSize: '0.85rem' }}>
                       Respuesta correcta esperada: <strong>{q.correctAnswer}</strong>
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {q.type === 'FILL_IN_THE_BLANKS' && (
+                <div style={{ color: 'var(--text)', fontSize: '1.05rem', lineHeight: '2.5' }}>
+                  {(() => {
+                    let blankIndex = 0;
+                    return getBlankText(q).split(/(\([^)]+\))/g).map((part, partIndex) => {
+                      if (!/^\([^)]+\)$/.test(part)) return <React.Fragment key={partIndex}>{part}</React.Fragment>;
+                      const currentBlankIndex = blankIndex;
+                      blankIndex += 1;
+                      const blankAnswers = Array.isArray(userAnswer) ? userAnswer : [];
+                      const expected = part.slice(1, -1);
+                      const blankCorrect = isSubmitted && isTextCorrect(String(blankAnswers[currentBlankIndex] || ''), expected, q.caseSensitive);
+                      return (
+                        <input
+                          key={partIndex}
+                          type="text"
+                          disabled={isSubmitted || readOnly}
+                          value={blankAnswers[currentBlankIndex] || ''}
+                          onChange={(event) => handleBlankAnswer(q.id, currentBlankIndex, event.target.value)}
+                          aria-label={`Hueco ${currentBlankIndex + 1} de la pregunta ${idx + 1}`}
+                          style={{ width: 'min(150px, 42vw)', margin: '0 0.3rem', padding: '0.35rem 0.5rem', borderRadius: '6px', border: isSubmitted ? `1px solid ${blankCorrect ? '#22c55e' : '#ef4444'}` : '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)', fontSize: '0.95rem', outline: 'none' }}
+                        />
+                      );
+                    });
+                  })()}
+                  {isSubmitted && !isCorrect && (
+                    <p style={{ margin: '0.65rem 0 0', color: '#ef4444', fontSize: '0.85rem' }}>
+                      Respuestas correctas: <strong>{getBlankAnswers(getBlankText(q)).join(' | ')}</strong>
                     </p>
                   )}
                 </div>

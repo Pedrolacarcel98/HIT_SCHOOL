@@ -154,7 +154,7 @@ const TeacherGrades: React.FC = () => {
   const [feedbackInput, setFeedbackInput] = useState<string>('');
   const [isSavingGrade, setIsSavingGrade] = useState(false);
   const [saveError, setSaveError] = useState('');
-  const [reviewingExam, setReviewingExam] = useState<{ title: string; questions?: ReviewQuestion[]; answers: Record<string, any>; score: number | null; total?: number | null } | null>(null);
+  const [reviewingExam, setReviewingExam] = useState<{ subId: string; title: string; questions?: ReviewQuestion[]; answers: Record<string, any>; score: number | null; total?: number | null; feedback: string | null } | null>(null);
 
   // Evaluación Final por Competencias
   const [currentEvaluation, setCurrentEvaluation] = useState<FinalEvaluationData | null>(null);
@@ -470,6 +470,31 @@ const TeacherGrades: React.FC = () => {
     } finally {
       setIsSavingGrade(false);
     }
+  };
+
+  const handleSaveExamFeedback = async (feedback: string) => {
+    if (!reviewingExam) return;
+
+    const token = localStorage.getItem('token');
+    const res = await fetch(`${apiUrl}/api/assignments/submissions/${reviewingExam.subId}/grade`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ grade: reviewingExam.score, feedback: feedback || null })
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Error al guardar el feedback.');
+    }
+
+    setAssignments(prev => prev.map(assignment => ({
+      ...assignment,
+      submissions: assignment.submissions.map(sub => sub.id === reviewingExam.subId ? { ...sub, feedback: feedback || null } : sub)
+    })));
+    setReviewingExam(null);
   };
 
   // Métricas globales
@@ -970,16 +995,26 @@ const TeacherGrades: React.FC = () => {
                                     <button
                                       type="button"
                                       onClick={() => setReviewingExam({
+                                        subId: sub.id,
                                         title: sub.assignmentTitle,
                                         questions: sub.materialFormData?.questions || [],
                                         answers: examData.answers,
                                         score: sub.grade,
-                                        total: examData.total
+                                        total: examData.total,
+                                        feedback: sub.feedback
                                       })}
                                       className="btn-secondary"
                                       style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
                                     >
                                       <FileText size={14} /> Revisar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => openGradingModal(sub)}
+                                      className="btn-primary"
+                                      style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+                                    >
+                                      <Edit3 size={14} /> Editar Nota y Feedback
                                     </button>
                                   </div>
                                 );
@@ -1222,20 +1257,32 @@ const TeacherGrades: React.FC = () => {
                                           )}
 
                                           {isExam ? (
+                                            <>
                                             <button
                                               type="button"
                                               onClick={() => setReviewingExam({
+                                                subId: sub.id,
                                                 title: sub.assignmentTitle,
                                                 questions: sub.materialFormData?.questions || [],
                                                 answers: examData?.answers || {},
                                                 score: sub.grade,
-                                                total: examData?.total
+                                                total: examData?.total,
+                                                feedback: sub.feedback
                                               })}
                                               className="btn-secondary"
                                               style={{ padding: '0.3rem 0.6rem', fontSize: '0.78rem' }}
                                             >
                                               Ver Test
                                             </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => openGradingModal(sub)}
+                                              className="btn-primary"
+                                              style={{ padding: '0.3rem 0.6rem', fontSize: '0.78rem' }}
+                                            >
+                                              Editar Nota y Feedback
+                                            </button>
+                                            </>
                                           ) : (
                                             <button
                                               type="button"
@@ -1483,6 +1530,8 @@ const TeacherGrades: React.FC = () => {
           answers={reviewingExam.answers}
           score={reviewingExam.score}
           total={reviewingExam.total}
+          feedback={reviewingExam.feedback}
+          onSaveFeedback={handleSaveExamFeedback}
           onClose={() => setReviewingExam(null)}
         />
       )}

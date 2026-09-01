@@ -77,7 +77,11 @@ const serializePayment = (input: {
     exists: input.exists,
     status: input.isPaid ? PaymentState.PAID : PaymentState.PENDING,
     isOverdue,
-    visualStatus: getPaymentVisualStatus({ isPaid: input.isPaid, dueDate })
+    visualStatus: getPaymentVisualStatus({
+      isPaid: input.isPaid,
+      month: input.month,
+      year: input.year
+    })
   };
 };
 

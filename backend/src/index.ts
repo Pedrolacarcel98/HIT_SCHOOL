@@ -13,6 +13,7 @@ import materialRoutes from './routes/materials';
 import paymentRoutes from './routes/payments';
 import assignmentRoutes from './routes/assignments';
 import chatRoutes from './routes/chat';
+import structuredTaskRoutes from './routes/structuredTasks';
 
 app.use(cors());
 app.use(express.json());
@@ -24,6 +25,7 @@ app.use('/api/materials', materialRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/assignments', assignmentRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/structured-tasks', structuredTaskRoutes);
 
 app.get('/', (req, res) => {
   res.send('API de HitSchool funcionando correctamente');

@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
-import { X, Plus, Trash2, Eye, Save, Music, HelpCircle } from 'lucide-react';
+import { X, Plus, Trash2, Eye, Save, Music, HelpCircle, Image } from 'lucide-react';
 import FormPlayer from './FormPlayer';
 
 interface Question {
   id: string;
   questionText: string;
+  blankText?: string;
   audioUrl?: string;
-  type: 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'SHORT_ANSWER';
+  imageUrl?: string;
+  type: 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'SHORT_ANSWER' | 'FILL_IN_THE_BLANKS';
   options: string[];
   correctAnswer: string | number;
+  caseSensitive?: boolean;
   points: number;
 }
 
@@ -17,6 +20,20 @@ interface FormBuilderModalProps {
   onSaveSuccess: () => void;
   initialData?: any;
 }
+
+const getBlankAnswers = (questionText: string) => Array.from(questionText.matchAll(/\(([^)]+)\)/g), (match) => match[1]);
+
+const replaceBlankAnswer = (questionText: string, blankIndex: number, replacement: string) => {
+  let currentIndex = 0;
+  return questionText.replace(/\(([^)]+)\)/g, (match) => {
+    if (currentIndex === blankIndex) {
+      currentIndex += 1;
+      return `(${replacement})`;
+    }
+    currentIndex += 1;
+    return match;
+  });
+};
 
 const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSuccess, initialData }) => {
   const [title, setTitle] = useState(initialData?.title || '');
@@ -29,6 +46,7 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
         id: 'q-1',
         questionText: 'Listen to the conversation and choose the correct answer:',
         audioUrl: '',
+        imageUrl: '',
         type: 'MULTIPLE_CHOICE',
         options: ['Option A', 'Option B', 'Option C'],
         correctAnswer: 0,
@@ -45,6 +63,7 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
       id: `q-${Date.now()}`,
       questionText: '',
       audioUrl: '',
+      imageUrl: '',
       type: 'MULTIPLE_CHOICE',
       options: ['Opción 1', 'Opción 2', 'Opción 3'],
       correctAnswer: 0,
@@ -318,7 +337,7 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
                           type="text"
                           value={q.questionText}
                           onChange={(e) => updateQuestion(qIndex, { questionText: e.target.value })}
-                          placeholder="Ej. What is the speaker suggesting in the recording?"
+                          placeholder="Ej. Completa los huecos con la respuesta correcta."
                           style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }}
                         />
                       </div>
@@ -337,6 +356,26 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
                         />
                       </div>
 
+                      <div>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                          <Image size={15} style={{ color: 'var(--primary)' }} /> 🖼️ URL de Imagen / Adjunto para esta pregunta (Opcional)
+                        </label>
+                        <input
+                          type="url"
+                          value={q.imageUrl || ''}
+                          onChange={(e) => updateQuestion(qIndex, { imageUrl: e.target.value })}
+                          placeholder="https://ejemplo.com/imagen.jpg"
+                          style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)', fontSize: '0.85rem' }}
+                        />
+                        {q.imageUrl && (
+                          <img
+                            src={q.imageUrl}
+                            alt={`Vista previa de la pregunta ${qIndex + 1}`}
+                            style={{ display: 'block', width: '120px', height: '80px', marginTop: '0.65rem', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border)' }}
+                          />
+                        )}
+                      </div>
+
                       <div style={{ display: 'flex', gap: '1rem' }}>
                         <div style={{ flex: 1 }}>
                           <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Tipo de Pregunta</label>
@@ -348,13 +387,19 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
                               if (newType === 'TRUE_FALSE') {
                                 newOptions = ['True', 'False'];
                               }
-                              updateQuestion(qIndex, { type: newType, options: newOptions, correctAnswer: 0 });
+                              updateQuestion(qIndex, {
+                                type: newType,
+                                options: newOptions,
+                                correctAnswer: newType === 'FILL_IN_THE_BLANKS' ? '' : 0,
+                                blankText: newType === 'FILL_IN_THE_BLANKS' && !q.blankText ? 'Hola me llamo (Carlos) y tengo (12) años.' : q.blankText
+                              });
                             }}
                             style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }}
                           >
                             <option value="MULTIPLE_CHOICE">Opción Múltiple (Test)</option>
                             <option value="TRUE_FALSE">Verdadero / Falso</option>
                             <option value="SHORT_ANSWER">Respuesta Corta</option>
+                            <option value="FILL_IN_THE_BLANKS">Completar espacios (Fill in the Blanks)</option>
                           </select>
                         </div>
 
@@ -452,6 +497,53 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
                             placeholder="Ej. was walking"
                             style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }}
                           />
+                        </div>
+                      )}
+
+                      {q.type === 'FILL_IN_THE_BLANKS' && (
+                        <div style={{ padding: '0.85rem 1rem', borderRadius: '8px', background: 'var(--primary-subtle)', border: '1px solid var(--primary-border)' }}>
+                          <p style={{ margin: 0, color: 'var(--primary-text)', fontSize: '0.85rem', lineHeight: '1.45' }}>
+                            Escribe el texto usando paréntesis () para encerrar las respuestas correctas. Ej: Hola me llamo (Carlos).
+                          </p>
+                          <div style={{ marginTop: '0.85rem' }}>
+                            <label style={{ display: 'block', marginBottom: '0.45rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 700 }}>Texto con huecos</label>
+                            <textarea
+                              rows={3}
+                              value={q.blankText || ''}
+                              onChange={(e) => updateQuestion(qIndex, { blankText: e.target.value })}
+                              placeholder="Ej. Hola me llamo (Carlos) y tengo (12) años."
+                              style={{ width: '100%', padding: '0.65rem 0.75rem', borderRadius: '6px', border: '1px solid var(--primary-border)', background: 'var(--surface)', color: 'var(--text-main)', resize: 'vertical', lineHeight: '1.45' }}
+                            />
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.85rem' }}>
+                            <strong style={{ color: 'var(--text-main)', fontSize: '0.85rem' }}>Huecos y respuestas correctas</strong>
+                            {getBlankAnswers(q.blankText || '').map((answer, blankIndex) => (
+                              <div key={blankIndex} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                <span style={{ minWidth: '64px', color: 'var(--text-muted)', fontSize: '0.8rem' }}>Hueco {blankIndex + 1}</span>
+                                <input
+                                  type="text"
+                                  value={answer}
+                                  onChange={(e) => updateQuestion(qIndex, { blankText: replaceBlankAnswer(q.blankText || '', blankIndex, e.target.value) })}
+                                  placeholder={`Respuesta ${blankIndex + 1}`}
+                                  style={{ flex: 1, padding: '0.55rem 0.65rem', borderRadius: '6px', border: '1px solid var(--primary-border)', background: 'var(--surface)', color: 'var(--text-main)' }}
+                                />
+                              </div>
+                            ))}
+                            {getBlankAnswers(q.blankText || '').length === 0 && (
+                              <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                                Añade una respuesta entre paréntesis en el texto para crear un hueco.
+                              </p>
+                            )}
+                          </div>
+                          <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', marginTop: '0.75rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={Boolean(q.caseSensitive)}
+                              onChange={(e) => updateQuestion(qIndex, { caseSensitive: e.target.checked })}
+                              style={{ accentColor: 'var(--primary)' }}
+                            />
+                            Sensible a mayúsculas
+                          </label>
                         </div>
                       )}
                     </div>
