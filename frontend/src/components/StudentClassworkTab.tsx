@@ -24,17 +24,22 @@ interface AssignedMaterial {
   submissionGrade?: number | null;
   submissionFeedback?: string | null;
   submittedAt?: string | null;
+  structuredStepId?: string;
+  structuredTaskId?: string;
 }
 
 interface StructuredTask {
   id: string;
   title: string;
   assignmentType: 'CLASS' | 'INDIVIDUAL';
+  isSequential: boolean;
   steps: Array<{
     id: string;
     order: number;
     title: string;
-    material?: { id: string; title: string; type: string; url?: string | null } | null;
+    isCompleted?: boolean;
+    submission?: any;
+    material?: { id: string; title: string; type: string; url?: string | null; description?: string; level?: string; category?: string; formData?: any } | null;
   }>;
 }
 
@@ -148,6 +153,66 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     setDeliveryType('TEXT');
   };
 
+  const openActionModal = (step: any, task: StructuredTask) => {
+    setViewingMaterial({
+      id: step.id,
+      title: step.title,
+      description: step.material?.description || '',
+      level: step.material?.level || 'GENERAL',
+      category: step.material?.category || 'GRAMMAR_VOCABULARY',
+      teacher: '',
+      assignedAt: '',
+      status: step.isCompleted ? 'COMPLETED' : 'PENDING',
+      url: step.material?.url || '',
+      type: step.material?.type || 'DOCUMENT',
+      formData: step.material?.formData,
+      submissionContent: step.submission?.content,
+      submissionGrade: step.submission?.grade,
+      submissionFeedback: step.submission?.feedback,
+      submittedAt: step.submission?.submittedAt,
+      structuredStepId: step.id,
+      structuredTaskId: task.id
+    });
+    setTextSubmission('');
+    setUrlSubmission('');
+    setSubmitError('');
+    if (step.material?.type === 'FORM') {
+       setDeliveryType('TEXT'); 
+    } else {
+       setDeliveryType('LINK');
+    }
+  };
+
+  const submitDirectly = async (stepId: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+      const res = await fetch(`${apiUrl}/api/structured-tasks/steps/${stepId}/complete`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({})
+      });
+      if (res.ok) {
+        await fetchAssignedMaterials();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleTick = (step: any, task: StructuredTask) => {
+    if (step.isCompleted) return;
+    
+    if (step.material?.type === 'VIDEO' || !step.material) {
+      submitDirectly(step.id);
+    } else {
+      openActionModal(step, task);
+    }
+  };
+
   const handleSubmitAssignment = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!viewingMaterial) return;
@@ -170,7 +235,7 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
       }
       finalContent = urlSubmission.trim();
     } else {
-      finalContent = 'Tarea completada por el alumno.';
+      finalContent = viewingMaterial.structuredStepId ? '' : 'Tarea completada por el alumno.';
     }
 
     try {
@@ -179,13 +244,22 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
       const token = localStorage.getItem('token');
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
       
-      const res = await fetch(`${apiUrl}/api/assignments/${viewingMaterial.id}/submit`, {
+      const isStructured = Boolean(viewingMaterial.structuredStepId);
+      const url = isStructured 
+        ? `${apiUrl}/api/structured-tasks/steps/${viewingMaterial.structuredStepId}/complete`
+        : `${apiUrl}/api/assignments/${viewingMaterial.id}/submit`;
+      
+      const body = isStructured
+        ? { submissionContent: finalContent }
+        : { content: finalContent };
+
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ content: finalContent })
+        body: JSON.stringify(body)
       });
 
       if (!res.ok) {
@@ -211,16 +285,23 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     try {
       const token = localStorage.getItem('token');
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-      const res = await fetch(`${apiUrl}/api/assignments/${viewingMaterial.id}/submit`, {
+      
+      const isStructured = Boolean(viewingMaterial.structuredStepId);
+      const url = isStructured 
+        ? `${apiUrl}/api/structured-tasks/steps/${viewingMaterial.structuredStepId}/submit-form`
+        : `${apiUrl}/api/assignments/${viewingMaterial.id}/submit`;
+      
+      const body = isStructured
+        ? { answers }
+        : { content: JSON.stringify({ answers, score, total }), grade };
+
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          content: JSON.stringify({ answers, score, total }),
-          grade
-        })
+        body: JSON.stringify(body)
       });
       if (res.ok) {
         await fetchAssignedMaterials();
@@ -329,22 +410,68 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
               <article key={task.id} className="glass-panel" style={{ padding: '1rem 1.15rem', border: '1px solid var(--primary-border)' }}>
                 <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
                   <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1rem' }}>{task.title}</h3>
-                  <span style={{ padding: '0.2rem 0.55rem', borderRadius: '12px', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.72rem', fontWeight: 700 }}>{task.steps.length} pasos</span>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    {task.isSequential && <span style={{ padding: '0.2rem 0.55rem', borderRadius: '12px', background: '#fef3c7', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}>Paso a paso</span>}
+                    <span style={{ padding: '0.2rem 0.55rem', borderRadius: '12px', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.72rem', fontWeight: 700 }}>{task.steps.length} pasos</span>
+                  </div>
                 </header>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {task.steps.map((step) => (
-                    <div key={step.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', padding: '0.65rem 0.75rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)', flexWrap: 'wrap' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', color: 'var(--text-main)', fontSize: '0.9rem' }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '25px', height: '25px', borderRadius: '50%', background: 'var(--primary-light)', color: 'var(--primary-text)', fontWeight: 700, fontSize: '0.78rem' }}>{step.order}</span>
-                        {step.title}
-                      </div>
-                      {step.material && (
-                        <button type="button" onClick={() => step.material?.url && window.open(step.material.url, '_blank', 'noopener,noreferrer')} disabled={!step.material.url} style={{ padding: '0.25rem 0.55rem', borderRadius: '10px', border: '1px solid var(--primary-border)', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.74rem', fontWeight: 700, cursor: step.material.url ? 'pointer' : 'default', opacity: step.material.url ? 1 : 0.6 }}>
-                          [ {step.material.type} ] {step.material.title}
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                  {(() => {
+                    let firstIncompleteFound = false;
+                    return task.steps.map((step) => {
+                      const isBlocked = task.isSequential && firstIncompleteFound;
+                      if (!step.isCompleted) firstIncompleteFound = true;
+                      
+                      return (
+                        <div key={step.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.85rem', padding: '0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)', opacity: isBlocked ? 0.6 : 1, pointerEvents: isBlocked ? 'none' : 'auto' }}>
+                          <div style={{ paddingTop: '0.15rem' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={step.isCompleted} 
+                              disabled={isBlocked || step.isCompleted}
+                              onChange={(e) => {
+                                if (e.target.checked) handleTick(step, task);
+                              }}
+                              style={{ width: '22px', height: '22px', cursor: (isBlocked || step.isCompleted) ? 'default' : 'pointer', accentColor: 'var(--primary)' }}
+                            />
+                          </div>
+                          
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', color: 'var(--text-main)', fontSize: '0.95rem' }}>
+                              <span style={{ fontWeight: 600, textDecoration: step.isCompleted ? 'line-through' : 'none', color: step.isCompleted ? 'var(--text-muted)' : 'inherit' }}>
+                                {step.order}. {step.title}
+                              </span>
+                            </div>
+                            
+                            {step.material && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                <button 
+                                  type="button" 
+                                  onClick={() => {
+                                    if (step.material?.type === 'FORM') {
+                                      openActionModal(step, task);
+                                    } else if (step.material?.url) {
+                                      window.open(step.material.url, '_blank', 'noopener,noreferrer');
+                                    }
+                                  }} 
+                                  disabled={!step.material?.url && step.material?.type !== 'FORM'} 
+                                  style={{ padding: '0.35rem 0.65rem', borderRadius: '10px', border: '1px solid var(--primary-border)', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.78rem', fontWeight: 700, cursor: (step.material?.url || step.material?.type === 'FORM') ? 'pointer' : 'default', opacity: (step.material?.url || step.material?.type === 'FORM') ? 1 : 0.6 }}
+                                >
+                                  [ {step.material.type} ] {step.material.title}
+                                </button>
+                                
+                                {step.isCompleted && step.material.type !== 'VIDEO' && (
+                                  <button type="button" onClick={() => openActionModal(step, task)} style={{ padding: '0.35rem 0.65rem', borderRadius: '10px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>
+                                    Ver Entrega / Resultados
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               </article>
             ))}

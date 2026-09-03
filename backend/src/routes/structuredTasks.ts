@@ -12,6 +12,7 @@ const getStudentName = (student: { profile: { firstName: string; lastName: strin
 
 const serializeTask = (task: any) => ({
   ...task,
+  isSequential: Boolean(task.isSequential),
   assignedStudentName: getStudentName(task.assignedStudent),
   steps: task.steps.map((step: any) => ({
     id: step.id,
@@ -201,18 +202,63 @@ router.post('/steps/:stepId/complete', authenticateToken, async (req: AuthReques
   if (req.user?.role !== 'STUDENT') return res.status(403).json({ error: 'Solo el alumno puede completar pasos.' });
   try {
     const stepId = req.params.stepId as string;
+    const { submissionContent } = req.body || {};
+    
     const step = await prisma.structuredTaskStep.findUnique({
       where: { id: stepId },
-      include: { task: { select: { courseId: true, assignmentType: true, assignedStudentId: true } } }
+      include: { 
+        material: true, 
+        task: { include: { course: { select: { teacherId: true } } } } 
+      }
     });
+    
     if (!step || !await isStudentInCourse(req.user.id, step.task.courseId)) return res.status(403).json({ error: 'No tienes acceso a este paso.' });
     if (step.task.assignmentType === StructuredTaskAssignmentType.INDIVIDUAL && step.task.assignedStudentId !== req.user.id) return res.status(403).json({ error: 'Este paso no está asignado a tu cuenta.' });
-    const progress = await prisma.structuredTaskStepProgress.upsert({
-      where: { stepId_studentId: { stepId, studentId: req.user.id } },
-      create: { stepId, studentId: req.user.id },
-      update: { completedAt: new Date() }
+    
+    let createdSubmission = null;
+    
+    const progress = await prisma.$transaction(async (transaction) => {
+      // Si hay contenido (ej. enlace de un documento), crear un Assignment y Submission
+      if (submissionContent && step.material) {
+        const assignment = await transaction.assignment.upsert({
+          where: { structuredTaskStepId: step.id },
+          create: {
+            teacherId: step.task.course.teacherId,
+            courseId: step.task.courseId,
+            studentId: step.task.assignmentType === StructuredTaskAssignmentType.INDIVIDUAL ? req.user!.id : null,
+            materialId: step.material.id,
+            structuredTaskStepId: step.id,
+            title: `${step.material.title} (${step.task.title})`,
+            description: step.title,
+            category: step.material.category
+          },
+          update: {}
+        });
+        
+        const existingSubmission = await transaction.submission.findUnique({ 
+          where: { assignmentId_studentId: { assignmentId: assignment.id, studentId: req.user!.id } } 
+        });
+        
+        if (!existingSubmission) {
+          createdSubmission = await transaction.submission.create({
+            data: {
+              assignmentId: assignment.id,
+              studentId: req.user!.id,
+              structuredTaskId: step.taskId,
+              content: submissionContent
+            }
+          });
+        }
+      }
+
+      return transaction.structuredTaskStepProgress.upsert({
+        where: { stepId_studentId: { stepId, studentId: req.user!.id } },
+        create: { stepId, studentId: req.user!.id },
+        update: { completedAt: new Date() }
+      });
     });
-    res.json(progress);
+    
+    res.json({ progress, submission: createdSubmission });
   } catch (error) {
     console.error('Error al completar paso estructurado:', error);
     res.status(500).json({ error: 'Error al completar el paso.' });
@@ -220,7 +266,7 @@ router.post('/steps/:stepId/complete', authenticateToken, async (req: AuthReques
 });
 
 router.post('/', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
-  const { title, courseId, assignmentType, assignedStudentId, steps } = req.body;
+  const { title, courseId, assignmentType, assignedStudentId, steps, isSequential } = req.body;
   if (!title?.trim() || !courseId || !Array.isArray(steps) || steps.length === 0) return res.status(400).json({ error: 'Título, clase y al menos un paso son obligatorios.' });
   if (assignmentType !== 'CLASS' && assignmentType !== 'INDIVIDUAL') return res.status(400).json({ error: 'Tipo de asignación no válido.' });
   if (assignmentType === 'INDIVIDUAL' && !assignedStudentId) return res.status(400).json({ error: 'Selecciona un alumno.' });
@@ -232,7 +278,7 @@ router.post('/', authenticateToken, requireTeacher, async (req: AuthRequest, res
 
     const task = await prisma.structuredTask.create({
       data: {
-        title: title.trim(), courseId, assignmentType, assignedStudentId: assignmentType === 'INDIVIDUAL' ? assignedStudentId : null,
+        title: title.trim(), courseId, assignmentType, isSequential: Boolean(isSequential), assignedStudentId: assignmentType === 'INDIVIDUAL' ? assignedStudentId : null,
         steps: { create: steps.filter((step: any) => step.title?.trim()).map((step: any, index: number) => ({ order: index + 1, title: step.title.trim(), materialId: step.materialId || null })) }
       },
       include: getTaskInclude()
@@ -246,7 +292,7 @@ router.post('/', authenticateToken, requireTeacher, async (req: AuthRequest, res
 
 router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
   const taskId = req.params.id as string;
-  const { title, courseId, assignmentType, assignedStudentId, steps } = req.body;
+  const { title, courseId, assignmentType, assignedStudentId, steps, isSequential } = req.body;
   if (!title?.trim() || !courseId || !Array.isArray(steps) || steps.length === 0) return res.status(400).json({ error: 'Título, clase y al menos un paso son obligatorios.' });
 
   try {
@@ -260,7 +306,7 @@ router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, r
       return transaction.structuredTask.update({
         where: { id: taskId },
         data: {
-          title: title.trim(), courseId, assignmentType, assignedStudentId: assignmentType === 'INDIVIDUAL' ? assignedStudentId : null,
+          title: title.trim(), courseId, assignmentType, isSequential: Boolean(isSequential), assignedStudentId: assignmentType === 'INDIVIDUAL' ? assignedStudentId : null,
           steps: { create: steps.filter((step: any) => step.title?.trim()).map((step: any, index: number) => ({ order: index + 1, title: step.title.trim(), materialId: step.materialId || null })) }
         },
         include: getTaskInclude()

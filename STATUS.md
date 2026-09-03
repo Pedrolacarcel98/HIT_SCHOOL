@@ -64,6 +64,16 @@
   - En exámenes: añadidos imágenes por pregunta, preguntas de completar espacios con sintaxis de paréntesis, validación sensible a mayúsculas opcional y revisión compatible con ambos formatos.
   - En calificaciones: habilitado feedback pedagógico para exámenes autocorregidos, con persistencia en `Submission.feedback` y actualización inmediata de los tres paneles.
   - En tareas estructuradas: creadas tareas con pasos, materiales por paso, asignación a clase o alumno, recursos interactivos, progreso individual y exámenes de intento único registrados como entregas estándar.
+  - **Sesión de Mejora de Tareas Estructuradas (Actual):**
+    - En `schema.prisma` y `backend`: Añadido campo `isSequential` a `StructuredTask`.
+    - En `TeacherDashboard.tsx`: Añadido toggle "Paso a paso" para crear/editar tareas estructuradas, obligando a realizarlas en orden.
+    - En `StudentClassworkTab.tsx` y `StudentDashboard.tsx`:
+      - Rediseñada la interfaz para usar casillas de verificación (ticks manuales) por paso.
+      - Lógica de bloqueo secuencial visual e interactivo (pasos bloqueados hasta completar los anteriores).
+      - Flujo de entrega manual diferenciado: 
+        - Vídeos se marcan como completados instantáneamente al clicar el tick (sin generar entrega para el profesor).
+        - Documentos despliegan modal para insertar el enlace al hacer tick (generando entrega evaluable).
+        - Cuestionarios/exámenes interactivos se resuelven y registran automáticamente.
 
 ---
 

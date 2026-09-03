@@ -15,6 +15,7 @@ interface StructuredTask {
   assignmentType: 'CLASS' | 'INDIVIDUAL';
   assignedStudentId: string | null;
   assignedStudentName: string | null;
+  isSequential: boolean;
   steps: StructuredTaskStep[];
 }
 
@@ -58,6 +59,7 @@ const TeacherDashboard: React.FC = () => {
   const [structuredTaskSteps, setStructuredTaskSteps] = useState<StructuredTaskStep[]>([]);
   const [structuredTaskCourseId, setStructuredTaskCourseId] = useState('');
   const [structuredTaskAssignmentType, setStructuredTaskAssignmentType] = useState<'CLASS' | 'INDIVIDUAL'>('CLASS');
+  const [structuredTaskIsSequential, setStructuredTaskIsSequential] = useState(false);
   const [assignedStudentId, setAssignedStudentId] = useState('');
   const [previewingForm, setPreviewingForm] = useState<Material | null>(null);
   const navigate = useNavigate();
@@ -186,6 +188,7 @@ const TeacherDashboard: React.FC = () => {
     const courseId = task?.courseId || courses[0]?.id || '';
     setStructuredTaskCourseId(courseId);
     setStructuredTaskAssignmentType(task?.assignmentType || 'CLASS');
+    setStructuredTaskIsSequential(task?.isSequential || false);
     setAssignedStudentId(task?.assignedStudentId || '');
     fetchEnrolledStudents(courseId);
     setIsStructuredTaskModalOpen(true);
@@ -217,7 +220,7 @@ const TeacherDashboard: React.FC = () => {
       const res = await fetch(`${apiUrl}/api/structured-tasks${editingStructuredTask ? `/${editingStructuredTask.id}` : ''}`, {
         method: editingStructuredTask ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ title, courseId: structuredTaskCourseId, assignmentType: structuredTaskAssignmentType, assignedStudentId: structuredTaskAssignmentType === 'INDIVIDUAL' ? assignedStudentId : null, steps })
+        body: JSON.stringify({ title, courseId: structuredTaskCourseId, assignmentType: structuredTaskAssignmentType, isSequential: structuredTaskIsSequential, assignedStudentId: structuredTaskAssignmentType === 'INDIVIDUAL' ? assignedStudentId : null, steps })
       });
       if (!res.ok) throw new Error('No se pudo guardar la tarea estructurada.');
       await fetchStructuredTasks();
@@ -400,6 +403,7 @@ const TeacherDashboard: React.FC = () => {
                       <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.05rem' }}>{task.title}</h3>
                       <div style={{ display: 'flex', gap: '0.45rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
                         <span style={{ display: 'inline-flex', padding: '0.18rem 0.5rem', borderRadius: '12px', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.72rem', fontWeight: 700 }}>Pasos Numerados</span>
+                        {task.isSequential && <span style={{ display: 'inline-flex', padding: '0.18rem 0.5rem', borderRadius: '12px', background: '#fef3c7', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}>Paso a paso</span>}
                         <span style={{ display: 'inline-flex', padding: '0.18rem 0.5rem', borderRadius: '12px', background: task.assignmentType === 'INDIVIDUAL' ? '#eef2ff' : '#ecfdf5', color: task.assignmentType === 'INDIVIDUAL' ? '#3730a3' : '#047857', fontSize: '0.72rem', fontWeight: 700 }}>
                           {task.assignmentType === 'INDIVIDUAL' ? `Asignado a: ${task.assignedStudentName || 'Alumno'}` : 'Toda la clase'}
                         </span>
@@ -477,6 +481,12 @@ const TeacherDashboard: React.FC = () => {
                 <option value="CLASS">Toda la clase</option>
                 <option value="INDIVIDUAL">Alumno individual</option>
               </select>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '0.3rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>
+                <input type="checkbox" checked={structuredTaskIsSequential} onChange={(e) => setStructuredTaskIsSequential(e.target.checked)} style={{ width: '16px', height: '16px', accentColor: 'var(--primary)' }} />
+                Paso a paso (secuencial)
+              </label>
             </div>
           </div>
           {structuredTaskAssignmentType === 'INDIVIDUAL' && (

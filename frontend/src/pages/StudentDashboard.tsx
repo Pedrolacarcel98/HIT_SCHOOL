@@ -71,6 +71,7 @@ interface StructuredTaskStep {
 interface StructuredTask {
   id: string;
   title: string;
+  isSequential: boolean;
   steps: StructuredTaskStep[];
 }
 
@@ -86,6 +87,8 @@ const StudentDashboard: React.FC = () => {
   const [reviewingContent, setReviewingContent] = useState<IndividualContent | null>(null);
   const [viewingStructuredForm, setViewingStructuredForm] = useState<{ stepId: string; material: NonNullable<StructuredTaskStep['material']> } | null>(null);
   const [reviewingStructuredForm, setReviewingStructuredForm] = useState<{ title: string; material: NonNullable<StructuredTaskStep['material']>; submission: NonNullable<StructuredTaskStep['submission']> } | null>(null);
+  const [viewingStructuredUpload, setViewingStructuredUpload] = useState<{ stepId: string; title: string } | null>(null);
+  const [uploadUrl, setUploadUrl] = useState('');
   const { selectedStudent, selectedStudentId } = useParent();
   const userRole = localStorage.getItem('userRole');
 
@@ -156,17 +159,20 @@ const StudentDashboard: React.FC = () => {
     else if (assignment.material.url) window.open(assignment.material.url, '_blank', 'noopener,noreferrer');
   };
 
-  const completeStructuredStep = async (stepId: string) => {
+  const completeStructuredStep = async (stepId: string, submissionContent?: string) => {
     if (userRole !== 'STUDENT') return;
+    const body = submissionContent ? { submissionContent } : {};
     const response = await fetch(`${apiUrl}/api/structured-tasks/steps/${stepId}/complete`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+      body: JSON.stringify(body)
     });
     if (response.ok) {
       setStructuredTasks((tasks) => tasks.map((task) => ({
         ...task,
         steps: task.steps.map((step) => step.id === stepId ? { ...step, isCompleted: true } : step)
       })));
+      setViewingStructuredUpload(null);
     }
   };
 
@@ -180,7 +186,6 @@ const StudentDashboard: React.FC = () => {
       return;
     }
     if (step.material?.url) window.open(step.material.url, '_blank', 'noopener,noreferrer');
-    await completeStructuredStep(step.id);
   };
 
   const assignedMaterialIds = new Set(individualContent.map(content => content.material?.id).filter(Boolean));
@@ -260,22 +265,57 @@ const StudentDashboard: React.FC = () => {
                     </div>
                   </header>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                    {task.steps.map((step) => {
-                      const materialAction = step.material?.type === 'FORM'
-                        ? (step.isCompleted ? 'Ver Examen Corregido' : 'Realizar Test')
-                        : step.material?.type === 'VIDEO' ? 'Ver Vídeo' : step.material?.type === 'DOCUMENT' ? 'Descargar / Ver PDF' : step.material ? 'Abrir Material' : 'Completar paso';
-                      return (
-                        <div key={step.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', padding: '0.75rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)', flexWrap: 'wrap' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', color: 'var(--text-main)', fontSize: '0.9rem' }}>
-                            {step.isCompleted ? <CheckCircle2 size={21} style={{ color: '#059669' }} /> : <Clock3 size={21} style={{ color: 'var(--text-muted)' }} />}
-                            <span><strong style={{ marginRight: '0.35rem' }}>{step.order}.</strong>{step.title}</span>
+                    {(() => {
+                      let firstIncompleteFound = false;
+                      return task.steps.map((step) => {
+                        const isBlocked = task.isSequential && firstIncompleteFound;
+                        if (!step.isCompleted) firstIncompleteFound = true;
+                        
+                        const materialAction = step.material?.type === 'FORM'
+                          ? (step.isCompleted ? 'Ver Examen Corregido' : 'Realizar Test')
+                          : step.material?.type === 'VIDEO' ? 'Ver Vídeo' : step.material?.type === 'DOCUMENT' ? 'Ver Documento' : step.material ? 'Abrir Material' : 'Ver Paso';
+
+                        return (
+                          <div key={step.id} style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.75rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)', opacity: isBlocked ? 0.6 : 1, pointerEvents: isBlocked ? 'none' : 'auto' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={step.isCompleted} 
+                              disabled={isBlocked || step.isCompleted}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  if (step.material?.type === 'VIDEO' || !step.material) {
+                                    completeStructuredStep(step.id);
+                                  } else if (step.material?.type === 'DOCUMENT') {
+                                    setViewingStructuredUpload({ stepId: step.id, title: step.title });
+                                    setUploadUrl('');
+                                  } else if (step.material?.type === 'FORM') {
+                                    if (!step.isCompleted) setViewingStructuredForm({ stepId: step.id, material: step.material });
+                                  }
+                                }
+                              }}
+                              style={{ width: '22px', height: '22px', cursor: (isBlocked || step.isCompleted) ? 'default' : 'pointer', accentColor: 'var(--primary)' }}
+                            />
+                            
+                            <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', color: 'var(--text-main)', fontSize: '0.9rem' }}>
+                                <span style={{ textDecoration: step.isCompleted ? 'line-through' : 'none', color: step.isCompleted ? 'var(--text-muted)' : 'inherit' }}>
+                                  <strong style={{ marginRight: '0.35rem' }}>{step.order}.</strong>{step.title}
+                                </span>
+                              </div>
+                              <button 
+                                type="button" 
+                                onClick={() => openStructuredStep(step)} 
+                                disabled={(userRole === 'PARENT' && !step.material?.url) && step.material?.type !== 'FORM'} 
+                                className="btn-secondary" 
+                                style={{ padding: '0.4rem 0.7rem', fontSize: '0.8rem', opacity: (userRole === 'PARENT' && !step.material?.url && step.material?.type !== 'FORM') ? 0.55 : 1 }}
+                              >
+                                {step.isCompleted && step.material?.type !== 'FORM' ? 'Ver de nuevo' : materialAction}
+                              </button>
+                            </div>
                           </div>
-                          <button type="button" onClick={() => openStructuredStep(step)} disabled={userRole === 'PARENT' && !step.material?.url} className="btn-secondary" style={{ padding: '0.4rem 0.7rem', fontSize: '0.8rem', opacity: userRole === 'PARENT' && !step.material?.url ? 0.55 : 1 }}>
-                            {step.isCompleted && step.material?.type !== 'FORM' ? 'Ver de nuevo' : materialAction}
-                          </button>
-                        </div>
-                      );
-                    })}
+                        );
+                      });
+                    })()}
                   </div>
                 </article>
               );
@@ -380,6 +420,26 @@ const StudentDashboard: React.FC = () => {
           total={parseSavedExam(reviewingStructuredForm.submission.content)?.total}
           onClose={() => setReviewingStructuredForm(null)}
         />
+      )}
+      
+      {viewingStructuredUpload && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.65)' }}>
+          <div className="animate-fade-in" style={{ width: '100%', maxWidth: '500px', background: 'var(--background)', borderRadius: '12px', padding: '1.5rem', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
+            <h2 style={{ margin: '0 0 1rem', fontSize: '1.2rem', color: 'var(--text-main)' }}>Entregar {viewingStructuredUpload.title}</h2>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1rem' }}>Introduce el enlace de tu documento en la nube para entregarlo al profesor.</p>
+            <input 
+              type="url" 
+              placeholder="https://docs.google.com/..." 
+              value={uploadUrl} 
+              onChange={e => setUploadUrl(e.target.value)} 
+              style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', outline: 'none', marginBottom: '1.5rem' }} 
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              <button onClick={() => setViewingStructuredUpload(null)} style={{ padding: '0.55rem 1rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-main)', cursor: 'pointer', fontWeight: 600 }}>Cancelar</button>
+              <button onClick={() => completeStructuredStep(viewingStructuredUpload.stepId, uploadUrl)} disabled={!uploadUrl.trim()} className="btn-primary" style={{ padding: '0.55rem 1.25rem', opacity: !uploadUrl.trim() ? 0.6 : 1, fontWeight: 700 }}>Entregar</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
