@@ -167,7 +167,7 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
   };
 
   return (
-    <div style={{
+    <div className="modal-backdrop" style={{
       position: 'fixed',
       inset: 0,
       background: 'rgba(0,0,0,0.7)',
@@ -178,7 +178,7 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
       zIndex: 60,
       padding: '1rem'
     }}>
-      <div className="glass-panel animate-fade-in" style={{
+      <div className="glass-panel modal-card modal-card--wide" style={{
         width: '100%',
         maxWidth: '900px',
         maxHeight: '92vh',
@@ -228,7 +228,7 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
               <Eye size={16} /> {previewMode ? 'Modo Editor' : 'Vista Previa'}
             </button>
 
-            <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}>
+            <button onClick={onClose} className="modal-close" aria-label="Cerrar modal">
               <X size={22} />
             </button>
           </div>

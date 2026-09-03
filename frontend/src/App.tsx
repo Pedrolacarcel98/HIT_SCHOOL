@@ -33,7 +33,6 @@ function App() {
             <Route path="chat" element={<Chat role="TEACHER" />} />
             <Route path="course/:id" element={<CourseView />} />
           </Route>
-
           <Route path="/student" element={<StudentLayout />}>
             <Route index element={<StudentDashboard />} />
             <Route path="dashboard" element={<StudentDashboard />} />

@@ -348,9 +348,9 @@ const StudentDashboard: React.FC = () => {
           </article>)}
         </div>
       </section>}
-      {viewingContent?.material?.type === 'FORM' && viewingContent.material.formData && <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: '0.75rem 1rem 0', background: 'rgba(255,255,255,0.2)' }}>
-        <div style={{ width: '100%', maxWidth: '980px', height: 'calc(100vh - 0.75rem)', overflowY: 'auto', background: 'var(--background)', borderRadius: '12px 12px 0 0', padding: '1rem' }}>
-          <button onClick={() => setViewingContent(null)} aria-label="Cerrar examen" style={{ display: 'flex', marginLeft: 'auto', border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={22} /></button>
+      {viewingContent?.material?.type === 'FORM' && viewingContent.material.formData && <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: '0.75rem 1rem 0', background: 'rgba(255,255,255,0.2)' }}>
+        <div className="modal-card modal-card--player" style={{ width: '100%', maxWidth: '980px', height: 'calc(100vh - 0.75rem)', overflowY: 'auto', background: 'var(--background)', borderRadius: '12px 12px 0 0', padding: '1rem' }}>
+          <button onClick={() => setViewingContent(null)} aria-label="Cerrar examen" className="modal-close"><X size={22} /></button>
           {userRole === 'PARENT' ? (
             <div style={{ padding: '2rem', textAlign: 'center', color: '#24583e', background: '#eaf4ef', borderRadius: '10px', border: '1px solid #bfe0d0', margin: '2rem 0', fontWeight: 600 }}>
               🛡️ Vista del Tutor (Modo Solo Lectura): Los exámenes interactivos deben ser realizados directamente por el alumno desde su propia cuenta.
@@ -360,9 +360,9 @@ const StudentDashboard: React.FC = () => {
           )}
         </div>
       </div>}
-      {viewingMaterialAssignment?.material.type === 'FORM' && viewingMaterialAssignment.material.formData && <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: '0.75rem 1rem 0', background: 'rgba(255,255,255,0.2)' }}>
-        <div style={{ width: '100%', maxWidth: '980px', height: 'calc(100vh - 0.75rem)', overflowY: 'auto', background: 'var(--background)', borderRadius: '12px 12px 0 0', padding: '1rem' }}>
-          <button onClick={() => setViewingMaterialAssignment(null)} aria-label="Cerrar examen" style={{ display: 'flex', marginLeft: 'auto', border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={22} /></button>
+      {viewingMaterialAssignment?.material.type === 'FORM' && viewingMaterialAssignment.material.formData && <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: '0.75rem 1rem 0', background: 'rgba(255,255,255,0.2)' }}>
+        <div className="modal-card modal-card--player" style={{ width: '100%', maxWidth: '980px', height: 'calc(100vh - 0.75rem)', overflowY: 'auto', background: 'var(--background)', borderRadius: '12px 12px 0 0', padding: '1rem' }}>
+          <button onClick={() => setViewingMaterialAssignment(null)} aria-label="Cerrar examen" className="modal-close"><X size={22} /></button>
           {userRole === 'PARENT' ? (
             <div style={{ padding: '2rem', textAlign: 'center', color: '#24583e', background: '#eaf4ef', borderRadius: '10px', border: '1px solid #bfe0d0', margin: '2rem 0', fontWeight: 600 }}>
               🛡️ Vista del Tutor (Modo Solo Lectura): Los exámenes interactivos deben ser realizados directamente por el alumno desde su propia cuenta.
@@ -382,9 +382,9 @@ const StudentDashboard: React.FC = () => {
           onClose={() => setReviewingContent(null)}
         />
       )}
-      {viewingStructuredForm && <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: '0.75rem 1rem 0', background: 'rgba(255,255,255,0.2)' }}>
-        <div style={{ width: '100%', maxWidth: '980px', height: 'calc(100vh - 0.75rem)', overflowY: 'auto', background: 'var(--background)', borderRadius: '12px 12px 0 0', padding: '1rem' }}>
-          <button onClick={() => setViewingStructuredForm(null)} aria-label="Cerrar examen" style={{ display: 'flex', marginLeft: 'auto', border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={22} /></button>
+      {viewingStructuredForm && <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: '0.75rem 1rem 0', background: 'rgba(255,255,255,0.2)' }}>
+        <div className="modal-card modal-card--player" style={{ width: '100%', maxWidth: '980px', height: 'calc(100vh - 0.75rem)', overflowY: 'auto', background: 'var(--background)', borderRadius: '12px 12px 0 0', padding: '1rem' }}>
+          <button onClick={() => setViewingStructuredForm(null)} aria-label="Cerrar examen" className="modal-close"><X size={22} /></button>
           {userRole === 'PARENT' ? (
             <div style={{ padding: '2rem', textAlign: 'center', color: '#24583e', background: '#eaf4ef', borderRadius: '10px', border: '1px solid #bfe0d0', margin: '2rem 0', fontWeight: 600 }}>Vista del Tutor: el examen debe realizarlo el alumno.</div>
           ) : (
@@ -423,8 +423,8 @@ const StudentDashboard: React.FC = () => {
       )}
       
       {viewingStructuredUpload && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.65)' }}>
-          <div className="animate-fade-in" style={{ width: '100%', maxWidth: '500px', background: 'var(--background)', borderRadius: '12px', padding: '1.5rem', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
+        <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.65)' }}>
+          <div className="modal-card" style={{ width: '100%', maxWidth: '500px', background: 'var(--background)', borderRadius: '12px', padding: '1.5rem', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
             <h2 style={{ margin: '0 0 1rem', fontSize: '1.2rem', color: 'var(--text-main)' }}>Entregar {viewingStructuredUpload.title}</h2>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1rem' }}>Introduce el enlace de tu documento en la nube para entregarlo al profesor.</p>
             <input 

@@ -6,9 +6,13 @@
 
 * **Diseño responsive móvil:** Corregir el layout en pantallas reducidas aplicando anchos fluidos, márgenes seguros y auto-scroll interno (`overflow-y: auto`), resolviendo los problemas de texto truncado y desbordamiento visual.
 
+
+* **Corregir tarjeta revisar prueba** En el portal de calificaciones del profesor corregir la tarjeta de la revisión de la prueba
+
 ---
 
 **2. Homogeneización visual de Tareas Estructuradas**
 
 * **Consistencia entre vistas:** Unificar los componentes y la estructura visual de tareas estructuradas entre la vista general de **«Mis Clases»** y la sección interna de **«Material Asignado»** dentro de cada clase.
 * **Mismo estándar de tarjetas y acciones:** Ambas pantallas deben compartir idéntico diseño de tarjetas, tipografías, estados de entrega y botones de acción para garantizar coherencia en la navegación.
+

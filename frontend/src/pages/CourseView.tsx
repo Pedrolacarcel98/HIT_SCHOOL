@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, MessageSquare, BookOpen, Users, Award } from 'lucide-react';
+import { ArrowLeft, MessageSquare, BookOpen, Users } from 'lucide-react';
 import StreamTab from '../components/StreamTab';
 import ClassworkTab from '../components/ClassworkTab';
 import PeopleTab from '../components/PeopleTab';
-import GradesTab from '../components/GradesTab';
 
 const CourseView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'stream' | 'classwork' | 'people' | 'grades'>('stream');
+  const [activeTab, setActiveTab] = useState<'stream' | 'classwork' | 'people'>('stream');
   const [course, setCourse] = useState<any>(null);
 
   useEffect(() => {
@@ -57,7 +56,6 @@ const CourseView: React.FC = () => {
           <TabButton active={activeTab === 'stream'} onClick={() => setActiveTab('stream')} icon={<MessageSquare size={18}/>} label="Tablón" />
           <TabButton active={activeTab === 'classwork'} onClick={() => setActiveTab('classwork')} icon={<BookOpen size={18}/>} label="Trabajo de clase" />
           <TabButton active={activeTab === 'people'} onClick={() => setActiveTab('people')} icon={<Users size={18}/>} label="Personas" />
-          <TabButton active={activeTab === 'grades'} onClick={() => setActiveTab('grades')} icon={<Award size={18}/>} label="Calificaciones" />
         </div>
       </nav>
 
@@ -66,7 +64,6 @@ const CourseView: React.FC = () => {
         {activeTab === 'stream' && <StreamTab courseId={id!} />}
         {activeTab === 'classwork' && <ClassworkTab courseId={id!} />}
         {activeTab === 'people' && <PeopleTab courseId={id!} />}
-        {activeTab === 'grades' && <GradesTab courseId={id!} />}
       </div>
     </div>
   );

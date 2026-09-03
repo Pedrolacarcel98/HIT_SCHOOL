@@ -73,7 +73,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   };
 
   return (
-    <div style={{
+    <div className="modal-backdrop" style={{
       position: 'fixed',
       inset: 0,
       background: 'rgba(0, 0, 0, 0.65)',
@@ -84,7 +84,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
       zIndex: 100,
       padding: '1rem'
     }}>
-      <div className="glass-panel animate-fade-in" style={{
+      <div className="glass-panel modal-card" style={{
         width: '100%',
         maxWidth: '480px',
         maxHeight: '92vh',
@@ -106,7 +106,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
           <button
             type="button"
             onClick={onClose}
-            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}
+            className="modal-close"
             aria-label="Cerrar modal"
           >
             <X size={20} />

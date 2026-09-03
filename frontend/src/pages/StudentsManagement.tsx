@@ -676,7 +676,7 @@ const StudentsManagement: React.FC = () => {
           zIndex: 80,
           padding: '1rem'
         }}>
-          <div className="glass-panel animate-fade-in" style={{ width: '100%', maxWidth: '580px', maxHeight: '90vh', overflowY: 'auto', padding: '2rem' }}>
+          <div className="glass-panel modal-card" style={{ width: '100%', maxWidth: '580px', maxHeight: '90vh', overflowY: 'auto', padding: '2rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '1.2rem' }}>
@@ -689,7 +689,7 @@ const StudentsManagement: React.FC = () => {
                   <span style={{ fontSize: '0.84rem', color: 'var(--text-muted)' }}>{viewingStudent.email}</span>
                 </div>
               </div>
-              <button onClick={() => setViewingStudent(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}>
+              <button onClick={() => setViewingStudent(null)} className="modal-close" aria-label="Cerrar modal">
                 <X size={20} />
               </button>
             </div>
@@ -774,7 +774,7 @@ const StudentsManagement: React.FC = () => {
 
       {/* Modal: Crear Alumno con Ficha Extendida & Tutor */}
       {showCreateModal && (
-        <div style={{
+        <div className="modal-backdrop" style={{
           position: 'fixed',
           inset: 0,
           background: 'rgba(0,0,0,0.65)',
@@ -785,12 +785,12 @@ const StudentsManagement: React.FC = () => {
           zIndex: 80,
           padding: '1rem'
         }}>
-          <div className="glass-panel animate-fade-in" style={{ width: '100%', maxWidth: '620px', maxHeight: '92vh', overflowY: 'auto', padding: '2rem' }}>
+          <div className="glass-panel modal-card" style={{ width: '100%', maxWidth: '620px', maxHeight: '92vh', overflowY: 'auto', padding: '2rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
               <h3 style={{ margin: 0, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.3rem' }}>
                 <UserPlus style={{ color: 'var(--primary)' }} /> Alta de Nuevo Alumno
               </h3>
-              <button onClick={() => setShowCreateModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+              <button onClick={() => setShowCreateModal(false)} className="modal-close" aria-label="Cerrar modal">
                 <X size={20} />
               </button>
             </div>
@@ -1029,7 +1029,7 @@ const StudentsManagement: React.FC = () => {
 
       {/* Modal: Editar Alumno */}
       {editingStudent && (
-        <div style={{
+        <div className="modal-backdrop" style={{
           position: 'fixed',
           inset: 0,
           background: 'rgba(0,0,0,0.65)',
@@ -1040,12 +1040,12 @@ const StudentsManagement: React.FC = () => {
           zIndex: 80,
           padding: '1rem'
         }}>
-          <div className="glass-panel animate-fade-in" style={{ width: '100%', maxWidth: '580px', maxHeight: '92vh', overflowY: 'auto', padding: '2rem' }}>
+          <div className="glass-panel modal-card" style={{ width: '100%', maxWidth: '580px', maxHeight: '92vh', overflowY: 'auto', padding: '2rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
               <h3 style={{ margin: 0, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Edit2 style={{ color: 'var(--primary)' }} /> Editar Ficha del Alumno
               </h3>
-              <button onClick={() => setEditingStudent(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+              <button onClick={() => setEditingStudent(null)} className="modal-close" aria-label="Cerrar modal">
                 <X size={20} />
               </button>
             </div>
@@ -1191,7 +1191,7 @@ const StudentsManagement: React.FC = () => {
 
       {/* Modal: Confirmar Eliminación */}
       {deletingStudent && (
-        <div style={{
+        <div className="modal-backdrop" style={{
           position: 'fixed',
           inset: 0,
           background: 'rgba(0,0,0,0.65)',
@@ -1202,7 +1202,7 @@ const StudentsManagement: React.FC = () => {
           zIndex: 80,
           padding: '1rem'
         }}>
-          <div className="glass-panel animate-fade-in" style={{ width: '100%', maxWidth: '420px', padding: '2rem', textAlign: 'center' }}>
+          <div className="glass-panel modal-card" style={{ width: '100%', maxWidth: '420px', padding: '2rem', textAlign: 'center' }}>
             <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
               <Trash2 size={24} />
             </div>

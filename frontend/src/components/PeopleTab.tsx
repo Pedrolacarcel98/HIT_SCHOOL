@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { UserPlus, Mail, Users, X, CheckSquare, Square, AlertCircle } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { UserPlus, Mail, Users, UserMinus, X, CheckSquare, Square, AlertCircle } from 'lucide-react';
 
 const PeopleTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const [courseStudents, setCourseStudents] = useState<any[]>([]);
@@ -7,6 +8,7 @@ const PeopleTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
+  const [studentSearch, setStudentSearch] = useState('');
   const [modalLoading, setModalLoading] = useState(false);
 
   // Form states for creating new student
@@ -38,6 +40,7 @@ const PeopleTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const handleOpenModal = async () => {
     setIsModalOpen(true);
     setSelectedStudentIds(new Set());
+    setStudentSearch('');
     setModalLoading(true);
     try {
       const token = localStorage.getItem('token');
@@ -88,6 +91,23 @@ const PeopleTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     }
   };
 
+  const handleRemoveStudent = async (studentId: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+      const res = await fetch(`${apiUrl}/api/courses/${courseId}/students/${studentId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        setCourseStudents(students => students.filter(student => student.id !== studentId));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     setMessage('');
@@ -125,6 +145,10 @@ const PeopleTab: React.FC<{ courseId: string }> = ({ courseId }) => {
 
   // Filtrar los alumnos para no mostrar los que ya están en esta clase
   const availableStudents = allStudents.filter(student => !courseStudents.some(cs => cs.id === student.id));
+  const filteredAvailableStudents = availableStudents.filter(student => {
+    const searchValue = `${student.profile?.firstName || ''} ${student.profile?.lastName || ''} ${student.email}`.toLowerCase();
+    return searchValue.includes(studentSearch.trim().toLowerCase());
+  });
 
   return (
     <div className="animate-fade-in">
@@ -187,32 +211,46 @@ const PeopleTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                 <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>{student.email}</p>
               </div>
             </div>
-            <button style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
-              <Mail size={18} />
+            <button
+              type="button"
+              onClick={() => handleRemoveStudent(student.id)}
+              title="Quitar de la clase"
+              aria-label={`Quitar a ${student.profile?.firstName || student.email} de la clase`}
+              style={{ background: 'none', border: 'none', color: '#b91c1c', cursor: 'pointer', padding: '0.4rem' }}
+            >
+              <UserMinus size={18} />
             </button>
           </div>
         ))}
         {courseStudents.length === 0 && <p style={{ color: 'var(--text-muted)' }}>No hay alumnos en esta clase aún.</p>}
       </div>
 
-      {isModalOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
-          <div className="glass-panel animate-fade-in" style={{ width: '100%', maxWidth: '600px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
+      {isModalOpen && createPortal(
+        <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
+          <div className="glass-panel modal-card" style={{ width: '100%', maxWidth: '600px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
             <div style={{ padding: '1.25rem', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 style={{ margin: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Users size={20} style={{ color: 'var(--primary)' }} /> Invitar Alumnos
               </h2>
-              <button onClick={() => setIsModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={20} /></button>
+              <button onClick={() => setIsModalOpen(false)} className="modal-close" aria-label="Cerrar modal"><X size={20} /></button>
             </div>
             
             <div style={{ padding: '1.25rem', overflowY: 'auto', flex: 1 }}>
+              <input
+                type="search"
+                value={studentSearch}
+                onChange={(event) => setStudentSearch(event.target.value)}
+                placeholder="Buscar por nombre o correo..."
+                aria-label="Buscar alumnos para invitar"
+                style={{ width: '100%', marginBottom: '0.9rem', padding: '0.7rem 0.8rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
+              />
               {modalLoading ? (
                 <p style={{ textAlign: 'center', color: 'var(--text-muted)' }}>Cargando alumnos...</p>
-              ) : availableStudents.length === 0 ? (
-                <p style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No hay más alumnos para invitar.</p>
+              ) : filteredAvailableStudents.length === 0 ? (
+                <p style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{availableStudents.length === 0 ? 'No hay más alumnos para invitar.' : 'No se encontraron alumnos.'}</p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {availableStudents.map(student => {
+                  {filteredAvailableStudents.map(student => {
                     const isSelected = selectedStudentIds.has(student.id);
                     const isEnrolledInOtherCourses = student.enrollments && student.enrollments.length > 0;
                     
@@ -266,6 +304,7 @@ const PeopleTab: React.FC<{ courseId: string }> = ({ courseId }) => {
             </div>
           </div>
         </div>
+      , document.body
       )}
     </div>
   );

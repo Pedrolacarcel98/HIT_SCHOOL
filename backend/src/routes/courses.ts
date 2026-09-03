@@ -356,6 +356,25 @@ router.get('/:id/students', authenticateToken, verifyCourseAccess, async (req: A
   }
 });
 
+router.delete('/:id/students/:studentId', authenticateToken, requireTeacher, verifyCourseAccess, async (req: AuthRequest, res: Response) => {
+  try {
+    const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const studentId = Array.isArray(req.params.studentId) ? req.params.studentId[0] : req.params.studentId;
+    const deletedEnrollment = await prisma.enrollment.deleteMany({
+      where: { courseId, studentId }
+    });
+
+    if (deletedEnrollment.count === 0) {
+      return res.status(404).json({ error: 'El alumno no está matriculado en esta clase.' });
+    }
+
+    res.json({ message: 'Alumno retirado de la clase correctamente.' });
+  } catch (error) {
+    console.error('Error al retirar alumno de la clase:', error);
+    res.status(500).json({ error: 'Error interno al retirar al alumno.' });
+  }
+});
+
 router.post('/:id/enroll', authenticateToken, requireTeacher, verifyCourseAccess, async (req: AuthRequest, res: Response) => {
   const { studentIds } = req.body;
   if (!Array.isArray(studentIds) || studentIds.length === 0) {

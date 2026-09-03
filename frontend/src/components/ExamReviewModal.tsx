@@ -61,7 +61,6 @@ const ExamReviewModal: React.FC<ExamReviewModalProps> = ({ title, questions = []
     ? questions.reduce((sum, question) => sum + (isCorrect(question, answers[question.id]) ? question.points || 1 : 0), 0)
     : (score !== null && score !== undefined ? (score <= 10 && calculatedTotal > 10 ? Math.round((score / 10) * calculatedTotal) : score) : 0);
 
-  const percentage = calculatedTotal ? Math.round((calculatedEarned / calculatedTotal) * 100) : 0;
   const gradeOutOfTen = calculatedTotal ? ((calculatedEarned / calculatedTotal) * 10).toFixed(1) : (score !== null && score !== undefined ? score.toFixed(1) : '-');
 
   const handleSaveFeedback = async () => {
@@ -80,18 +79,18 @@ const ExamReviewModal: React.FC<ExamReviewModalProps> = ({ title, questions = []
   };
 
   return (
-    <div style={backdropStyle} onClick={onClose}>
-      <div className="glass-panel" onClick={(event) => event.stopPropagation()} style={modalStyle}>
+    <div className="modal-backdrop" style={backdropStyle} onClick={onClose}>
+      <div className="glass-panel modal-card" onClick={(event) => event.stopPropagation()} style={modalStyle}>
         <header style={headerStyle}>
           <div>
             <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase' }}>
-              REVISIÓN PEDAGÓGICA
+              REVISIÓN
             </span>
             <h2 style={{ margin: '0.15rem 0 0', fontSize: '1.2rem', color: 'var(--text-main)' }}>
               Corrección: {title}
             </h2>
           </div>
-          <button type="button" onClick={onClose} aria-label="Cerrar revisión" style={closeStyle}><X size={20} /></button>
+          <button type="button" onClick={onClose} aria-label="Cerrar revisión" className="modal-close"><X size={20} /></button>
         </header>
 
         {/* Resumen de Puntuación */}
@@ -100,7 +99,7 @@ const ExamReviewModal: React.FC<ExamReviewModalProps> = ({ title, questions = []
             <div>
               <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600 }}>Aciertos</span>
               <strong style={{ display: 'block', marginTop: '0.15rem', color: 'var(--text-main)', fontSize: '1.15rem' }}>
-                {calculatedEarned} / {calculatedTotal} ({percentage}%)
+                {calculatedEarned} / {calculatedTotal}
               </strong>
             </div>
             <div style={{ width: '1px', height: '32px', background: 'var(--border)' }} />

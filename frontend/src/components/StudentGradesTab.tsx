@@ -309,7 +309,7 @@ const StudentGradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
 
       {/* Modal: Comentarios del Profesor */}
       {viewingFeedback && (
-        <div style={{
+        <div className="modal-backdrop" style={{
           position: 'fixed',
           inset: 0,
           background: 'rgba(0, 0, 0, 0.65)',
@@ -320,7 +320,7 @@ const StudentGradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
           zIndex: 90,
           padding: '1rem'
         }}>
-          <div className="glass-panel animate-fade-in" style={{ width: '100%', maxWidth: '520px', padding: '1.75rem' }}>
+          <div className="glass-panel modal-card" style={{ width: '100%', maxWidth: '520px', padding: '1.75rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
               <div>
                 <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 700, textTransform: 'uppercase' }}>
@@ -333,7 +333,7 @@ const StudentGradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
               <button
                 type="button"
                 onClick={() => setViewingFeedback(null)}
-                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}
+                className="modal-close"
               >
                 <X size={20} />
               </button>

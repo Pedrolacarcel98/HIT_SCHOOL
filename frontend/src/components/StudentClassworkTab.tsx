@@ -481,8 +481,8 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
 
       {/* Modal Principal de Tarea / Entrega */}
       {viewingMaterial && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'stretch', justifyContent: 'center', zIndex: 100, padding: '0.75rem 1rem 0', overflow: 'hidden' }}>
-          <div className="animate-fade-in" style={{ width: '100%', maxWidth: viewingMaterial.type === 'FORM' ? '980px' : '920px', height: 'calc(100vh - 0.75rem)', background: 'var(--background)', borderRadius: '12px 12px 0 0', overflow: 'hidden', display: 'flex', flexDirection: 'column', margin: '0 auto', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
+        <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'stretch', justifyContent: 'center', zIndex: 100, padding: '0.75rem 1rem 0', overflow: 'hidden' }}>
+          <div className="modal-card modal-card--player" style={{ width: '100%', maxWidth: viewingMaterial.type === 'FORM' ? '980px' : '920px', height: 'calc(100vh - 0.75rem)', background: 'var(--background)', borderRadius: '12px 12px 0 0', overflow: 'hidden', display: 'flex', flexDirection: 'column', margin: '0 auto', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
             
             {/* Header del Modal */}
             <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface)' }}>
@@ -492,7 +492,7 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                 </span>
                 <h2 style={{ margin: '0.2rem 0 0', fontSize: '1.25rem', color: 'var(--text-main)' }}>{viewingMaterial.title}</h2>
               </div>
-              <button onClick={() => setViewingMaterial(null)} style={{ border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}><X size={22} /></button>
+              <button onClick={() => setViewingMaterial(null)} className="modal-close" aria-label="Cerrar modal"><X size={22} /></button>
             </div>
             
             {/* Contenido del Modal */}

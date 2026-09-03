@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Calendar, FileText, Pencil, Plus, Trash2, X } from 'lucide-react';
 
 const SKILL_CATEGORIES = [
@@ -251,16 +252,16 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
           </div>
         ))}
       </div>
-      {editingAssignment && <div style={modalBackdropStyle} onClick={() => setEditingAssignment(null)}>
-        <form className="glass-panel animate-fade-in" onSubmit={saveEdit} onClick={(event) => event.stopPropagation()} style={{ width: 'min(100%, 500px)', padding: '1.5rem' }}>
-          <button type="button" onClick={() => setEditingAssignment(null)} aria-label="Cerrar" style={{ ...actionButtonStyle, float: 'right' }}><X size={19} /></button>
+      {editingAssignment && createPortal(<div className="modal-backdrop" style={modalBackdropStyle} onClick={() => setEditingAssignment(null)}>
+        <form className="glass-panel modal-card" onSubmit={saveEdit} onClick={(event) => event.stopPropagation()} style={{ width: 'min(100%, 500px)', padding: '1.5rem' }}>
+          <button type="button" onClick={() => setEditingAssignment(null)} aria-label="Cerrar" className="modal-close"><X size={19} /></button>
           <h2 style={{ margin: '0 0 1rem' }}>Editar contenido</h2>
           <label style={labelStyle}>Título<input value={editTitle} onChange={(event) => setEditTitle(event.target.value)} required style={inputStyle} /></label>
           <label style={labelStyle}>Categoría<select value={editCategory} onChange={(event) => setEditCategory(event.target.value)} style={inputStyle}>{SKILL_CATEGORIES.map(category => <option key={category.id} value={category.id}>{category.label}</option>)}</select></label>
           <label style={labelStyle}>Destinatario<select value={editRecipient} onChange={(event) => setEditRecipient(event.target.value)} style={inputStyle}><option value={courseId}>Toda la clase</option>{students.map(student => <option key={student.id} value={student.id}>{student.profile?.firstName} {student.profile?.lastName} ({student.email})</option>)}</select></label>
           <button className="btn-primary" type="submit">Guardar cambios</button>
         </form>
-      </div>}
+      </div>, document.body)}
     </div>
   );
 };
@@ -268,6 +269,6 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
 const actionButtonStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0.45rem', border: 'none', borderRadius: '6px', background: 'transparent', color: 'var(--primary-text)', cursor: 'pointer' };
 const inputStyle: React.CSSProperties = { width: '100%', marginTop: '0.35rem', padding: '0.7rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)', color: 'var(--text-main)' };
 const labelStyle: React.CSSProperties = { display: 'block', marginBottom: '0.9rem', fontSize: '0.88rem', fontWeight: 600 };
-const modalBackdropStyle: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 100, display: 'grid', placeItems: 'center', padding: '1rem', background: 'rgba(34, 49, 43, 0.35)' };
+const modalBackdropStyle: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 100, display: 'grid', placeItems: 'center', padding: '1rem', background: 'rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(4px)' };
 
 export default ClassworkTab;

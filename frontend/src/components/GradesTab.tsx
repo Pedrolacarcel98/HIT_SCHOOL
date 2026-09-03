@@ -401,14 +401,14 @@ const GradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
 
       {/* Modal: Calificar / Editar Nota Manual */}
       {evaluatingSubmission && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 80, padding: '1rem' }}>
-          <div className="glass-panel animate-fade-in" style={{ width: '100%', maxWidth: '560px', maxHeight: '90vh', overflowY: 'auto', padding: '2rem' }}>
+        <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 80, padding: '1rem' }}>
+          <div className="glass-panel modal-card" style={{ width: '100%', maxWidth: '560px', maxHeight: '90vh', overflowY: 'auto', padding: '2rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
               <div>
                 <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>EVALUACIÓN DE TAREA</span>
                 <h3 style={{ margin: '0.2rem 0 0', fontSize: '1.3rem', color: 'var(--text-main)' }}>Calificar a {evaluatingSubmission.studentName}</h3>
               </div>
-              <button onClick={() => setEvaluatingSubmission(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={20} /></button>
+              <button onClick={() => setEvaluatingSubmission(null)} className="modal-close" aria-label="Cerrar modal"><X size={20} /></button>
             </div>
             {saveError && <div style={{ padding: '0.75rem', background: '#fdf0f0', color: '#9e2a2b', border: '1px solid #f7caca', borderRadius: '8px', marginBottom: '1rem' }}>{saveError}</div>}
             

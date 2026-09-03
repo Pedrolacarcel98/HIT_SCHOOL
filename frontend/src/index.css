@@ -1,3 +1,8 @@
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
 :root {
   /* Paleta Verde Pastel / Salvia Suave */
   --primary-hue: 152;
@@ -68,6 +73,63 @@ body {
 
 .glass-panel:hover {
   box-shadow: var(--shadow-lg);
+}
+
+.modal-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 100 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 1rem !important;
+  background: rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(4px) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+  transition: all 0.2s ease;
+}
+
+.modal-card {
+  position: relative !important;
+  width: 100% !important;
+  max-width: 512px !important;
+  padding: 1.5rem !important;
+  background: #ffffff !important;
+  border: 1px solid rgba(241, 245, 249, 0.8) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25) !important;
+  animation: modal-zoom-in 0.2s ease-out;
+}
+
+.modal-card--wide {
+  max-width: 900px !important;
+}
+
+.modal-card--player {
+  max-width: 980px !important;
+}
+
+.modal-close {
+  position: absolute !important;
+  top: 1rem !important;
+  right: 1rem !important;
+  padding: 0.375rem !important;
+  border: none !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  color: #94a3b8 !important;
+  cursor: pointer !important;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.modal-close:hover {
+  color: #475569 !important;
+  background: #f1f5f9 !important;
+}
+
+@keyframes modal-zoom-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 h1, h2, h3, h4, h5, h6 {

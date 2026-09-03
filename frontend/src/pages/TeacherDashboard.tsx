@@ -446,9 +446,9 @@ const TeacherDashboard: React.FC = () => {
         )}
       </section>
 
-      {previewingForm && <div style={modalBackdropStyle} onClick={() => setPreviewingForm(null)}>
-        <div className="glass-panel animate-fade-in" onClick={(event) => event.stopPropagation()} style={{ width: 'min(100%, 900px)', maxHeight: '90vh', overflowY: 'auto', padding: '1.5rem' }}>
-          <button type="button" onClick={() => setPreviewingForm(null)} aria-label="Cerrar previsualización" style={{ ...iconButtonStyle, float: 'right' }}><X size={19} /></button>
+      {previewingForm && <div className="modal-backdrop" style={modalBackdropStyle} onClick={() => setPreviewingForm(null)}>
+        <div className="glass-panel modal-card modal-card--wide" onClick={(event) => event.stopPropagation()} style={{ width: 'min(100%, 900px)', maxHeight: '90vh', overflowY: 'auto', padding: '1.5rem' }}>
+          <button type="button" onClick={() => setPreviewingForm(null)} aria-label="Cerrar previsualización" className="modal-close"><X size={19} /></button>
           <FormPlayer
             title={previewingForm.title}
             description={previewingForm.description || undefined}
@@ -460,9 +460,9 @@ const TeacherDashboard: React.FC = () => {
         </div>
       </div>}
 
-      {isStructuredTaskModalOpen && <div style={modalBackdropStyle} onClick={() => setIsStructuredTaskModalOpen(false)}>
-        <form onSubmit={saveStructuredTask} className="glass-panel animate-fade-in" onClick={(event) => event.stopPropagation()} style={{ width: 'min(100%, 520px)', padding: '1.5rem' }}>
-          <button type="button" onClick={() => setIsStructuredTaskModalOpen(false)} aria-label="Cerrar" style={{ ...iconButtonStyle, float: 'right' }}><X size={19} /></button>
+      {isStructuredTaskModalOpen && <div className="modal-backdrop" style={modalBackdropStyle} onClick={() => setIsStructuredTaskModalOpen(false)}>
+        <form onSubmit={saveStructuredTask} className="glass-panel modal-card" onClick={(event) => event.stopPropagation()} style={{ width: 'min(100%, 520px)', padding: '1.5rem' }}>
+          <button type="button" onClick={() => setIsStructuredTaskModalOpen(false)} aria-label="Cerrar" className="modal-close"><X size={19} /></button>
           <h2 style={{ margin: '0 0 0.35rem', color: 'var(--text-main)', fontSize: '1.2rem' }}>{editingStructuredTask ? 'Editar Tarea Estructurada' : 'Añadir Tarea Estructurada'}</h2>
           <p style={{ margin: '0 0 1.25rem', color: 'var(--text-muted)', fontSize: '0.88rem' }}>Configura la instrucción y el material opcional de cada paso.</p>
           <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Título</label>

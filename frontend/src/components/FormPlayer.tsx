@@ -119,7 +119,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
 
       {/* Pop-up Modal de Resultado */}
       {showResultModal && (
-        <div style={{
+        <div className="modal-backdrop" style={{
           position: 'fixed',
           inset: 0,
           background: 'rgba(0,0,0,0.75)',
@@ -130,7 +130,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
           zIndex: 100,
           padding: '1.5rem'
         }}>
-          <div className="glass-panel animate-fade-in" style={{
+          <div className="glass-panel modal-card" style={{
             width: '100%',
             maxWidth: modalStep === 'REVIEW' ? '700px' : '460px',
             maxHeight: '90vh',

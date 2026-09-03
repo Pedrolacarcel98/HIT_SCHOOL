@@ -478,7 +478,7 @@ const MaterialsManagement: React.FC = () => {
 
       {/* Modal: Visor / Reproductor Multimedia */}
       {viewingMaterial && (
-        <div style={{
+        <div className="modal-backdrop" style={{
           position: 'fixed',
           inset: 0,
           background: 'rgba(0,0,0,0.75)',
@@ -489,7 +489,7 @@ const MaterialsManagement: React.FC = () => {
           zIndex: 70,
           padding: '1.5rem'
         }}>
-          <div className="glass-panel animate-fade-in" style={{
+          <div className="glass-panel modal-card modal-card--wide" style={{
             width: '100%',
             maxWidth: viewingMaterial.type === 'FORM' ? '900px' : '850px',
             maxHeight: '90vh',
@@ -579,14 +579,14 @@ const MaterialsManagement: React.FC = () => {
       )}
 
       {assigningMaterial && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 75, padding: '1rem' }}>
-          <div className="glass-panel animate-fade-in" style={{ width: '100%', maxWidth: '560px', maxHeight: '90vh', overflowY: 'auto', padding: '2rem' }}>
+        <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 75, padding: '1rem' }}>
+          <div className="glass-panel modal-card" style={{ width: '100%', maxWidth: '560px', maxHeight: '90vh', overflowY: 'auto', padding: '2rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '1.5rem' }}>
               <div>
                 <span style={{ color: 'var(--primary)', fontSize: '0.75rem', fontWeight: 700 }}>COMPARTIR MATERIAL</span>
                 <h3 style={{ margin: '0.3rem 0 0', color: 'var(--text)' }}>Asignar Material: {assigningMaterial.title}</h3>
               </div>
-              <button onClick={() => setAssigningMaterial(null)} aria-label="Cerrar" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={20} /></button>
+              <button onClick={() => setAssigningMaterial(null)} aria-label="Cerrar" className="modal-close"><X size={20} /></button>
             </div>
 
             <form onSubmit={handleAssignMaterial} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -632,7 +632,7 @@ const MaterialsManagement: React.FC = () => {
 
       {/* Modal: Añadir Recurso Multimedia / Documento */}
       {showAddResourceModal && (
-        <div style={{
+        <div className="modal-backdrop" style={{
           position: 'fixed',
           inset: 0,
           background: 'rgba(0,0,0,0.6)',
@@ -643,12 +643,12 @@ const MaterialsManagement: React.FC = () => {
           zIndex: 60,
           padding: '1rem'
         }}>
-          <div className="glass-panel animate-fade-in" style={{ width: '100%', maxWidth: '540px', padding: '2rem' }}>
+          <div className="glass-panel modal-card" style={{ width: '100%', maxWidth: '540px', padding: '2rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
               <h3 style={{ margin: 0, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Plus style={{ color: 'var(--primary)' }} /> Añadir Recurso Multimedia
               </h3>
-              <button onClick={() => setShowAddResourceModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+              <button onClick={() => setShowAddResourceModal(false)} className="modal-close" aria-label="Cerrar modal">
                 <X size={20} />
               </button>
             </div>
@@ -770,7 +770,7 @@ const MaterialsManagement: React.FC = () => {
 
       {/* Modal: Confirmar Borrado */}
       {deletingMaterial && (
-        <div style={{
+        <div className="modal-backdrop" style={{
           position: 'fixed',
           inset: 0,
           background: 'rgba(0,0,0,0.6)',
@@ -781,7 +781,7 @@ const MaterialsManagement: React.FC = () => {
           zIndex: 80,
           padding: '1rem'
         }}>
-          <div className="glass-panel animate-fade-in" style={{ width: '100%', maxWidth: '400px', padding: '2rem', textAlign: 'center' }}>
+          <div className="glass-panel modal-card" style={{ width: '100%', maxWidth: '400px', padding: '2rem', textAlign: 'center' }}>
             <Trash2 size={36} style={{ color: '#ef4444', margin: '0 auto 1rem' }} />
             <h3 style={{ margin: '0 0 0.5rem', color: 'var(--text)' }}>¿Eliminar recurso?</h3>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: '0 0 1.5rem' }}>

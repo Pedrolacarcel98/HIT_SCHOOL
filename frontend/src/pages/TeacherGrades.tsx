@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Award,
+  ArrowLeft,
   BookOpen,
   CheckCircle2,
   ChevronDown,
@@ -419,7 +421,11 @@ const TeacherGrades: React.FC = () => {
     e.preventDefault();
     if (!evaluatingSubmission) return;
 
-    const numGrade = gradeInput.trim() !== '' ? parseFloat(gradeInput) : null;
+    const savedExam = parseSavedExam(evaluatingSubmission.content);
+    const calculatedExamGrade = savedExam?.score !== null && savedExam?.score !== undefined && savedExam.total
+      ? (savedExam.score / savedExam.total) * 10
+      : null;
+    const numGrade = calculatedExamGrade ?? (gradeInput.trim() !== '' ? parseFloat(gradeInput) : null);
     if (numGrade !== null && (isNaN(numGrade) || numGrade < 0 || numGrade > 10)) {
       setSaveError('La calificación debe ser un número entre 0 y 10.');
       return;
@@ -501,6 +507,8 @@ const TeacherGrades: React.FC = () => {
   const totalSubmissionsCount = allSubmissionsFlat.length;
   const totalPendingCount = allSubmissionsFlat.filter(s => s.materialType !== 'FORM' && (s.grade === null || s.grade === undefined)).length;
   const totalGradedCount = allSubmissionsFlat.filter(s => s.grade !== null && s.grade !== undefined).length;
+  const gradingExamData = evaluatingSubmission ? parseSavedExam(evaluatingSubmission.content) : null;
+  const isAutocorrectedExam = Boolean(gradingExamData?.total && gradingExamData.score !== null && gradingExamData.score !== undefined);
 
   return (
     <div className="page-container animate-fade-in" style={{ maxWidth: '1200px', margin: '0 auto' }}>
@@ -653,7 +661,7 @@ const TeacherGrades: React.FC = () => {
               </p>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: selectedStudentForDossier ? 'minmax(300px, 380px) 1fr' : '1fr', gap: '1.5rem', alignItems: 'flex-start' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem', alignItems: 'flex-start' }}>
               {/* Listado de Alumnos */}
               <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
                 <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)', fontWeight: 600, fontSize: '0.88rem', color: 'var(--text-muted)' }}>
@@ -771,29 +779,31 @@ const TeacherGrades: React.FC = () => {
 
               {/* Expediente Académico Detallado del Alumno Seleccionado */}
               {selectedStudentForDossier && (
-                <div className="glass-panel animate-fade-in" style={{ padding: '1.5rem 1.75rem' }}>
+                createPortal(
+                <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: '260px', zIndex: 50, minHeight: '100vh', overflowY: 'auto', background: '#f8fafc', padding: '2rem' }}>
+                  <div className="animate-fade-in" style={{ maxWidth: '1024px', margin: '0 auto', padding: '2rem', background: '#fff', border: '1px solid rgba(226, 232, 240, 0.8)', borderRadius: '16px', boxShadow: 'var(--shadow-sm)' }}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedStudentForDossier(null)}
+                      className="btn-secondary"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', marginBottom: '1.5rem' }}
+                    >
+                      <ArrowLeft size={17} /> Volver a Calificaciones
+                    </button>
                   {/* Encabezado del Expediente */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--border)', paddingBottom: '1rem', marginBottom: '1.25rem' }}>
                     <div>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      <span style={{ display: 'inline-flex', padding: '0.25rem 0.55rem', borderRadius: '999px', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                         EXPEDIENTE ACADÉMICO DEL ALUMNO
                       </span>
-                      <h2 style={{ margin: '0.2rem 0 0', fontSize: '1.4rem', color: 'var(--text-main)' }}>
+                      <h1 style={{ margin: '0.35rem 0 0', fontSize: '1.75rem', color: 'var(--text-main)' }}>
                         {selectedStudentForDossier.fullName}
-                      </h2>
+                      </h1>
                       <p style={{ margin: '0.15rem 0 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                         {selectedStudentForDossier.email} · {selectedStudentForDossier.modality === 'ONLINE' ? '💻 Modalidad Online' : '🏫 Modalidad Presencial'}
                       </p>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => setSelectedStudentForDossier(null)}
-                      style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}
-                      aria-label="Cerrar expediente"
-                    >
-                      <X size={20} />
-                    </button>
                   </div>
 
                   {/* Sección de Evaluación Final por Competencias */}
@@ -813,7 +823,6 @@ const TeacherGrades: React.FC = () => {
                         </div>
                         <div>
                           <h3 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--text-main)' }}>Evaluación Final / Competencias</h3>
-                          <p style={{ margin: '0.1rem 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Desglose de las 4 destrezas principales (0-10)</p>
                         </div>
                       </div>
 
@@ -921,7 +930,7 @@ const TeacherGrades: React.FC = () => {
                                   {sub.assignmentTitle}
                                 </strong>
                                 <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                                  {sub.courseTitle ? `Clase: ${sub.courseTitle}` : 'Asignación individual'} · Entregado el {new Date(sub.submittedAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                  Entregado el {new Date(sub.submittedAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                                 </span>
                               </div>
 
@@ -984,11 +993,6 @@ const TeacherGrades: React.FC = () => {
                                         <strong style={{ display: 'block', fontSize: '0.9rem', color: 'var(--text-main)' }}>
                                           Examen tipo test completado
                                         </strong>
-                                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                          {examData.score !== null && examData.total !== null
-                                            ? `Aciertos: ${examData.score} de ${examData.total} preguntas (${Math.round((examData.score! / (examData.total! || 1)) * 100)}%)`
-                                            : `${Object.keys(examData.answers).length} preguntas respondidas`}
-                                        </span>
                                       </div>
                                     </div>
 
@@ -1053,14 +1057,15 @@ const TeacherGrades: React.FC = () => {
                             {(!isExam || documentUrl) && (
                               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border)' }}>
                                 {documentUrl && (
-                                  <button
-                                    type="button"
-                                    onClick={() => window.open(documentUrl, '_blank', 'noopener,noreferrer')}
+                                  <a
+                                    href={documentUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
                                     className="btn-secondary"
-                                    style={{ padding: '0.35rem 0.7rem', fontSize: '0.8rem' }}
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.35rem 0.7rem', fontSize: '0.8rem', textDecoration: 'none' }}
                                   >
                                     <ExternalLink size={14} /> Abrir Doc
-                                  </button>
+                                  </a>
                                 )}
 
                                 {!isExam && (
@@ -1081,6 +1086,8 @@ const TeacherGrades: React.FC = () => {
                     </div>
                   )}
                 </div>
+                </div>
+                , document.body)
               )}
             </div>
           )}
@@ -1246,14 +1253,15 @@ const TeacherGrades: React.FC = () => {
                                       <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
                                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.4rem' }}>
                                           {documentUrl && (
-                                            <button
-                                              type="button"
-                                              onClick={() => window.open(documentUrl, '_blank', 'noopener,noreferrer')}
+                                            <a
+                                              href={documentUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
                                               className="btn-secondary"
-                                              style={{ padding: '0.3rem 0.6rem', fontSize: '0.78rem' }}
+                                              style={{ display: 'inline-flex', alignItems: 'center', padding: '0.3rem 0.6rem', fontSize: '0.78rem', textDecoration: 'none' }}
                                             >
                                               Doc
-                                            </button>
+                                            </a>
                                           )}
 
                                           {isExam ? (
@@ -1315,8 +1323,8 @@ const TeacherGrades: React.FC = () => {
       {/* =========================================================================
           MODAL DE CALIFICACIÓN Y FEEDBACK
          ========================================================================= */}
-      {evaluatingSubmission && (
-        <div style={{
+      {evaluatingSubmission && createPortal(
+        <div className="modal-backdrop" style={{
           position: 'fixed',
           inset: 0,
           background: 'rgba(0, 0, 0, 0.65)',
@@ -1327,7 +1335,7 @@ const TeacherGrades: React.FC = () => {
           zIndex: 80,
           padding: '1rem'
         }}>
-          <div className="glass-panel animate-fade-in" style={{
+          <div className="glass-panel modal-card" style={{
             width: '100%',
             maxWidth: '560px',
             maxHeight: '90vh',
@@ -1335,18 +1343,10 @@ const TeacherGrades: React.FC = () => {
             padding: '2rem'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
-              <div>
-                <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 700, textTransform: 'uppercase' }}>
-                  EVALUACIÓN DOCENTE
-                </span>
-                <h3 style={{ margin: '0.2rem 0 0', fontSize: '1.3rem', color: 'var(--text-main)' }}>
-                  Calificar a {evaluatingSubmission.studentName}
-                </h3>
-              </div>
               <button
                 type="button"
                 onClick={() => setEvaluatingSubmission(null)}
-                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}
+                className="modal-close"
               >
                 <X size={20} />
               </button>
@@ -1369,15 +1369,13 @@ const TeacherGrades: React.FC = () => {
               {evaluatingSubmission.content && (() => {
                 const examData = parseSavedExam(evaluatingSubmission.content);
                 if (examData) {
+                  const examGrade = examData.score !== null && examData.total
+                    ? ((examData.score / examData.total) * 10).toFixed(1)
+                    : '-';
                   return (
-                    <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px dashed var(--border)' }}>
-                      <span style={{ color: 'var(--text-muted)', display: 'block', marginBottom: '0.35rem', fontSize: '0.8rem', fontWeight: 600 }}>
-                        Resultado del examen interactivo:
-                      </span>
-                      <div style={{ padding: '0.6rem 0.8rem', background: 'var(--surface)', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '0.88rem' }}>
-                        {examData.score !== null && examData.total !== null
-                          ? `🎯 ${examData.score} / ${examData.total} preguntas acertadas (${Math.round((examData.score! / (examData.total! || 1)) * 100)}%)`
-                          : `🎯 ${Object.keys(examData.answers).length} preguntas respondidas`}
+                    <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px dashed var(--border)', display: 'flex', justifyContent: 'center' }}>
+                      <div style={{ color: 'var(--primary-text)', fontWeight: 700, fontSize: '1.65rem', lineHeight: 1, textAlign: 'center' }}>
+                        {examGrade} <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>/ 10</span>
                       </div>
                     </div>
                   );
@@ -1393,21 +1391,12 @@ const TeacherGrades: React.FC = () => {
                   );
                 }
 
-                return (
-                  <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px dashed var(--border)' }}>
-                    <span style={{ color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem', fontSize: '0.78rem', fontWeight: 600 }}>
-                      Contenido entregado por el alumno:
-                    </span>
-                    <p style={{ margin: 0, color: 'var(--text-main)', background: 'var(--surface)', padding: '0.6rem', borderRadius: '6px', border: '1px solid var(--border)', whiteSpace: 'pre-wrap' }}>
-                      {evaluatingSubmission.content}
-                    </p>
-                  </div>
-                );
+                return null;
               })()}
             </div>
 
             <form onSubmit={handleSaveGrade} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              <div>
+              {!isAutocorrectedExam && <div>
                 <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-main)' }}>
                   Calificación Numérica (0 - 10)
                 </label>
@@ -1457,11 +1446,11 @@ const TeacherGrades: React.FC = () => {
                     ))}
                   </div>
                 </div>
-              </div>
+              </div>}
 
               <div>
                 <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-main)' }}>
-                  Observaciones y Feedback Pedagógico (Visible para el alumno)
+                  Observaciones y Feedback (Visible para el alumno)
                 </label>
                 <textarea
                   rows={4}
@@ -1518,12 +1507,13 @@ const TeacherGrades: React.FC = () => {
             </form>
           </div>
         </div>
+      , document.body
       )}
 
       {/* =========================================================================
           MODAL DE REVISIÓN DE EXAMEN TIPO TEST
          ========================================================================= */}
-      {reviewingExam && (
+      {reviewingExam && createPortal(
         <ExamReviewModal
           title={reviewingExam.title}
           questions={reviewingExam.questions}
@@ -1534,14 +1524,15 @@ const TeacherGrades: React.FC = () => {
           onSaveFeedback={handleSaveExamFeedback}
           onClose={() => setReviewingExam(null)}
         />
+      , document.body
       )}
 
       {/* =========================================================================
           MODAL DE EVALUACIÓN FINAL POR COMPETENCIAS
          ========================================================================= */}
-      {isEvaluationModalOpen && selectedStudentForDossier && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
-          <div className="glass-panel animate-fade-in" style={{ width: '100%', maxWidth: '520px', padding: '2rem', background: 'var(--surface)', position: 'relative' }}>
+      {isEvaluationModalOpen && selectedStudentForDossier && createPortal(
+        <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
+          <div className="glass-panel modal-card" style={{ width: '100%', maxWidth: '520px', padding: '2rem', background: 'var(--surface)', position: 'relative' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
               <div>
                 <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 700, textTransform: 'uppercase' }}>
@@ -1554,7 +1545,7 @@ const TeacherGrades: React.FC = () => {
                   {selectedStudentForDossier.fullName}
                 </p>
               </div>
-              <button type="button" onClick={() => setIsEvaluationModalOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+              <button type="button" onClick={() => setIsEvaluationModalOpen(false)} className="modal-close" aria-label="Cerrar modal">
                 <X size={20} />
               </button>
             </div>
@@ -1705,6 +1696,7 @@ const TeacherGrades: React.FC = () => {
             </form>
           </div>
         </div>
+      , document.body
       )}
     </div>
   );
