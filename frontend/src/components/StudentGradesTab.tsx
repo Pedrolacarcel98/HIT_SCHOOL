@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Award, FileText, CheckCircle2, Clock3, ExternalLink, MessageSquare, X } from 'lucide-react';
 import ExamReviewModal from './ExamReviewModal';
 import { useParent } from '../context/ParentContext';
@@ -308,7 +309,7 @@ const StudentGradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
       )}
 
       {/* Modal: Comentarios del Profesor */}
-      {viewingFeedback && (
+      {viewingFeedback && createPortal(
         <div className="modal-backdrop" style={{
           position: 'fixed',
           inset: 0,
@@ -347,7 +348,7 @@ const StudentGradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
               </button>
             </div>
           </div>
-        </div>
+        </div>, document.body
       )}
     </div>
   );

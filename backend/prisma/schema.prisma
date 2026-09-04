@@ -66,6 +66,7 @@ model User {
   receivedChatMessages ChatMessage[] @relation("ReceivedChatMessages")
   finalEvaluation FinalEvaluation? @relation("StudentFinalEvaluation")
   structuredTasks StructuredTask[] @relation("AssignedStructuredTasks")
+  structuredTaskAssignments StructuredTaskStudent[]
   structuredTaskStepProgress StructuredTaskStepProgress[]
 }
 
@@ -201,16 +202,28 @@ model StructuredTask {
   title                 String
   courseId              String
   assignmentType        StructuredTaskAssignmentType @default(CLASS)
-  isSequential          Boolean                      @default(false)
+  isSequential           Boolean                      @default(false)
   assignedStudentId     String?
   createdAt             DateTime                     @default(now())
   updatedAt             DateTime                     @updatedAt
   course                Course                       @relation(fields: [courseId], references: [id], onDelete: Cascade)
   assignedStudent       User?                        @relation("AssignedStructuredTasks", fields: [assignedStudentId], references: [id], onDelete: SetNull)
+  assignedStudents      StructuredTaskStudent[]
   steps                 StructuredTaskStep[]
 
   @@index([courseId])
   @@index([assignedStudentId])
+}
+
+model StructuredTaskStudent {
+  id        String        @id @default(uuid())
+  taskId    String
+  studentId String
+  task      StructuredTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  student   User          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, studentId])
+  @@index([studentId])
 }
 
 model StructuredTaskStep {

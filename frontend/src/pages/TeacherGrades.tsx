@@ -108,8 +108,8 @@ const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 interface ParsedExamData {
   answers: Record<string, string | number>;
-  score?: number | null;
-  total?: number | null;
+  score: number | null;
+  total: number | null;
 }
 
 const parseSavedExam = (content?: string | null): ParsedExamData | null => {
@@ -1367,10 +1367,9 @@ const TeacherGrades: React.FC = () => {
               </div>
 
               {evaluatingSubmission.content && (() => {
-                const examData = parseSavedExam(evaluatingSubmission.content);
-                if (examData) {
-                  const examGrade = examData.score !== null && examData.total
-                    ? ((examData.score / examData.total) * 10).toFixed(1)
+                if (parseSavedExam(evaluatingSubmission.content)) {
+                  const examGrade = evaluatingSubmission.currentGrade !== null && evaluatingSubmission.currentGrade !== undefined
+                    ? evaluatingSubmission.currentGrade.toFixed(1)
                     : '-';
                   return (
                     <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px dashed var(--border)', display: 'flex', justifyContent: 'center' }}>

@@ -268,6 +268,13 @@ router.get('/:id/assignments', authenticateToken, verifyCourseAccess, async (req
     const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const assignments = await prisma.assignment.findMany({
       where: { courseId },
+      include: {
+        material: { select: { id: true, title: true, type: true, url: true, formData: true, description: true, level: true } },
+        submissions: {
+          include: { student: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } } },
+          orderBy: { submittedAt: 'desc' }
+        }
+      },
       orderBy: { dueDate: 'asc' }
     });
     res.json(assignments);

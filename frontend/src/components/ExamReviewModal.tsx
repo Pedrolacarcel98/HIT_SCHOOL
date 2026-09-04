@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CheckCircle2, X, XCircle } from 'lucide-react';
 
 export interface ReviewQuestion {
@@ -78,7 +79,7 @@ const ExamReviewModal: React.FC<ExamReviewModalProps> = ({ title, questions = []
     }
   };
 
-  return (
+  return createPortal(
     <div className="modal-backdrop" style={backdropStyle} onClick={onClose}>
       <div className="glass-panel modal-card" onClick={(event) => event.stopPropagation()} style={modalStyle}>
         <header style={headerStyle}>
@@ -189,7 +190,8 @@ const ExamReviewModal: React.FC<ExamReviewModalProps> = ({ title, questions = []
           </button>
         </footer>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
@@ -200,6 +202,5 @@ const scoreStyle: React.CSSProperties = { margin: '0.55rem auto 0.2rem', padding
 const listStyle: React.CSSProperties = { flex: 1, minHeight: 0, overflowY: 'auto', padding: '0.7rem 0.1rem 0.25rem 0' };
 const questionStyle: React.CSSProperties = { padding: '0.85rem 1rem', marginBottom: '0.7rem', border: '1px solid #e5e7eb', borderLeft: '4px solid #9ca3af', borderRadius: '9px', background: '#ffffff' };
 const footerStyle: React.CSSProperties = { display: 'flex', justifyContent: 'flex-end', padding: '0.75rem 0 0.85rem', borderTop: '1px solid #e5e7eb', background: '#ffffff' };
-const closeStyle: React.CSSProperties = { display: 'flex', border: 'none', background: 'transparent', color: '#6b7280', cursor: 'pointer', padding: '0.1rem' };
 
 export default ExamReviewModal;

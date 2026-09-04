@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CalendarDays, CheckCircle2, Clock3, FileText, Search, X, ExternalLink, Send, Link, PenTool, Check } from 'lucide-react';
 import DocumentViewer from './DocumentViewer';
 import FormPlayer from './FormPlayer';
@@ -480,7 +481,7 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
       )}
 
       {/* Modal Principal de Tarea / Entrega */}
-      {viewingMaterial && (
+      {viewingMaterial && createPortal(
         <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'stretch', justifyContent: 'center', zIndex: 100, padding: '0.75rem 1rem 0', overflow: 'hidden' }}>
           <div className="modal-card modal-card--player" style={{ width: '100%', maxWidth: viewingMaterial.type === 'FORM' ? '980px' : '920px', height: 'calc(100vh - 0.75rem)', background: 'var(--background)', borderRadius: '12px 12px 0 0', overflow: 'hidden', display: 'flex', flexDirection: 'column', margin: '0 auto', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
             
@@ -837,7 +838,7 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
               )}
             </div>
           </div>
-        </div>
+        </div>, document.body
       )}
 
       {/* Modal de Revisión de Examen */}

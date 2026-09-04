@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, CheckSquare, GraduationCap, Laptop, ListChecks, MoreVertical, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { BookOpen, CheckSquare, ClipboardCheck, FileText, GraduationCap, Headphones, Laptop, ListChecks, MoreVertical, Pencil, Plus, Search, Trash2, Video, X } from 'lucide-react';
 import FormPlayer from '../components/FormPlayer';
 
 interface Course {
@@ -15,6 +16,8 @@ interface StructuredTask {
   assignmentType: 'CLASS' | 'INDIVIDUAL';
   assignedStudentId: string | null;
   assignedStudentName: string | null;
+  assignedStudentIds?: string[];
+  assignedStudentNames?: string[];
   isSequential: boolean;
   steps: StructuredTaskStep[];
 }
@@ -30,6 +33,7 @@ interface Material {
   id: string;
   title: string;
   type: 'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'FORM';
+  level?: string;
   url?: string | null;
   description?: string | null;
   formData?: { questions?: any[] } | null;
@@ -60,8 +64,11 @@ const TeacherDashboard: React.FC = () => {
   const [structuredTaskCourseId, setStructuredTaskCourseId] = useState('');
   const [structuredTaskAssignmentType, setStructuredTaskAssignmentType] = useState<'CLASS' | 'INDIVIDUAL'>('CLASS');
   const [structuredTaskIsSequential, setStructuredTaskIsSequential] = useState(false);
-  const [assignedStudentId, setAssignedStudentId] = useState('');
+  const [assignedStudentIds, setAssignedStudentIds] = useState<string[]>([]);
   const [previewingForm, setPreviewingForm] = useState<Material | null>(null);
+  const [materialPickerStepIndex, setMaterialPickerStepIndex] = useState<number | null>(null);
+  const [materialSearch, setMaterialSearch] = useState('');
+  const [materialCategoryFilter, setMaterialCategoryFilter] = useState<'ALL' | Material['type']>('ALL');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -189,7 +196,7 @@ const TeacherDashboard: React.FC = () => {
     setStructuredTaskCourseId(courseId);
     setStructuredTaskAssignmentType(task?.assignmentType || 'CLASS');
     setStructuredTaskIsSequential(task?.isSequential || false);
-    setAssignedStudentId(task?.assignedStudentId || '');
+    setAssignedStudentIds(task?.assignedStudentIds?.length ? task.assignedStudentIds : (task?.assignedStudentId ? [task.assignedStudentId] : []));
     fetchEnrolledStudents(courseId);
     setIsStructuredTaskModalOpen(true);
   };
@@ -212,7 +219,7 @@ const TeacherDashboard: React.FC = () => {
     const steps = structuredTaskSteps
       .map((step, index) => ({ ...step, title: step.title.trim(), order: index + 1 }))
       .filter((step) => step.title);
-    if (!title || !structuredTaskCourseId || steps.length === 0 || (structuredTaskAssignmentType === 'INDIVIDUAL' && !assignedStudentId)) return;
+    if (!title || !structuredTaskCourseId || steps.length === 0 || (structuredTaskAssignmentType === 'INDIVIDUAL' && assignedStudentIds.length === 0)) return;
 
     try {
       const token = localStorage.getItem('token');
@@ -220,7 +227,7 @@ const TeacherDashboard: React.FC = () => {
       const res = await fetch(`${apiUrl}/api/structured-tasks${editingStructuredTask ? `/${editingStructuredTask.id}` : ''}`, {
         method: editingStructuredTask ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ title, courseId: structuredTaskCourseId, assignmentType: structuredTaskAssignmentType, isSequential: structuredTaskIsSequential, assignedStudentId: structuredTaskAssignmentType === 'INDIVIDUAL' ? assignedStudentId : null, steps })
+        body: JSON.stringify({ title, courseId: structuredTaskCourseId, assignmentType: structuredTaskAssignmentType, isSequential: structuredTaskIsSequential, assignedStudentIds: structuredTaskAssignmentType === 'INDIVIDUAL' ? assignedStudentIds : [], steps })
       });
       if (!res.ok) throw new Error('No se pudo guardar la tarea estructurada.');
       await fetchStructuredTasks();
@@ -231,6 +238,33 @@ const TeacherDashboard: React.FC = () => {
   };
 
   const getMaterial = (materialId: string | null) => materials.find((material) => material.id === materialId);
+
+  const getMaterialIcon = (type: Material['type']) => {
+    if (type === 'FORM') return <ClipboardCheck size={16} />;
+    if (type === 'VIDEO') return <Video size={16} />;
+    if (type === 'AUDIO') return <Headphones size={16} />;
+    return <FileText size={16} />;
+  };
+
+  const getMaterialTypeLabel = (type: Material['type']) => {
+    if (type === 'FORM') return 'EXAMEN INTERACTIVO';
+    if (type === 'VIDEO') return 'VÍDEO';
+    if (type === 'AUDIO') return 'AUDIO';
+    return 'DOCUMENTO';
+  };
+
+  const filteredPickerMaterials = materials.filter((material) => {
+    const query = materialSearch.trim().toLowerCase();
+    const matchesSearch = !query || `${material.title} ${material.description || ''}`.toLowerCase().includes(query);
+    const matchesCategory = materialCategoryFilter === 'ALL' || material.type === materialCategoryFilter;
+    return matchesSearch && matchesCategory;
+  });
+
+  const openMaterialPicker = (stepIndex: number) => {
+    setMaterialPickerStepIndex(stepIndex);
+    setMaterialSearch('');
+    setMaterialCategoryFilter('ALL');
+  };
 
   const handleOpenMaterial = (material: Material) => {
     if (material.type === 'FORM') {
@@ -405,7 +439,7 @@ const TeacherDashboard: React.FC = () => {
                         <span style={{ display: 'inline-flex', padding: '0.18rem 0.5rem', borderRadius: '12px', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.72rem', fontWeight: 700 }}>Pasos Numerados</span>
                         {task.isSequential && <span style={{ display: 'inline-flex', padding: '0.18rem 0.5rem', borderRadius: '12px', background: '#fef3c7', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}>Paso a paso</span>}
                         <span style={{ display: 'inline-flex', padding: '0.18rem 0.5rem', borderRadius: '12px', background: task.assignmentType === 'INDIVIDUAL' ? '#eef2ff' : '#ecfdf5', color: task.assignmentType === 'INDIVIDUAL' ? '#3730a3' : '#047857', fontSize: '0.72rem', fontWeight: 700 }}>
-                          {task.assignmentType === 'INDIVIDUAL' ? `Asignado a: ${task.assignedStudentName || 'Alumno'}` : 'Toda la clase'}
+                          {task.assignmentType === 'INDIVIDUAL' ? `Asignado a: ${(task.assignedStudentNames?.length ? task.assignedStudentNames.join(', ') : task.assignedStudentName) || 'Alumno'}` : 'Toda la clase'}
                         </span>
                         <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{task.steps.length} {task.steps.length === 1 ? 'paso' : 'pasos'}</span>
                       </div>
@@ -470,14 +504,14 @@ const TeacherDashboard: React.FC = () => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '0.75rem', marginTop: '1rem' }}>
             <div>
               <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Clase destinataria</label>
-              <select required value={structuredTaskCourseId} onChange={(event) => { setStructuredTaskCourseId(event.target.value); setAssignedStudentId(''); fetchEnrolledStudents(event.target.value); }} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}>
+              <select required value={structuredTaskCourseId} onChange={(event) => { setStructuredTaskCourseId(event.target.value); setAssignedStudentIds([]); fetchEnrolledStudents(event.target.value); }} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}>
                 <option value="">Selecciona una clase</option>
                 {courses.map((course) => <option key={course.id} value={course.id}>{course.title}</option>)}
               </select>
             </div>
             <div>
               <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Asignar a</label>
-              <select value={structuredTaskAssignmentType} onChange={(event) => { setStructuredTaskAssignmentType(event.target.value as 'CLASS' | 'INDIVIDUAL'); setAssignedStudentId(''); }} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}>
+              <select value={structuredTaskAssignmentType} onChange={(event) => { setStructuredTaskAssignmentType(event.target.value as 'CLASS' | 'INDIVIDUAL'); setAssignedStudentIds([]); }} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}>
                 <option value="CLASS">Toda la clase</option>
                 <option value="INDIVIDUAL">Alumno individual</option>
               </select>
@@ -492,10 +526,15 @@ const TeacherDashboard: React.FC = () => {
           {structuredTaskAssignmentType === 'INDIVIDUAL' && (
             <div style={{ marginTop: '0.75rem' }}>
               <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Alumno</label>
-              <select required value={assignedStudentId} onChange={(event) => setAssignedStudentId(event.target.value)} disabled={!structuredTaskCourseId} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}>
-                <option value="">Selecciona un alumno matriculado</option>
-                {enrolledStudents.map((student) => <option key={student.id} value={student.id}>{student.profile ? `${student.profile.firstName} ${student.profile.lastName}`.trim() : student.email}</option>)}
-              </select>
+              <div style={{ display: 'grid', gap: '0.45rem', maxHeight: '150px', overflowY: 'auto', padding: '0.5rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)' }}>
+                {enrolledStudents.map((student) => {
+                  const studentName = student.profile ? `${student.profile.firstName} ${student.profile.lastName}`.trim() : student.email;
+                  const selected = assignedStudentIds.includes(student.id);
+                  return <label key={student.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.35rem', cursor: 'pointer' }}><input type="checkbox" checked={selected} onChange={() => setAssignedStudentIds((ids) => selected ? ids.filter((id) => id !== student.id) : [...ids, student.id])} /><span>{studentName}</span></label>;
+                })}
+                {enrolledStudents.length === 0 && <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>No hay alumnos matriculados.</span>}
+              </div>
+              <small style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-muted)' }}>{assignedStudentIds.length} alumno(s) seleccionado(s)</small>
             </div>
           )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', marginTop: '1rem' }}>
@@ -504,10 +543,21 @@ const TeacherDashboard: React.FC = () => {
               <div key={step.id} style={{ display: 'grid', gridTemplateColumns: '32px minmax(0, 1fr) minmax(150px, 0.8fr) 32px', alignItems: 'center', gap: '0.5rem', padding: '0.6rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)' }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '50%', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.8rem', fontWeight: 700 }}>{index + 1}</span>
                 <input required value={step.title} onChange={(event) => updateStructuredTaskStep(index, { title: event.target.value })} placeholder="Título o instrucción del paso" style={{ ...inputStyle, padding: '0.55rem' }} />
-                <select value={step.materialId || ''} onChange={(event) => updateStructuredTaskStep(index, { materialId: event.target.value || null })} style={{ minWidth: 0, padding: '0.55rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}>
-                  <option value="">Vincular Material de Clase</option>
-                  {materials.map((material) => <option key={material.id} value={material.id}>[{material.type}] {material.title}</option>)}
-                </select>
+                {getMaterial(step.materialId) ? (
+                  <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.55rem', border: '1px solid var(--primary-border)', borderRadius: '8px', background: 'var(--primary-light)', color: 'var(--primary-text)' }}>
+                    <span style={{ display: 'inline-flex', flexShrink: 0 }}>{getMaterialIcon(getMaterial(step.materialId)!.type)}</span>
+                    <span style={{ minWidth: 0, overflow: 'hidden' }}>
+                      <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.78rem', fontWeight: 700 }}>{getMaterial(step.materialId)!.title}</span>
+                      <span style={{ display: 'block', fontSize: '0.68rem', fontWeight: 600 }}>{getMaterialTypeLabel(getMaterial(step.materialId)!.type)}</span>
+                    </span>
+                    <button type="button" onClick={() => openMaterialPicker(index)} title="Cambiar material" aria-label="Cambiar material" style={{ marginLeft: 'auto', border: 'none', background: 'transparent', color: 'var(--primary-text)', cursor: 'pointer', padding: '0.2rem' }}>✏️</button>
+                    <button type="button" onClick={() => updateStructuredTaskStep(index, { materialId: null })} title="Eliminar material" aria-label="Eliminar material" style={{ border: 'none', background: 'transparent', color: '#b91c1c', cursor: 'pointer', padding: '0.2rem' }}>🗑️</button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => openMaterialPicker(index)} style={{ minWidth: 0, padding: '0.7rem 0.55rem', border: '2px dashed #cbd5e1', borderRadius: '8px', background: 'transparent', color: '#475569', cursor: 'pointer', fontSize: '0.76rem', fontWeight: 600 }}>
+                    📎 Seleccionar Material de Clase
+                  </button>
+                )}
                 <button type="button" onClick={() => removeStructuredTaskStep(index)} disabled={structuredTaskSteps.length === 1} title="Eliminar paso" aria-label={`Eliminar paso ${index + 1}`} style={{ ...iconButtonStyle, color: '#b91c1c', opacity: structuredTaskSteps.length === 1 ? 0.4 : 1 }}><Trash2 size={17} /></button>
               </div>
             ))}
@@ -519,6 +569,41 @@ const TeacherDashboard: React.FC = () => {
           </div>
         </form>
       </div>}
+      {materialPickerStepIndex !== null && createPortal(
+        <div className="modal-backdrop" style={{ zIndex: 110 }} onClick={() => setMaterialPickerStepIndex(null)}>
+          <div className="glass-panel modal-card modal-card--wide" onClick={(event) => event.stopPropagation()} style={{ maxWidth: '760px', maxHeight: '88vh', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <button type="button" onClick={() => setMaterialPickerStepIndex(null)} aria-label="Cerrar biblioteca" className="modal-close"><X size={19} /></button>
+            <div style={{ paddingRight: '2rem' }}>
+              <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Elige el material que acompañará este paso.</p>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+              <div style={{ position: 'relative' }}>
+                <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input value={materialSearch} onChange={(event) => setMaterialSearch(event.target.value)} placeholder="Buscar por título o descripción..." aria-label="Buscar materiales" style={{ ...inputStyle, paddingLeft: '2.25rem' }} />
+              </div>
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                {([['ALL', 'Todos'], ['DOCUMENT', 'Documentos'], ['VIDEO', 'Vídeos'], ['AUDIO', 'Audios'], ['FORM', 'Exámenes']] as const).map(([value, label]) => (
+                  <button key={value} type="button" onClick={() => setMaterialCategoryFilter(value)} className={materialCategoryFilter === value ? 'btn-primary' : 'btn-secondary'} style={{ padding: '0.4rem 0.7rem', fontSize: '0.78rem' }}>{label}</button>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', maxHeight: '60vh', overflowY: 'auto', padding: '0.15rem' }}>
+              {filteredPickerMaterials.map((material) => (
+                <article key={material.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', padding: '1rem', border: '1px solid var(--border)', borderRadius: '10px', background: 'var(--surface)', minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: 'var(--primary-text)', fontSize: '0.72rem', fontWeight: 700 }}>
+                    {getMaterialIcon(material.type)} <span>{getMaterialTypeLabel(material.type)}</span>
+                    <span style={{ marginLeft: 'auto', padding: '0.15rem 0.4rem', borderRadius: '999px', background: 'var(--primary-light)', border: '1px solid var(--primary-border)' }}>{material.level || 'GENERAL'}</span>
+                  </div>
+                  <strong style={{ color: '#0f172a', fontWeight: 700 }}>{material.title}</strong>
+                  <p style={{ margin: 0, minHeight: '2.4rem', color: '#64748b', fontSize: '0.75rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{material.description || 'Sin descripción disponible.'}</p>
+                  <button type="button" onClick={() => { updateStructuredTaskStep(materialPickerStepIndex, { materialId: material.id }); setMaterialPickerStepIndex(null); }} className="btn-primary" style={{ width: '100%', padding: '0.55rem', fontSize: '0.82rem', marginTop: 'auto' }}>✓ Seleccionar</button>
+                </article>
+              ))}
+              {filteredPickerMaterials.length === 0 && <p style={{ gridColumn: '1 / -1', padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>No se encontraron materiales.</p>}
+            </div>
+          </div>
+        </div>, document.body
+      )}
       {(editingCourse || deletingCourse) && <div style={modalBackdropStyle} onClick={() => { setEditingCourse(null); setDeletingCourse(null); }}>
         <div className="glass-panel animate-fade-in" onClick={(event) => event.stopPropagation()} style={{ width: 'min(100%, 440px)', padding: '1.5rem' }}>
           <button onClick={() => { setEditingCourse(null); setDeletingCourse(null); }} aria-label="Cerrar" style={{ ...iconButtonStyle, float: 'right' }}><X size={19} /></button>

@@ -330,8 +330,26 @@ router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, r
 router.delete('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
   try {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const deleted = await prisma.material.deleteMany({ where: { id, teacherId: req.user!.id } });
-    if (deleted.count === 0) return res.status(404).json({ error: 'Material no encontrado' });
+    const material = await prisma.material.findFirst({
+      where: { id, teacherId: req.user!.id },
+      select: { id: true }
+    });
+    if (!material) return res.status(404).json({ error: 'Material no encontrado' });
+
+    await prisma.$transaction(async (transaction) => {
+      const linkedAssignments = await transaction.assignment.findMany({
+        where: { materialId: id },
+        select: { id: true }
+      });
+      const assignmentIds = linkedAssignments.map((assignment) => assignment.id);
+
+      if (assignmentIds.length > 0) {
+        await transaction.submission.deleteMany({ where: { assignmentId: { in: assignmentIds } } });
+        await transaction.assignment.deleteMany({ where: { id: { in: assignmentIds } } });
+      }
+
+      await transaction.material.delete({ where: { id } });
+    });
 
     res.json({ message: 'Material eliminado con éxito' });
   } catch (error) {

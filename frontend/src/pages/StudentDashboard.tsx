@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, CheckCircle2, Clock3, FileText, ListChecks, X } from 'lucide-react';
+import { BookOpen, CalendarDays, CheckCircle2, Clock3, FileText, ListChecks, X } from 'lucide-react';
 import FormPlayer from '../components/FormPlayer';
 import ExamReviewModal from '../components/ExamReviewModal';
 import { useParent } from '../context/ParentContext';
@@ -49,14 +50,14 @@ interface IndividualContent {
   description?: string;
   category?: string;
   dueDate?: string;
-  material?: { id?: string; title: string; type: string; description?: string; url?: string; formData?: { questions?: unknown[] } } | null;
+  material?: { id?: string; title: string; type: string; level?: string; description?: string; url?: string; formData?: { questions?: unknown[] } } | null;
   submissions?: { grade?: number | null; content?: string | null }[];
 }
 
 interface AssignedMaterial {
   id: string;
   deadline?: string | null;
-  material: { id: string; title: string; type: string; description?: string | null; url?: string | null; formData?: { questions?: unknown[] } | null };
+  material: { id: string; title: string; type: string; level?: string; description?: string | null; url?: string | null; formData?: { questions?: unknown[] } | null };
 }
 
 interface StructuredTaskStep {
@@ -327,28 +328,59 @@ const StudentDashboard: React.FC = () => {
       {individualContent.length > 0 && <section style={{ marginTop: '2rem' }}>
         <h2 style={{ marginBottom: '1rem', fontSize: '1.35rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}><FileText style={{ color: 'var(--primary)' }} /> Contenido asignado individualmente</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '1.25rem' }}>
-          {individualContent.map(content => <article key={content.id} className="glass-panel" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column' }}>
-            <p style={{ margin: 0, color: 'var(--primary)', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase' }}>{content.category || 'Material'}</p>
-            <h3 style={{ margin: '0.45rem 0', fontSize: '1.1rem' }}>{content.title || content.material?.title}</h3>
-            {content.description && <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem' }}>{content.description}</p>}
-            {content.dueDate && <small style={{ display: 'block', marginTop: '0.75rem', color: 'var(--text-muted)' }}>Entrega: {new Date(content.dueDate).toLocaleDateString('es-ES')}</small>}
-            <button className="btn-primary" onClick={() => openAssignedMaterial(content)} style={{ marginTop: '1rem', alignSelf: 'flex-start', padding: '0.55rem 0.8rem', fontSize: '0.84rem' }}>{content.material?.type === 'FORM' ? (content.submissions?.length ? 'Ver Examen Corregido' : 'Abrir y Realizar Examen') : 'Ver / Abrir'}</button>
-          </article>)}
+          {individualContent.map(content => {
+            const isExam = content.material?.type === 'FORM';
+            const completed = Boolean(content.submissions?.length);
+            return <article key={content.id} className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: '310px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.15rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#2b6cb0', fontSize: '0.76rem', fontWeight: 700, textTransform: 'uppercase' }}>
+                  <span style={{ padding: '0.45rem', borderRadius: '8px', background: '#eef6fc', display: 'flex' }}><FileText size={18} /></span>
+                  {isExam ? 'Examen Interactivo' : content.material?.type === 'VIDEO' ? 'Vídeo' : 'Tarea / Redacción'}
+                </div>
+                <span style={{ padding: '0.2rem 0.55rem', borderRadius: '12px', background: 'var(--primary-light)', color: 'var(--primary-text)', border: '1px solid var(--primary-border)', fontSize: '0.72rem', fontWeight: 700 }}>{content.material?.level || 'GENERAL'}</span>
+              </div>
+              <h3 style={{ fontSize: '1.1rem', lineHeight: 1.35, margin: '0 0 0.55rem' }}>{content.title || content.material?.title}</h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.86rem', lineHeight: 1.45, marginBottom: '1.25rem', flex: 1 }}>{content.description || content.material?.description || 'Sin descripción disponible.'}</p>
+              <div style={{ display: 'grid', gap: '0.45rem', borderTop: '1px solid var(--border)', paddingTop: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                {content.dueDate && <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><CalendarDays size={14} /> Entrega: {new Date(content.dueDate).toLocaleDateString('es-ES')}</span>}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginTop: '1.25rem' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: completed ? '#24583e' : '#8d5b12', background: completed ? 'var(--primary-light)' : '#fef7e8', padding: '0.3rem 0.65rem', borderRadius: '14px', border: completed ? '1px solid var(--primary-border)' : '1px solid #fae0b0', fontSize: '0.82rem', fontWeight: 700 }}>
+                  {completed ? <><CheckCircle2 size={16} /> Entregado</> : <><Clock3 size={16} /> Pendiente</>}
+                </span>
+                <button className="btn-primary" onClick={() => openAssignedMaterial(content)} style={{ padding: '0.55rem 0.9rem', fontSize: '0.84rem' }}>{isExam ? (completed ? 'Ver Examen' : 'Realizar Examen') : 'Ver / Abrir'}</button>
+              </div>
+            </article>;
+          })}
         </div>
       </section>}
       {assignedMaterials.length > 0 && <section style={{ marginTop: '2rem' }}>
         <h2 style={{ marginBottom: '1rem', fontSize: '1.35rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}><FileText style={{ color: 'var(--primary)' }} /> Material asignado directamente</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '1.25rem' }}>
-          {assignedMaterials.filter(assignment => !assignedMaterialIds.has(assignment.material.id)).map(assignment => <article key={assignment.id} className="glass-panel" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column' }}>
-            <p style={{ margin: 0, color: 'var(--primary)', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase' }}>{assignment.material.type}</p>
-            <h3 style={{ margin: '0.45rem 0', fontSize: '1.1rem' }}>{assignment.material.title}</h3>
-            {assignment.material.description && <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem' }}>{assignment.material.description}</p>}
-            {assignment.deadline && <small style={{ display: 'block', marginTop: '0.75rem', color: 'var(--text-muted)' }}>Entrega: {new Date(assignment.deadline).toLocaleDateString('es-ES')}</small>}
-            <button className="btn-primary" onClick={() => openMaterialAssignment(assignment)} disabled={assignment.material.type !== 'FORM' && !assignment.material.url} style={{ marginTop: '1rem', alignSelf: 'flex-start', padding: '0.55rem 0.8rem', fontSize: '0.84rem', opacity: assignment.material.type === 'FORM' || assignment.material.url ? 1 : 0.6 }}>{assignment.material.type === 'FORM' ? 'Abrir y Realizar Examen' : 'Ver / Abrir'}</button>
-          </article>)}
+          {assignedMaterials.filter(assignment => !assignedMaterialIds.has(assignment.material.id)).map(assignment => {
+            const isExam = assignment.material.type === 'FORM';
+            return <article key={assignment.id} className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: '310px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.15rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#2b6cb0', fontSize: '0.76rem', fontWeight: 700, textTransform: 'uppercase' }}>
+                  <span style={{ padding: '0.45rem', borderRadius: '8px', background: '#eef6fc', display: 'flex' }}><FileText size={18} /></span>
+                  {isExam ? 'Examen Interactivo' : assignment.material.type === 'VIDEO' ? 'Vídeo' : 'Documento'}
+                </div>
+                <span style={{ padding: '0.2rem 0.55rem', borderRadius: '12px', background: 'var(--primary-light)', color: 'var(--primary-text)', border: '1px solid var(--primary-border)', fontSize: '0.72rem', fontWeight: 700 }}>{assignment.material.level || 'GENERAL'}</span>
+              </div>
+              <h3 style={{ fontSize: '1.1rem', lineHeight: 1.35, margin: '0 0 0.55rem' }}>{assignment.material.title}</h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.86rem', lineHeight: 1.45, marginBottom: '1.25rem', flex: 1 }}>{assignment.material.description || 'Sin descripción disponible.'}</p>
+              <div style={{ display: 'grid', gap: '0.45rem', borderTop: '1px solid var(--border)', paddingTop: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                {assignment.deadline && <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><CalendarDays size={14} /> Entrega: {new Date(assignment.deadline).toLocaleDateString('es-ES')}</span>}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginTop: '1.25rem' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#8d5b12', background: '#fef7e8', padding: '0.3rem 0.65rem', borderRadius: '14px', border: '1px solid #fae0b0', fontSize: '0.82rem', fontWeight: 700 }}><Clock3 size={16} /> Pendiente</span>
+                <button className="btn-primary" onClick={() => openMaterialAssignment(assignment)} disabled={!isExam && !assignment.material.url} style={{ padding: '0.55rem 0.9rem', fontSize: '0.84rem', opacity: isExam || assignment.material.url ? 1 : 0.6 }}>{isExam ? 'Realizar Examen' : 'Ver / Abrir'}</button>
+              </div>
+            </article>;
+          })}
         </div>
       </section>}
-      {viewingContent?.material?.type === 'FORM' && viewingContent.material.formData && <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: '0.75rem 1rem 0', background: 'rgba(255,255,255,0.2)' }}>
+      {viewingContent?.material?.type === 'FORM' && viewingContent.material.formData && createPortal(<div className="modal-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: '0.75rem 1rem 0', background: 'rgba(255,255,255,0.2)' }}>
         <div className="modal-card modal-card--player" style={{ width: '100%', maxWidth: '980px', height: 'calc(100vh - 0.75rem)', overflowY: 'auto', background: 'var(--background)', borderRadius: '12px 12px 0 0', padding: '1rem' }}>
           <button onClick={() => setViewingContent(null)} aria-label="Cerrar examen" className="modal-close"><X size={22} /></button>
           {userRole === 'PARENT' ? (
@@ -359,8 +391,8 @@ const StudentDashboard: React.FC = () => {
             <FormPlayer title={viewingContent.title} description={viewingContent.description} questions={viewingContent.material.formData.questions as never[] || []} onFinish={handleExamFinish} />
           )}
         </div>
-      </div>}
-      {viewingMaterialAssignment?.material.type === 'FORM' && viewingMaterialAssignment.material.formData && <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: '0.75rem 1rem 0', background: 'rgba(255,255,255,0.2)' }}>
+      </div>, document.body)}
+      {viewingMaterialAssignment?.material.type === 'FORM' && viewingMaterialAssignment.material.formData && createPortal(<div className="modal-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: '0.75rem 1rem 0', background: 'rgba(255,255,255,0.2)' }}>
         <div className="modal-card modal-card--player" style={{ width: '100%', maxWidth: '980px', height: 'calc(100vh - 0.75rem)', overflowY: 'auto', background: 'var(--background)', borderRadius: '12px 12px 0 0', padding: '1rem' }}>
           <button onClick={() => setViewingMaterialAssignment(null)} aria-label="Cerrar examen" className="modal-close"><X size={22} /></button>
           {userRole === 'PARENT' ? (
@@ -371,7 +403,7 @@ const StudentDashboard: React.FC = () => {
             <FormPlayer title={viewingMaterialAssignment.material.title} description={viewingMaterialAssignment.material.description || undefined} questions={(viewingMaterialAssignment.material.formData.questions || []) as any[]} onFinish={handleExamFinish} />
           )}
         </div>
-      </div>}
+      </div>, document.body)}
       {reviewingContent?.material?.type === 'FORM' && reviewingContent.material.formData && (
         <ExamReviewModal
           title={reviewingContent.title}
@@ -382,7 +414,7 @@ const StudentDashboard: React.FC = () => {
           onClose={() => setReviewingContent(null)}
         />
       )}
-      {viewingStructuredForm && <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: '0.75rem 1rem 0', background: 'rgba(255,255,255,0.2)' }}>
+      {viewingStructuredForm && createPortal(<div className="modal-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: '0.75rem 1rem 0', background: 'rgba(255,255,255,0.2)' }}>
         <div className="modal-card modal-card--player" style={{ width: '100%', maxWidth: '980px', height: 'calc(100vh - 0.75rem)', overflowY: 'auto', background: 'var(--background)', borderRadius: '12px 12px 0 0', padding: '1rem' }}>
           <button onClick={() => setViewingStructuredForm(null)} aria-label="Cerrar examen" className="modal-close"><X size={22} /></button>
           {userRole === 'PARENT' ? (
@@ -410,7 +442,7 @@ const StudentDashboard: React.FC = () => {
             />
           )}
         </div>
-      </div>}
+      </div>, document.body)}
       {reviewingStructuredForm && (
         <ExamReviewModal
           title={reviewingStructuredForm.title}

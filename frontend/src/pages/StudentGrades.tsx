@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Award, CheckCircle2, Clock3, ExternalLink, FileText, MessageSquare, X } from 'lucide-react';
 import ExamReviewModal from '../components/ExamReviewModal';
 import { useParent } from '../context/ParentContext';
@@ -236,7 +237,18 @@ const StudentGrades: React.FC = () => {
           onClose={() => setReviewing(null)}
         />
       )}
-      {document && <div className="modal-backdrop" style={backdropStyle} onClick={() => setDocument(null)}><div className="glass-panel modal-card" onClick={event => event.stopPropagation()} style={{ width: 'min(100%, 520px)', padding: '1.5rem' }}><button onClick={() => setDocument(null)} aria-label="Cerrar" className="modal-close"><X size={20} /></button><h2 style={{ marginTop: 0 }}>Comentarios del profesor</h2><p style={{ color: 'var(--text-main)', background: 'var(--surface-alt)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border)', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{document.submissions?.[0]?.feedback || 'El profesor aún no ha añadido comentarios.'}</p></div></div>}
+      {document && createPortal(
+        <div className="modal-backdrop" onClick={() => setDocument(null)}>
+          <div className="glass-panel modal-card" onClick={event => event.stopPropagation()}>
+            <button onClick={() => setDocument(null)} aria-label="Cerrar" className="modal-close"><X size={20} /></button>
+            <h2 style={{ marginTop: 0 }}>Comentarios del profesor</h2>
+            <p style={{ color: 'var(--text-main)', background: 'var(--surface-alt)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border)', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>
+              {document.submissions?.[0]?.feedback || 'El profesor aún no ha añadido comentarios.'}
+            </p>
+          </div>
+        </div>,
+        globalThis.document.body
+      )}
     </div>
   );
 };
@@ -247,6 +259,5 @@ const iconStyle: React.CSSProperties = { display: 'grid', placeItems: 'center', 
 const gradeStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.45rem 0.75rem', borderRadius: '16px', background: 'var(--primary-light)', border: '1px solid var(--primary-border)', color: 'var(--primary-text)', fontWeight: 700 };
 const pendingStyle: React.CSSProperties = { ...gradeStyle, color: '#8d5b12', background: '#fef7e8', borderColor: '#fae0b0' };
 const smallButtonStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.45rem 0.7rem', fontSize: '0.8rem' };
-const backdropStyle: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.75rem', background: '#aeb4b7' };
 
 export default StudentGrades;

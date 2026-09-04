@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CheckCircle2, XCircle, RotateCcw, Award } from 'lucide-react';
 import AudioPlayer from './AudioPlayer';
 
@@ -118,7 +119,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
       </div>
 
       {/* Pop-up Modal de Resultado */}
-      {showResultModal && (
+      {showResultModal && createPortal(
         <div className="modal-backdrop" style={{
           position: 'fixed',
           inset: 0,
@@ -403,7 +404,8 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Lista de Preguntas */}
