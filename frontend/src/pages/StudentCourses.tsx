@@ -76,7 +76,7 @@ interface StructuredTask {
   steps: StructuredTaskStep[];
 }
 
-const StudentDashboard: React.FC = () => {
+const StudentCourses: React.FC = () => {
   const navigate = useNavigate();
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
@@ -477,4 +477,4 @@ const StudentDashboard: React.FC = () => {
   );
 };
 
-export default StudentDashboard;
+export default StudentCourses;

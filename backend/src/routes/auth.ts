@@ -22,9 +22,7 @@ export const getChildrenForParent = async (prisma: PrismaClient, parentId: strin
       id: true,
       email: true,
       role: true,
-      monthlyFee: true,
-      courseDurationMonths: true,
-      courseStartDate: true,
+      status: true,
       createdAt: true,
       profile: true,
       parentId: true,
@@ -75,6 +73,10 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
 
+    if (user.status === 'INACTIVE' && user.role !== 'ADMIN' && user.role !== 'TEACHER') {
+      return res.status(403).json({ error: 'Tu cuenta está inactiva. Contacta con la academia.' });
+    }
+
     const token = jwt.sign(
       { id: user.id, role: user.role, email: user.email },
       JWT_SECRET,
@@ -93,6 +95,7 @@ router.post('/login', async (req, res) => {
         email: user.email,
         role: user.role,
         profile: user.profile,
+        parentId: user.parentId,
         children
       }
     });
@@ -114,9 +117,8 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res) => {
         id: true,
         email: true,
         role: true,
-        monthlyFee: true,
-        courseDurationMonths: true,
-        courseStartDate: true,
+        status: true,
+        modality: true,
         profile: true,
         parentId: true,
         parent: {
@@ -143,6 +145,49 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res) => {
   } catch (error) {
     console.error('Error al obtener perfil:', error);
     res.status(500).json({ error: 'Error al obtener perfil de usuario' });
+  }
+});
+
+// Actualizar perfil del alumno
+router.put('/me/profile', authenticateToken, async (req: AuthRequest, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: 'No autenticado' });
+
+  const { firstName, lastName, dni, phone } = req.body;
+  if (!firstName || !lastName) {
+    return res.status(400).json({ error: 'Nombre y apellidos son obligatorios' });
+  }
+
+  try {
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        profile: {
+          upsert: {
+            create: {
+              firstName: firstName.trim(),
+              lastName: lastName.trim(),
+              dni: dni?.trim() || null,
+              phone: phone?.trim() || null
+            },
+            update: {
+              firstName: firstName.trim(),
+              lastName: lastName.trim(),
+              dni: dni !== undefined ? (dni?.trim() || null) : undefined,
+              phone: phone !== undefined ? (phone?.trim() || null) : undefined
+            }
+          }
+        }
+      },
+      include: {
+        profile: true
+      }
+    });
+
+    res.json({ success: true, profile: updatedUser.profile });
+  } catch (error) {
+    console.error('Error al actualizar perfil:', error);
+    res.status(500).json({ error: 'Error del servidor al actualizar perfil' });
   }
 });
 

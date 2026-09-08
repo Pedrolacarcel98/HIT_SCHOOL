@@ -43,6 +43,11 @@ const Login: React.FC = () => {
       localStorage.setItem('userId', data.user.id);
       localStorage.setItem('userRole', data.user.role);
       localStorage.setItem('userEmail', data.user.email);
+      if (data.user.parentId) {
+        localStorage.setItem('hasParent', 'true');
+      } else {
+        localStorage.removeItem('hasParent');
+      }
       localStorage.removeItem('selectedStudentId');
 
       if (data.user.role === 'TEACHER' || data.user.role === 'ADMIN') {

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Award, BookOpen, CircleDollarSign, GraduationCap, LogOut, MessageCircle, Menu, X, Users, Settings } from 'lucide-react';
+import { Award, BookOpen, CircleDollarSign, GraduationCap, LogOut, MessageCircle, Menu, X, Users, Settings, Home } from 'lucide-react';
 import { useParent } from '../context/ParentContext';
 import SettingsModal from './SettingsModal';
 
@@ -38,11 +38,18 @@ const StudentLayout: React.FC = () => {
   };
 
   const navItems = [
-    { label: 'Mis Clases', path: '/student', icon: <BookOpen size={20} /> },
-    { label: 'Mis Pagos', path: '/student/payments', icon: <CircleDollarSign size={20} /> },
+    { label: 'Inicio', path: '/student', icon: <Home size={20} /> },
+    { label: 'Mis Clases', path: '/student/courses', icon: <BookOpen size={20} /> },
+  ];
+
+  if (userRole === 'PARENT' || (userRole === 'STUDENT' && localStorage.getItem('hasParent') !== 'true')) {
+    navItems.push({ label: 'Mis Pagos', path: '/student/payments', icon: <CircleDollarSign size={20} /> });
+  }
+
+  navItems.push(
     { label: 'Calificaciones', path: '/student/grades', icon: <Award size={20} /> },
     { label: 'Chat con Profesor', path: '/student/chat', icon: <MessageCircle size={20} /> }
-  ];
+  );
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--background)', flexDirection: 'column' }}>
@@ -141,7 +148,8 @@ const StudentLayout: React.FC = () => {
           <nav style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1, overflowY: 'auto' }}>
             {navItems.map((item) => {
               const isActive = location.pathname === item.path ||
-                (item.path === '/student' && (location.pathname === '/student/dashboard' || location.pathname.startsWith('/student/course')));
+                (item.path === '/student/courses' && location.pathname.startsWith('/student/course/')) ||
+                (item.path === '/student' && location.pathname === '/student/dashboard');
 
               return (
                 <button

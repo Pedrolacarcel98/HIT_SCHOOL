@@ -1,7 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Check, CircleDollarSign, FileText, LoaderCircle, X } from 'lucide-react';
-import { generateInvoicePDF } from '../utils/invoice';
+import { generateInvoicePDF, generateStatementPDF } from '../utils/invoice';
 import { getPaymentVisualStatus } from '../utils/paymentStatus';
+
+interface AcademyEnrollment {
+  id: string;
+  monthlyFee: number;
+  startDate: string;
+  endDate: string | null;
+}
 
 interface StudentPaymentItem {
   month: number;
@@ -24,8 +31,14 @@ interface PaymentStudent {
   firstName: string;
   lastName: string;
   dni?: string | null;
-  monthlyFee: number | null;
-  courseDurationMonths: number | null;
+  parent?: {
+    profile?: {
+      firstName: string;
+      lastName: string;
+      dni?: string | null;
+    } | null;
+  } | null;
+  enrollments?: AcademyEnrollment[];
   payments: StudentPaymentItem[];
 }
 
@@ -49,16 +62,78 @@ const TeacherPayments: React.FC = () => {
   const handleDownloadInvoice = (student: PaymentStudent, payment: StudentPaymentItem) => {
     const studentName = `${student.firstName} ${student.lastName}`.trim();
     const monthName = monthLabel(payment.month, payment.year);
+    
+    // Find matching enrollment for amount if not in payment
+    let amount = payment.amount;
+    if (!amount) {
+      const cardDate = new Date(payment.year, payment.month - 1, 1);
+      const enr = student.enrollments?.find(e => {
+         const sd = new Date(e.startDate);
+         const sdMonth = new Date(sd.getFullYear(), sd.getMonth(), 1);
+         let edMonth = new Date(3000, 0, 1);
+         if (e.endDate) {
+           const ed = new Date(e.endDate);
+           edMonth = new Date(ed.getFullYear(), ed.getMonth(), 1);
+         }
+         return cardDate.getTime() >= sdMonth.getTime() && cardDate.getTime() <= edMonth.getTime();
+      });
+      amount = enr?.monthlyFee || 35;
+    }
+
+    const billedName = student.parent?.profile 
+      ? `${student.parent.profile.firstName} ${student.parent.profile.lastName}`.trim()
+      : studentName;
+    const billedDni = student.parent?.profile?.dni || student.dni || null;
 
     generateInvoicePDF({
-      studentName,
-      studentDni: student.dni || null,
+      studentName: billedName,
+      studentDni: billedDni,
       studentEmail: student.email,
       month: payment.month,
       year: payment.year,
       monthLabel: monthName,
-      amount: payment.amount || student.monthlyFee || 35,
+      amount,
       paidAt: payment.paidAt
+    });
+  };
+
+  const handleDownloadStatement = (student: PaymentStudent) => {
+    const studentName = `${student.firstName} ${student.lastName}`.trim();
+    const payments = student.payments.filter(p => p.isApplicable).map(p => {
+      let amount = p.amount;
+      if (!amount) {
+        const cardDate = new Date(p.year, p.month - 1, 1);
+        const enr = student.enrollments?.find(e => {
+           const sd = new Date(e.startDate);
+           const sdMonth = new Date(sd.getFullYear(), sd.getMonth(), 1);
+           let edMonth = new Date(3000, 0, 1);
+           if (e.endDate) {
+             const ed = new Date(e.endDate);
+             edMonth = new Date(ed.getFullYear(), ed.getMonth(), 1);
+           }
+           return cardDate.getTime() >= sdMonth.getTime() && cardDate.getTime() <= edMonth.getTime();
+        });
+        amount = enr?.monthlyFee || 35;
+      }
+
+      return {
+        monthLabel: monthLabel(p.month, p.year),
+        amount,
+        isPaid: p.isPaid,
+        paidAt: p.paidAt
+      };
+    });
+
+    const billedName = student.parent?.profile 
+      ? `${student.parent.profile.firstName} ${student.parent.profile.lastName}`.trim()
+      : studentName;
+    const billedDni = student.parent?.profile?.dni || student.dni || null;
+
+    generateStatementPDF({
+      studentName: billedName,
+      studentDni: billedDni,
+      studentEmail: student.email,
+      payments
     });
   };
 
@@ -229,6 +304,9 @@ const TeacherPayments: React.FC = () => {
               students.map((student) => {
                 const initials = `${student.firstName[0] || ''}${student.lastName[0] || ''}`.toUpperCase() || 'AL';
 
+                const activeEnrollment = student.enrollments?.find(e => !e.endDate);
+                const pastEnrollments = student.enrollments?.filter(e => e.endDate) || [];
+
                 return (
                   <tr key={student.id} style={{ borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
                     <td style={{ padding: '1rem 1.5rem' }}>
@@ -255,11 +333,45 @@ const TeacherPayments: React.FC = () => {
                         </div>
                       </div>
                     </td>
-                    <td style={{ padding: '1rem 1.5rem', color: 'var(--text-main)', fontWeight: 600 }}>
-                      {student.monthlyFee ? `${student.monthlyFee} € / mes` : 'Sin tarifa'}
-                      <div style={{ marginTop: '0.35rem', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 400 }}>
-                        {student.courseDurationMonths ? `${student.courseDurationMonths} meses` : 'Duración sin definir'}
-                      </div>
+                    <td style={{ padding: '1rem 1.5rem' }}>
+                      {activeEnrollment ? (
+                        <div>
+                          <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>{activeEnrollment.monthlyFee} € / mes</span>
+                          <div style={{ marginTop: '0.35rem', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 400 }}>
+                            Matrícula Activa
+                          </div>
+                        </div>
+                      ) : pastEnrollments.length > 0 ? (
+                        <div>
+                          <span style={{ color: 'var(--text-main)', fontWeight: 600, opacity: 0.7 }}>Inactivo</span>
+                          <div style={{ marginTop: '0.35rem', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 400 }}>
+                            Última: {pastEnrollments[0].monthlyFee} €/mes
+                          </div>
+                        </div>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)' }}>Sin matrícula</span>
+                      )}
+                      
+                      {student.payments.filter(p => p.isApplicable).length > 0 && (
+                        <button
+                          onClick={() => handleDownloadStatement(student)}
+                          style={{
+                            marginTop: '1rem',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.35rem',
+                            padding: '0.4rem 0.75rem',
+                            fontSize: '0.8rem',
+                            borderRadius: '6px',
+                            background: 'var(--surface)',
+                            border: '1px solid var(--border)',
+                            color: 'var(--text-main)',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <FileText size={14} /> Extracto
+                        </button>
+                      )}
                     </td>
                     <td style={{ padding: '1rem 1.5rem' }}>
                       <div style={{ display: 'grid', gap: '0.75rem' }}>
@@ -267,6 +379,22 @@ const TeacherPayments: React.FC = () => {
                           const styles = getStatusStyles(payment);
                           const paymentKey = `${student.id}-${payment.year}-${payment.month}`;
                           const isUpdating = updatingKey === paymentKey;
+
+                          let amount = payment.amount;
+                          if (!amount) {
+                            const cardDate = new Date(payment.year, payment.month - 1, 1);
+                            const enr = student.enrollments?.find(e => {
+                               const sd = new Date(e.startDate);
+                               const sdMonth = new Date(sd.getFullYear(), sd.getMonth(), 1);
+                               let edMonth = new Date(3000, 0, 1);
+                               if (e.endDate) {
+                                 const ed = new Date(e.endDate);
+                                 edMonth = new Date(ed.getFullYear(), ed.getMonth(), 1);
+                               }
+                               return cardDate.getTime() >= sdMonth.getTime() && cardDate.getTime() <= edMonth.getTime();
+                            });
+                            amount = enr?.monthlyFee || 35;
+                          }
 
                           return (
                             <div
@@ -289,14 +417,14 @@ const TeacherPayments: React.FC = () => {
                                   {monthLabel(payment.month, payment.year)}
                                 </div>
                                 <div style={{ color: 'var(--text-main)', fontSize: '0.92rem' }}>
-                                  {payment.amount ? `${payment.amount} €` : 'Sin importe'}
+                                  {amount} €
                                 </div>
                                 <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', marginTop: '0.25rem' }}>
                                   Vence el {payment.dueDate ? new Date(payment.dueDate).toLocaleDateString('es-ES') : '1 del mes'}
                                 </div>
                                 {!payment.isApplicable && (
                                   <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', marginTop: '0.25rem' }}>
-                                    Fuera de la duración del curso.
+                                    Fuera de periodo de matrícula.
                                   </div>
                                 )}
                               </div>

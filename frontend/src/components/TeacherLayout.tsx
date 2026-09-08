@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Award, BookOpen, Users, LogOut, GraduationCap, FolderArchive, CircleDollarSign, MessageCircle, Menu, X, Settings } from 'lucide-react';
+import { Award, BookOpen, Users, LogOut, GraduationCap, FolderArchive, CircleDollarSign, MessageCircle, Menu, X, Settings, FileText, Home } from 'lucide-react';
 import SettingsModal from './SettingsModal';
 
 const TeacherLayout: React.FC = () => {
@@ -43,10 +43,12 @@ const TeacherLayout: React.FC = () => {
   };
 
   const navItems = [
-    { label: 'Mis Clases', path: '/teacher', icon: <BookOpen size={20} /> },
+    { label: 'Inicio', path: '/teacher', icon: <Home size={20} /> },
+    { label: 'Mis Clases', path: '/teacher/courses', icon: <BookOpen size={20} /> },
     { label: 'Calificaciones', path: '/teacher/grades', icon: <Award size={20} /> },
     { label: 'Material de Clase', path: '/teacher/materials', icon: <FolderArchive size={20} /> },
     { label: 'Gestión de Alumnos', path: '/teacher/students', icon: <Users size={20} /> },
+    { label: 'Matrículas', path: '/teacher/enrollments', icon: <FileText size={20} /> },
     { label: 'Control de Pagos', path: '/teacher/payments', icon: <CircleDollarSign size={20} /> },
     { label: 'Chat Alumnos', path: '/teacher/chat', icon: <MessageCircle size={20} /> },
   ];
@@ -152,7 +154,7 @@ const TeacherLayout: React.FC = () => {
           <nav style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1, overflowY: 'auto' }}>
             {navItems.map((item) => {
               const isActive = location.pathname === item.path || 
-                (item.path === '/teacher' && location.pathname.startsWith('/teacher/course'));
+                (item.path === '/teacher/courses' && location.pathname.startsWith('/teacher/course/'));
 
               return (
                 <button

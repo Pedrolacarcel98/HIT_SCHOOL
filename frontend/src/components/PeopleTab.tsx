@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { UserPlus, Mail, Users, UserMinus, X, CheckSquare, Square, AlertCircle } from 'lucide-react';
+import { UserPlus, UserMinus, Users, X, CheckSquare, Square, AlertCircle } from 'lucide-react';
 
 const PeopleTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const [courseStudents, setCourseStudents] = useState<any[]>([]);

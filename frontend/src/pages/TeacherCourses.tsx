@@ -45,7 +45,7 @@ interface EnrolledStudent {
   profile?: { firstName: string; lastName: string } | null;
 }
 
-const TeacherDashboard: React.FC = () => {
+const TeacherCourses: React.FC = () => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [newCourseTitle, setNewCourseTitle] = useState('');
   const [isCreating, setIsCreating] = useState(false);
@@ -628,4 +628,4 @@ const menuButtonStyle: React.CSSProperties = { width: '100%', display: 'flex', a
 const inputStyle: React.CSSProperties = { width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', outline: 'none' };
 const modalBackdropStyle: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 100, display: 'grid', placeItems: 'center', padding: '1rem', background: 'rgba(34, 49, 43, 0.35)' };
 
-export default TeacherDashboard;
+export default TeacherCourses;

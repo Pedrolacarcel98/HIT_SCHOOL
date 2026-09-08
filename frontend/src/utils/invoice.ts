@@ -169,3 +169,120 @@ export const generateInvoicePDF = (data: InvoiceData) => {
   // Guardar archivo PDF
   doc.save(`${invoiceNumber}.pdf`);
 };
+
+import autoTable from 'jspdf-autotable';
+
+export interface StatementData {
+  studentName: string;
+  studentDni?: string | null;
+  studentEmail?: string | null;
+  payments: {
+    monthLabel: string;
+    amount: number;
+    isPaid: boolean;
+    paidAt?: string | Date | null;
+  }[];
+}
+
+export const generateStatementPDF = (data: StatementData) => {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const greenCorporate = [35, 108, 57]; // #236c39
+  const darkText = [33, 37, 41];
+  const mutedText = [108, 117, 125];
+
+  // Fondo / Franja Superior suave en gris/verde menta claro
+  doc.setFillColor(240, 246, 243);
+  doc.rect(0, 0, 210, 42, 'F');
+
+  // Marca "HIT SCHOOL" en verde corporativo negrita a la izquierda con datos de la academia
+  doc.setTextColor(greenCorporate[0], greenCorporate[1], greenCorporate[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(22);
+  doc.text('HIT SCHOOL', 15, 18);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(mutedText[0], mutedText[1], mutedText[2]);
+  doc.text('C. Concepción Soto 36, Las Pajanosas', 15, 25);
+  doc.text('NIF: B-93821045', 15, 30);
+  doc.text('Email: info@hitschool.es', 15, 35);
+
+  // A la derecha: "EXTRACTO DE PAGOS"
+  doc.setTextColor(greenCorporate[0], greenCorporate[1], greenCorporate[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.text('EXTRACTO DE PAGOS', 195, 18, { align: 'right' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(darkText[0], darkText[1], darkText[2]);
+  const issueDateStr = new Date().toLocaleDateString('es-ES');
+  doc.text(`Fecha de emisión: ${issueDateStr}`, 195, 25, { align: 'right' });
+
+  // Línea divisoria suave
+  doc.setDrawColor(220, 220, 220);
+  doc.setLineWidth(0.5);
+  doc.line(15, 46, 195, 46);
+
+  // Tarjeta de Datos del Cliente (Recuadro con bordes redondeados)
+  doc.setFillColor(250, 252, 250);
+  doc.setDrawColor(220, 230, 222);
+  doc.roundedRect(15, 52, 180, 28, 3, 3, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(greenCorporate[0], greenCorporate[1], greenCorporate[2]);
+  doc.text('DATOS DEL ALUMNO', 20, 60);
+
+  // Datos estructurados en 2 columnas: Nombre y DNI a la izquierda; Email a la derecha
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(darkText[0], darkText[1], darkText[2]);
+  doc.text('Nombre:', 20, 67);
+  doc.setFont('helvetica', 'normal');
+  doc.text(data.studentName || 'Alumno', 42, 67);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('DNI / NIE:', 20, 73);
+  doc.setFont('helvetica', 'normal');
+  doc.text(data.studentDni || 'No registrado', 42, 73);
+
+  if (data.studentEmail) {
+    doc.setFont('helvetica', 'bold');
+    doc.text('Email:', 115, 67);
+    doc.setFont('helvetica', 'normal');
+    doc.text(data.studentEmail, 130, 67);
+  }
+
+  const tableData = data.payments.map(p => {
+    return [
+      p.monthLabel,
+      `${p.amount} €`,
+      p.isPaid ? 'Pagado' : 'Pendiente/Impago',
+      p.paidAt ? new Date(p.paidAt).toLocaleDateString('es-ES') : '-'
+    ];
+  });
+
+  autoTable(doc, {
+    startY: 90,
+    head: [['Periodo', 'Importe', 'Estado', 'Fecha Pago']],
+    body: tableData,
+    headStyles: { fillColor: [35, 108, 57] }, // greenCorporate
+  });
+
+  // Pie de Página
+  doc.setDrawColor(220, 220, 220);
+  doc.line(15, 275, 195, 275);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(mutedText[0], mutedText[1], mutedText[2]);
+  doc.text('HitSchool — Plataforma Educativa. C. Concepción Soto 36, Las Pajanosas.', 105, 281, { align: 'center' });
+
+  const sanitizedName = (data.studentName || 'ALUMNO').replace(/\s+/g, '_');
+  doc.save(`Extracto_${sanitizedName}.pdf`);
+};

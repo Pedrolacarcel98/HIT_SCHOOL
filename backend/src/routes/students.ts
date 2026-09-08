@@ -2,26 +2,10 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import { authenticateToken, requireTeacher, AuthRequest } from '../middleware/auth';
-import { ALLOWED_MONTHLY_FEES, ensureStudentPaymentSchedule } from '../services/payments';
 import { getChildrenForParent } from './auth';
 
 const router = Router();
 const prisma = new PrismaClient();
-
-const parseBillingFields = (body: Record<string, unknown>) => {
-  const monthlyFee = Number(body.monthlyFee);
-  const courseDurationMonths = Number(body.courseDurationMonths);
-
-  if (!Number.isInteger(courseDurationMonths) || courseDurationMonths <= 0) {
-    return { error: 'La duración del curso debe ser un número entero positivo.' };
-  }
-
-  if (!ALLOWED_MONTHLY_FEES.includes(monthlyFee as 35 | 65)) {
-    return { error: 'La tarifa mensual debe ser 35 o 65 euros.' };
-  }
-
-  return { monthlyFee, courseDurationMonths };
-};
 
 // Endpoint para listar todos los tutores/padres registrados
 router.get('/parents', authenticateToken, requireTeacher, async (req, res) => {
@@ -178,15 +162,10 @@ router.put('/:id/evaluation', authenticateToken, requireTeacher, async (req: Aut
 
 // Ruta protegida: crear alumno (con soporte de ficha extendida y vinculación familiar)
 router.post('/', authenticateToken, requireTeacher, async (req, res) => {
-  const { email, firstName, lastName, dni, phone, birthDate, address, parentId, parentData } = req.body;
-  const billing = parseBillingFields(req.body as Record<string, unknown>);
+  const { email, firstName, lastName, dni, phone, birthDate, address, parentId, parentData, modality } = req.body;
 
   if (!email || !firstName || !lastName) {
     return res.status(400).json({ error: 'Faltan campos requeridos (email, nombre y apellidos del alumno)' });
-  }
-
-  if ('error' in billing) {
-    return res.status(400).json(billing);
   }
 
   try {
@@ -239,9 +218,8 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
         email: email.trim().toLowerCase(),
         passwordHash,
         role: 'STUDENT',
-        monthlyFee: billing.monthlyFee,
-        courseDurationMonths: billing.courseDurationMonths,
-        courseStartDate: new Date(),
+        status: 'INACTIVE',
+        modality: modality || 'PRESENCIAL',
         parentId: finalParentId,
         profile: {
           create: {
@@ -262,14 +240,7 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
       }
     });
 
-    await ensureStudentPaymentSchedule(prisma, {
-      id: newStudent.id,
-      role: newStudent.role,
-      createdAt: newStudent.createdAt,
-      courseDurationMonths: newStudent.courseDurationMonths,
-      monthlyFee: newStudent.monthlyFee,
-      courseStartDate: newStudent.courseStartDate
-    });
+
 
     // Intentar notificar a n8n para que envíe el correo con las credenciales
     try {
@@ -303,11 +274,8 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
         lastName: newStudent.profile?.lastName,
         dni: newStudent.profile?.dni,
         phone: newStudent.profile?.phone,
-        birthDate: newStudent.profile?.birthDate,
         address: newStudent.profile?.address,
-        monthlyFee: newStudent.monthlyFee,
-        courseDurationMonths: newStudent.courseDurationMonths,
-        courseStartDate: newStudent.courseStartDate,
+        modality: newStudent.modality,
         parent: newStudent.parent ? {
           id: newStudent.parent.id,
           email: newStudent.parent.email,
@@ -336,10 +304,9 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
       select: {
         id: true,
         email: true,
+        status: true,
         createdAt: true,
-        monthlyFee: true,
-        courseDurationMonths: true,
-        courseStartDate: true,
+        modality: true,
         parentId: true,
         profile: {
           select: {
@@ -374,7 +341,8 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
               }
             }
           }
-        }
+        },
+        academyEnrollments: true
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -388,15 +356,10 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
 // Ruta para actualizar un alumno
 router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
   const studentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const { firstName, lastName, email, dni, phone, birthDate, address, parentId } = req.body;
-  const billing = parseBillingFields(req.body as Record<string, unknown>);
+  const { firstName, lastName, email, dni, phone, birthDate, address, parentId, modality } = req.body;
 
   if (!firstName || !lastName || !email) {
     return res.status(400).json({ error: 'Nombre, apellidos y email son obligatorios' });
-  }
-
-  if ('error' in billing) {
-    return res.status(400).json(billing);
   }
 
   try {
@@ -411,8 +374,7 @@ router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
       where: { id: studentId },
       data: {
         email: email.trim().toLowerCase(),
-        monthlyFee: billing.monthlyFee,
-        courseDurationMonths: billing.courseDurationMonths,
+        modality: modality !== undefined ? modality : undefined,
         parentId: parentId !== undefined ? (parentId || null) : undefined,
         profile: {
           upsert: {
@@ -443,15 +405,6 @@ router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
       }
     });
 
-    await ensureStudentPaymentSchedule(prisma, {
-      id: updatedUser.id,
-      role: updatedUser.role,
-      createdAt: updatedUser.createdAt,
-      courseDurationMonths: updatedUser.courseDurationMonths,
-      monthlyFee: updatedUser.monthlyFee,
-      courseStartDate: updatedUser.courseStartDate
-    });
-
     res.json({
       message: 'Alumno actualizado con éxito',
       student: {
@@ -463,9 +416,7 @@ router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
         phone: updatedUser.profile?.phone,
         birthDate: updatedUser.profile?.birthDate,
         address: updatedUser.profile?.address,
-        monthlyFee: updatedUser.monthlyFee,
-        courseDurationMonths: updatedUser.courseDurationMonths,
-        courseStartDate: updatedUser.courseStartDate,
+        modality: updatedUser.modality,
         parent: updatedUser.parent ? {
           id: updatedUser.parent.id,
           email: updatedUser.parent.email,
@@ -488,6 +439,7 @@ router.delete('/:id', authenticateToken, requireTeacher, async (req, res) => {
   try {
     await prisma.$transaction([
       prisma.paymentStatus.deleteMany({ where: { studentId } }),
+      prisma.academyEnrollment.deleteMany({ where: { studentId } }),
       prisma.submission.deleteMany({ where: { studentId } }),
       prisma.materialAssignment.deleteMany({ where: { studentId } }),
       prisma.enrollment.deleteMany({ where: { studentId } }),

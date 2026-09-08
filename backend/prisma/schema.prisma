@@ -14,6 +14,17 @@ enum Role {
   PARENT
 }
 
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum Modality {
+  PRESENCIAL
+  ONLINE
+  HIBRIDO
+}
+
 enum Level {
   A1
   A2
@@ -42,9 +53,8 @@ model User {
   email        String       @unique
   passwordHash String
   role         Role         @default(STUDENT)
-  courseDurationMonths Int?
-  monthlyFee   Int?
-  courseStartDate DateTime?
+  status       UserStatus   @default(INACTIVE)
+  modality     Modality     @default(PRESENCIAL)
   createdAt    DateTime     @default(now())
 
   // Relación familiar Padre ↔ Hijos
@@ -54,6 +64,7 @@ model User {
 
   profile      Profile?
   courses      Course[]     @relation("TeacherCourses")
+  academyEnrollments AcademyEnrollment[]
   enrollments  Enrollment[]
   submissions  Submission[]
   materials    Material[]
@@ -135,6 +146,18 @@ model Enrollment {
   course    Course   @relation(fields: [courseId], references: [id])
 
   @@unique([studentId, courseId])
+}
+
+model AcademyEnrollment {
+  id         String    @id @default(uuid())
+  studentId  String
+  startDate  DateTime
+  endDate    DateTime?
+  monthlyFee Int
+  student    User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  payments   PaymentStatus[]
+
+  @@index([studentId])
 }
 
 model Assignment {
@@ -274,6 +297,7 @@ model MaterialAssignment {
 model PaymentStatus {
   id         String   @id @default(uuid())
   studentId  String
+  enrollmentId String?
   markedById String?
   month      Int
   year       Int
@@ -285,6 +309,7 @@ model PaymentStatus {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   student    User     @relation("StudentPayments", fields: [studentId], references: [id])
+  enrollment AcademyEnrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
   markedBy   User?    @relation("MarkedPayments", fields: [markedById], references: [id])
 
   @@unique([studentId, month, year])

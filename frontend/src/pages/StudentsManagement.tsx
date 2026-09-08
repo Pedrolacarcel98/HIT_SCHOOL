@@ -39,10 +39,9 @@ interface ParentData {
 interface Student {
   id: string;
   email: string;
+  status?: 'ACTIVE' | 'INACTIVE';
   createdAt?: string;
-  monthlyFee?: number | null;
-  courseDurationMonths?: number | null;
-  courseStartDate?: string | null;
+  modality?: 'PRESENCIAL' | 'ONLINE' | 'HIBRIDO';
   parentId?: string | null;
   profile?: {
     firstName: string;
@@ -92,8 +91,7 @@ const StudentsManagement: React.FC = () => {
   const [newPhone, setNewPhone] = useState('');
   const [newBirthDate, setNewBirthDate] = useState('');
   const [newAddress, setNewAddress] = useState('');
-  const [newMonthlyFee, setNewMonthlyFee] = useState('35');
-  const [newCourseDurationMonths, setNewCourseDurationMonths] = useState('9');
+  const [newModality, setNewModality] = useState<'PRESENCIAL' | 'ONLINE' | 'HIBRIDO'>('PRESENCIAL');
 
   // Gestión de Tutor en Crear
   const [hasParent, setHasParent] = useState(false);
@@ -115,8 +113,7 @@ const StudentsManagement: React.FC = () => {
   const [editBirthDate, setEditBirthDate] = useState('');
   const [editAddress, setEditAddress] = useState('');
   const [editParentId, setEditParentId] = useState('');
-  const [editMonthlyFee, setEditMonthlyFee] = useState('35');
-  const [editCourseDurationMonths, setEditCourseDurationMonths] = useState('9');
+  const [editModality, setEditModality] = useState<'PRESENCIAL' | 'ONLINE' | 'HIBRIDO'>('PRESENCIAL');
 
   // Modal Eliminar
   const [deletingStudent, setDeletingStudent] = useState<Student | null>(null);
@@ -217,8 +214,7 @@ const StudentsManagement: React.FC = () => {
           phone: newPhone.trim() || null,
           birthDate: newBirthDate ? newBirthDate : null,
           address: newAddress.trim() || null,
-          monthlyFee: Number(newMonthlyFee),
-          courseDurationMonths: Number(newCourseDurationMonths),
+          modality: newModality,
           parentId: finalParentId,
           parentData: parentPayload
         })
@@ -249,8 +245,7 @@ const StudentsManagement: React.FC = () => {
     setNewPhone('');
     setNewBirthDate('');
     setNewAddress('');
-    setNewMonthlyFee('35');
-    setNewCourseDurationMonths('9');
+    setNewModality('PRESENCIAL');
     setHasParent(false);
     setSelectedParentId('');
     setNewParentFirstName('');
@@ -270,8 +265,7 @@ const StudentsManagement: React.FC = () => {
     setEditBirthDate(student.profile?.birthDate ? student.profile.birthDate.split('T')[0] : '');
     setEditAddress(student.profile?.address || '');
     setEditParentId(student.parentId || '');
-    setEditMonthlyFee(String(student.monthlyFee || 35));
-    setEditCourseDurationMonths(String(student.courseDurationMonths || 9));
+    setEditModality(student.modality || 'PRESENCIAL');
   };
 
   const handleUpdate = async (e: React.FormEvent) => {
@@ -295,8 +289,7 @@ const StudentsManagement: React.FC = () => {
           birthDate: editBirthDate ? editBirthDate : null,
           address: editAddress.trim() || null,
           parentId: editParentId || null,
-          monthlyFee: Number(editMonthlyFee),
-          courseDurationMonths: Number(editCourseDurationMonths)
+          modality: editModality
         })
       });
 
@@ -356,11 +349,10 @@ const StudentsManagement: React.FC = () => {
       phone.includes(query) ||
       parentName.includes(query);
 
-    const isOnline = s.monthlyFee === 65 || email.includes('online') || fullName.includes('online');
-    const modality = isOnline ? 'ONLINE' : 'PRESENCIAL';
+    const modality = s.modality || 'PRESENCIAL';
 
     if (modalityFilter === 'PRESENCIAL' && modality !== 'PRESENCIAL') return false;
-    if (modalityFilter === 'ONLINE' && modality !== 'ONLINE') return false;
+    if (modalityFilter === 'ONLINE' && modality !== 'ONLINE' && modality !== 'HIBRIDO') return false;
 
     if (familyFilter === 'WITH_PARENT' && !s.parentId) return false;
     if (familyFilter === 'INDEPENDENT' && s.parentId) return false;
@@ -418,7 +410,7 @@ const StudentsManagement: React.FC = () => {
           {([
             ['ALL', 'Todos los alumnos', null],
             ['PRESENCIAL', 'Presencial', <GraduationCap size={15} />],
-            ['ONLINE', 'Online / Particular', <Laptop size={15} />]
+            ['ONLINE', 'Online / Híbrido', <Laptop size={15} />]
           ] as const).map(([val, label, icon]) => (
             <button
               key={val}
@@ -500,8 +492,8 @@ const StudentsManagement: React.FC = () => {
                 <th style={{ padding: '1rem 1.25rem', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.84rem' }}>ALUMNO Y CONTACTO</th>
                 <th style={{ padding: '1rem 1.25rem', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.84rem' }}>DNI / NIE</th>
                 <th style={{ padding: '1rem 1.25rem', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.84rem' }}>CUENTA / TUTOR</th>
-                <th style={{ padding: '1rem 1.25rem', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.84rem' }}>TARIFA</th>
-                <th style={{ padding: '1rem 1.25rem', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.84rem' }}>DURACIÓN</th>
+                <th style={{ padding: '1rem 1.25rem', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.84rem' }}>ESTADO</th>
+                <th style={{ padding: '1rem 1.25rem', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.84rem' }}></th>
                 <th style={{ padding: '1rem 1.25rem', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.84rem', textAlign: 'right' }}>ACCIONES</th>
               </tr>
             </thead>
@@ -587,11 +579,15 @@ const StudentsManagement: React.FC = () => {
                       </td>
 
                       <td style={{ padding: '1rem 1.25rem', color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: '600' }}>
-                        {s.monthlyFee ? `${s.monthlyFee} € / mes` : '35 € / mes'}
+                        {s.status === 'ACTIVE' ? (
+                          <span style={{ padding: '0.35rem 0.65rem', background: '#dcfce7', color: '#166534', borderRadius: '16px', fontSize: '0.75rem', fontWeight: 600 }}>Alta</span>
+                        ) : (
+                          <span style={{ padding: '0.35rem 0.65rem', background: '#fee2e2', color: '#991b1b', borderRadius: '16px', fontSize: '0.75rem', fontWeight: 600 }}>Baja</span>
+                        )}
                       </td>
 
                       <td style={{ padding: '1rem 1.25rem', color: 'var(--text-muted)', fontSize: '0.88rem' }}>
-                        {s.courseDurationMonths ? `${s.courseDurationMonths} meses` : '9 meses'}
+                        {/* Removido temporalmente duracion y tarifa */}
                       </td>
 
                       <td style={{ padding: '1rem 1.25rem', textAlign: 'right' }}>
@@ -686,7 +682,14 @@ const StudentsManagement: React.FC = () => {
                   <h2 style={{ margin: 0, fontSize: '1.3rem', color: 'var(--text-main)' }}>
                     {viewingStudent.profile?.firstName} {viewingStudent.profile?.lastName}
                   </h2>
-                  <span style={{ fontSize: '0.84rem', color: 'var(--text-muted)' }}>{viewingStudent.email}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.2rem' }}>
+                    <span style={{ fontSize: '0.84rem', color: 'var(--text-muted)' }}>{viewingStudent.email}</span>
+                    {viewingStudent.status === 'ACTIVE' ? (
+                      <span style={{ padding: '0.2rem 0.5rem', background: '#dcfce7', color: '#166534', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 600 }}>Alta</span>
+                    ) : (
+                      <span style={{ padding: '0.2rem 0.5rem', background: '#fee2e2', color: '#991b1b', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 600 }}>Baja</span>
+                    )}
+                  </div>
                 </div>
               </div>
               <button onClick={() => setViewingStudent(null)} className="modal-close" aria-label="Cerrar modal">
@@ -715,9 +718,9 @@ const StudentsManagement: React.FC = () => {
               </div>
 
               <div style={{ padding: '0.85rem 1rem', background: 'var(--surface-alt)', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', textTransform: 'uppercase' }}>Cuota y Duración</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', textTransform: 'uppercase' }}>Modalidad</span>
                 <strong style={{ fontSize: '0.95rem', color: 'var(--text-main)' }}>
-                  {viewingStudent.monthlyFee || 35} €/mes · {viewingStudent.courseDurationMonths || 9} meses
+                  {viewingStudent.modality}
                 </strong>
               </div>
             </div>
@@ -880,27 +883,17 @@ const StudentsManagement: React.FC = () => {
 
               <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
                 <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Tarifa mensual</label>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Modalidad</label>
                   <select
                     required
-                    value={newMonthlyFee}
-                    onChange={(e) => setNewMonthlyFee(e.target.value)}
+                    value={newModality}
+                    onChange={(e) => setNewModality(e.target.value as 'PRESENCIAL' | 'ONLINE' | 'HIBRIDO')}
                     style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
                   >
-                    <option value="35">35 € / mes</option>
-                    <option value="65">65 € / mes</option>
+                    <option value="PRESENCIAL">Presencial</option>
+                    <option value="ONLINE">Online</option>
+                    <option value="HIBRIDO">Híbrido</option>
                   </select>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Duración del curso (meses)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={newCourseDurationMonths}
-                    onChange={(e) => setNewCourseDurationMonths(e.target.value)}
-                    style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
-                  />
                 </div>
               </div>
 
@@ -1148,27 +1141,17 @@ const StudentsManagement: React.FC = () => {
 
               <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
                 <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Tarifa mensual</label>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Modalidad</label>
                   <select
                     required
-                    value={editMonthlyFee}
-                    onChange={(e) => setEditMonthlyFee(e.target.value)}
+                    value={editModality}
+                    onChange={(e) => setEditModality(e.target.value as 'PRESENCIAL' | 'ONLINE' | 'HIBRIDO')}
                     style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
                   >
-                    <option value="35">35 € / mes</option>
-                    <option value="65">65 € / mes</option>
+                    <option value="PRESENCIAL">Presencial</option>
+                    <option value="ONLINE">Online</option>
+                    <option value="HIBRIDO">Híbrido</option>
                   </select>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Duración del curso (meses)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={editCourseDurationMonths}
-                    onChange={(e) => setEditCourseDurationMonths(e.target.value)}
-                    style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
-                  />
                 </div>
               </div>
 
