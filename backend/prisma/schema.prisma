@@ -224,10 +224,14 @@ enum StructuredTaskAssignmentType {
 model StructuredTask {
   id                    String                       @id @default(uuid())
   title                 String
+  description           String?
+  dueDate               DateTime?
+  isTemplate            Boolean                      @default(false)
+  category              SkillCategory                @default(GRAMMAR_VOCABULARY)
   courseId              String?
   teacherId             String?
   assignmentType        StructuredTaskAssignmentType @default(CLASS)
-  isSequential           Boolean                      @default(false)
+  isSequential          Boolean                      @default(false)
   assignedStudentId     String?
   createdAt             DateTime                     @default(now())
   updatedAt             DateTime                     @updatedAt
@@ -240,6 +244,7 @@ model StructuredTask {
   @@index([courseId])
   @@index([teacherId])
   @@index([assignedStudentId])
+  @@index([isTemplate])
 }
 
 model StructuredTaskStudent {

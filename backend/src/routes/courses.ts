@@ -77,7 +77,7 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
     const course = await prisma.course.findUnique({
       where: { id: courseId },
       include: {
-        teacher: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } },
+        teacher: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true, avatarUrl: true } } } },
         enrollments: { select: { studentId: true } }
       }
     });
@@ -90,6 +90,18 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
 
     if (role === 'STUDENT' && !course.enrollments.some(e => e.studentId === userId)) {
       return res.status(403).json({ error: 'No estás matriculado en esta clase' });
+    }
+
+    if (role === 'PARENT') {
+      const userEmail = (req.user as any)?.email || '';
+      const child = await prisma.user.findFirst({
+        where: {
+          role: 'STUDENT',
+          OR: [{ parentId: userId }, { parent: { email: { equals: userEmail, mode: 'insensitive' } } }],
+          enrollments: { some: { courseId } }
+        }
+      });
+      if (!child) return res.status(403).json({ error: 'Ninguno de tus hijos está matriculado en esta clase' });
     }
 
     res.json(course);
@@ -193,20 +205,6 @@ const verifyCourseAccess = async (req: any, res: any, next: any) => {
   }
   next();
 };
-
-// Obtener info básica del curso
-router.get('/:id', authenticateToken, verifyCourseAccess, async (req: AuthRequest, res: Response) => {
-  try {
-    const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const course = await prisma.course.findUnique({
-      where: { id: courseId },
-      include: { teacher: { include: { profile: true } } }
-    });
-    res.json(course);
-  } catch (error) {
-    res.status(500).json({ error: 'Error interno' });
-  }
-});
 
 // TABLÓN (Posts)
 router.get('/:id/posts', authenticateToken, verifyCourseAccess, async (req: AuthRequest, res: Response) => {

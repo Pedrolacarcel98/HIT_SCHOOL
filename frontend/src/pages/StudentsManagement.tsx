@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   UserPlus,
   Search,
@@ -12,7 +13,8 @@ import {
   Laptop,
   Phone,
   Eye,
-  UserCheck
+  UserCheck,
+  FileText
 } from 'lucide-react';
 
 interface ParentData {
@@ -72,6 +74,7 @@ interface Student {
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 const StudentsManagement: React.FC = () => {
+  const navigate = useNavigate();
   const [students, setStudents] = useState<Student[]>([]);
   const [parents, setParents] = useState<ParentData[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -754,13 +757,25 @@ const StudentsManagement: React.FC = () => {
               )}
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem', flexWrap: 'wrap' }}>
               <button
                 type="button"
                 onClick={() => setViewingStudent(null)}
                 style={{ padding: '0.6rem 1.2rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-main)', cursor: 'pointer', fontWeight: 600 }}
               >
                 Cerrar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const query = viewingStudent.profile?.firstName || viewingStudent.email;
+                  setViewingStudent(null);
+                  navigate(`/teacher/payments?student=${encodeURIComponent(query)}`);
+                }}
+                className="btn-secondary"
+                style={{ padding: '0.6rem 1.15rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.88rem' }}
+              >
+                <FileText size={16} /> Facturas y Pagos
               </button>
               <button
                 type="button"

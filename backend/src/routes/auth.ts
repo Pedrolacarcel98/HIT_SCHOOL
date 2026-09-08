@@ -127,6 +127,15 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res) => {
             email: true,
             profile: true
           }
+        },
+        academyEnrollments: {
+          select: {
+            monthlyFee: true,
+            startDate: true,
+            endDate: true
+          },
+          orderBy: { startDate: 'desc' },
+          take: 1
         }
       }
     });
@@ -138,8 +147,14 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res) => {
       children = await getChildrenForParent(prisma, user.id, user.email);
     }
 
+    const activeEnrollment = (user as any).academyEnrollments?.[0];
+    const monthlyFee = activeEnrollment ? activeEnrollment.monthlyFee : null;
+    const courseStartDate = activeEnrollment ? activeEnrollment.startDate : null;
+
     res.json({
       ...user,
+      monthlyFee,
+      courseStartDate,
       children
     });
   } catch (error) {

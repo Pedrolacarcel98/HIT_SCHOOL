@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import {
   Award,
@@ -167,6 +168,7 @@ const parseSavedExam = (content?: string | null): ParsedExamData | null => {
 };
 
 const TeacherGrades: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const [students, setStudents] = useState<StudentData[]>([]);
   const [courses, setCourses] = useState<CourseData[]>([]);
   const [assignments, setAssignments] = useState<AssignmentItem[]>([]);
@@ -175,7 +177,7 @@ const TeacherGrades: React.FC = () => {
   // Vistas y Filtros
   const [viewMode, setViewMode] = useState<'STUDENTS' | 'CLASSES'>('STUDENTS');
   const [modalityFilter, setModalityFilter] = useState<'ALL' | 'PRESENCIAL' | 'ONLINE'>('ALL');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(searchParams.get('student') || '');
   const [selectedStudentForDossier, setSelectedStudentForDossier] = useState<StudentWithMeta | null>(null);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
 
@@ -1031,33 +1033,40 @@ const TeacherGrades: React.FC = () => {
                                         <strong style={{ display: 'block', fontSize: '0.9rem', color: 'var(--text-main)' }}>
                                           Examen tipo test completado
                                         </strong>
+                                        {examData.score !== null && examData.total !== null && (
+                                          <span style={{ fontSize: '0.78rem', color: 'var(--primary)', fontWeight: 600 }}>
+                                            {examData.score} / {examData.total} aciertos
+                                          </span>
+                                        )}
                                       </div>
                                     </div>
 
-                                    <button
-                                      type="button"
-                                      onClick={() => setReviewingExam({
-                                        subId: sub.id,
-                                        title: sub.assignmentTitle,
-                                        questions: sub.materialFormData?.questions || [],
-                                        answers: examData.answers,
-                                        score: sub.grade,
-                                        total: examData.total,
-                                        feedback: sub.feedback
-                                      })}
-                                      className="btn-secondary"
-                                      style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
-                                    >
-                                      <FileText size={14} /> Revisar
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => openGradingModal(sub)}
-                                      className="btn-primary"
-                                      style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
-                                    >
-                                      <Edit3 size={14} /> Editar Nota y Feedback
-                                    </button>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                      <button
+                                        type="button"
+                                        onClick={() => setReviewingExam({
+                                          subId: sub.id,
+                                          title: sub.assignmentTitle,
+                                          questions: sub.materialFormData?.questions || [],
+                                          answers: examData.answers,
+                                          score: sub.grade,
+                                          total: examData.total,
+                                          feedback: sub.feedback
+                                        })}
+                                        className="btn-secondary"
+                                        style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                                      >
+                                        <FileText size={14} /> Revisar
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => openGradingModal(sub)}
+                                        className="btn-primary"
+                                        style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                                      >
+                                        <Edit3 size={14} /> Editar Nota y Feedback
+                                      </button>
+                                    </div>
                                   </div>
                                 );
                               }

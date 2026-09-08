@@ -380,11 +380,16 @@ const GradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                             </button>
                           )}
                           {isExam ? (
-                            <button onClick={() => setReviewingExam(sub)} style={{ padding: '0.45rem 0.8rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 500 }}>
-                              <FileText size={16} /> Ver
-                            </button>
+                            <>
+                              <button onClick={() => setReviewingExam(sub)} style={{ padding: '0.45rem 0.8rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                                <FileText size={15} /> Ver
+                              </button>
+                              <button onClick={() => openGradingModal(sub)} className="btn-primary" style={{ padding: '0.45rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                                <Edit3 size={14} /> {hasGrade ? 'Editar' : 'Evaluar'}
+                              </button>
+                            </>
                           ) : (
-                            <button onClick={() => openGradingModal(sub)} className="btn-primary" style={{ padding: '0.45rem 0.85rem', fontSize: '0.82rem' }}>
+                            <button onClick={() => openGradingModal(sub)} className="btn-primary" style={{ padding: '0.45rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
                               <Edit3 size={14} /> {hasGrade ? 'Editar' : 'Evaluar'}
                             </button>
                           )}

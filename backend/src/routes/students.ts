@@ -342,7 +342,17 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
             }
           }
         },
-        academyEnrollments: true
+        academyEnrollments: true,
+        paymentStatuses: {
+          select: {
+            month: true,
+            year: true,
+            amount: true,
+            isPaid: true,
+            status: true,
+            dueDate: true
+          }
+        }
       },
       orderBy: { createdAt: 'desc' }
     });

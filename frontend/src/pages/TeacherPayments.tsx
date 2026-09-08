@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, ArrowLeft, CalendarDays, Check, ChevronRight, CircleDollarSign, Clock3, FileText, GraduationCap, Laptop, LoaderCircle, Users, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CalendarDays, Check, ChevronRight, CircleDollarSign, Clock3, FileText, GraduationCap, Laptop, LoaderCircle, Search, Users, X } from 'lucide-react';
 import { generateInvoicePDF, generateStatementPDF } from '../utils/invoice';
 import { getPaymentVisualStatus } from '../utils/paymentStatus';
 
@@ -50,11 +51,13 @@ interface PaymentsResponse {
 }
 
 const TeacherPayments: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const [students, setStudents] = useState<PaymentStudent[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingKey, setUpdatingKey] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [selectedStudentPaymentId, setSelectedStudentPaymentId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('student') || '');
 
   const monthLabel = (month: number, year: number) => {
     const date = new Date(year, month - 1, 1);
@@ -169,6 +172,28 @@ const TeacherPayments: React.FC = () => {
   useEffect(() => {
     fetchPayments();
   }, []);
+
+  useEffect(() => {
+    const param = searchParams.get('student')?.toLowerCase();
+    if (param && students.length > 0) {
+      const found = students.find((s) =>
+        `${s.firstName} ${s.lastName}`.toLowerCase().includes(param) ||
+        s.email.toLowerCase().includes(param)
+      );
+      if (found) {
+        setSelectedStudentPaymentId(found.id);
+      }
+    }
+  }, [students, searchParams]);
+
+  const filteredStudents = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return students;
+    return students.filter((s) =>
+      `${s.firstName} ${s.lastName}`.toLowerCase().includes(q) ||
+      s.email.toLowerCase().includes(q)
+    );
+  }, [students, searchQuery]);
 
   const totalOverdue = useMemo(
     () => students.reduce((acc, student) => acc + student.payments.filter((payment) => payment.isApplicable && getPaymentVisualStatus(payment.isPaid, payment.month, payment.year) === 'OVERDUE').length, 0),
@@ -286,19 +311,39 @@ const TeacherPayments: React.FC = () => {
       )}
 
       <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)', fontWeight: 600, fontSize: '0.88rem', color: 'var(--text-muted)' }}>
-          ALUMNOS REGISTRADOS ({students.length})
+        <div style={{ padding: '0.85rem 1.25rem', borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--text-muted)' }}>
+            ALUMNOS REGISTRADOS ({filteredStudents.length} de {students.length})
+          </span>
+          <div style={{ position: 'relative', width: '260px' }}>
+            <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+            <input
+              type="text"
+              placeholder="Buscar alumno..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '0.45rem 0.8rem 0.45rem 2rem',
+                borderRadius: '8px',
+                border: '1px solid var(--border)',
+                background: 'var(--surface)',
+                color: 'var(--text-main)',
+                fontSize: '0.85rem'
+              }}
+            />
+          </div>
         </div>
 
         {loading ? (
           <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>Cargando pagos...</div>
-        ) : students.length === 0 ? (
+        ) : filteredStudents.length === 0 ? (
           <div style={{ padding: '3rem 2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
             <Users size={48} style={{ color: 'var(--primary)', opacity: 0.35, marginBottom: '1rem' }} />
-            <p style={{ margin: 0 }}>No hay alumnos registrados.</p>
+            <p style={{ margin: 0 }}>No se encontraron alumnos con ese criterio.</p>
           </div>
         ) : (
-          students.map((student) => {
+          filteredStudents.map((student) => {
             const initials = `${student.firstName[0] || ''}${student.lastName[0] || ''}`.toUpperCase() || 'AL';
             const activeEnrollment = student.enrollments?.find((enrollment) => !enrollment.endDate);
             const pastEnrollments = student.enrollments?.filter((enrollment) => enrollment.endDate) || [];

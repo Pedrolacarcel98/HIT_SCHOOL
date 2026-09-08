@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Calendar, CheckCircle2, ChevronDown, ChevronUp, ClipboardCheck, Clock3, FileText, Headphones, Pencil, Plus, Search, Trash2, Video, X } from 'lucide-react';
+import { Calendar, CheckCircle2, ChevronDown, ChevronUp, ClipboardCheck, Clock3, FileText, Headphones, Pencil, Plus, Search, Trash2, Video, X, BookmarkPlus, ListChecks } from 'lucide-react';
 import ExamReviewModal from './ExamReviewModal';
+import TaskCard, { type TaskItem } from './TaskCard';
 
 const SKILL_CATEGORIES = [
   { id: 'GRAMMAR_VOCABULARY', label: 'Grammar and Vocabulary' },
@@ -62,6 +63,10 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const [materialSearch, setMaterialSearch] = useState('');
   const [materialTypeFilter, setMaterialTypeFilter] = useState<'ALL' | MaterialItem['type']>('ALL');
   const [reviewingExam, setReviewingExam] = useState<ExamReviewData | null>(null);
+  const [structuredTasks, setStructuredTasks] = useState<any[]>([]);
+  const [templateCatalog, setTemplateCatalog] = useState<any[]>([]);
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [templateLoading, setTemplateLoading] = useState(false);
   const [expandedTopics, setExpandedTopics] = useState<Record<string, boolean>>(
     () => Object.fromEntries(SKILL_CATEGORIES.map(cat => [cat.id, false]))
   );
@@ -70,6 +75,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     fetchAssignments();
     fetchMaterials();
     fetchStudents();
+    fetchStructuredTasks();
   }, [courseId]);
 
   useEffect(() => {
@@ -78,6 +84,79 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
 
   const toggleTopic = (topicId: string) => {
     setExpandedTopics(prev => ({ ...prev, [topicId]: !prev[topicId] }));
+  };
+
+  const fetchStructuredTasks = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${apiUrl}/api/structured-tasks/course/${courseId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setStructuredTasks(await res.json());
+      }
+    } catch (err) {
+      console.error('Error fetching course structured tasks', err);
+    }
+  };
+
+  const openTemplateModal = async () => {
+    setIsTemplateModalOpen(true);
+    try {
+      setTemplateLoading(true);
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${apiUrl}/api/structured-tasks/templates`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setTemplateCatalog(await res.json());
+      }
+    } catch (err) {
+      console.error('Error loading template catalog', err);
+    } finally {
+      setTemplateLoading(false);
+    }
+  };
+
+  const handleAssignTemplateToCourse = async (templateId: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${apiUrl}/api/structured-tasks/${templateId}/duplicate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          courseId,
+          assignmentType: 'CLASS',
+          isTemplate: false
+        })
+      });
+      if (res.ok) {
+        setIsTemplateModalOpen(false);
+        await fetchStructuredTasks();
+        window.alert('¡Plantilla asignada con éxito a esta clase!');
+      } else {
+        window.alert('No se pudo asignar la plantilla.');
+      }
+    } catch (err) {
+      console.error(err);
+      window.alert('Error de conexión.');
+    }
+  };
+
+  const handleDeleteStructuredTask = async (task: TaskItem) => {
+    if (!window.confirm(`¿Eliminar la tarea "${task.title}" de esta clase?`)) return;
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${apiUrl}/api/structured-tasks/${task.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        await fetchStructuredTasks();
+      }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const fetchStudents = async () => {
@@ -218,9 +297,30 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   return (
     <div className="animate-fade-in">
       {!isCreating ? (
-        <button onClick={() => setIsCreating(true)} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2rem' }}>
-          <Plus size={18} /> Crear tarea o material
-        </button>
+        <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
+          <button onClick={() => setIsCreating(true)} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Plus size={18} /> Crear tarea simple
+          </button>
+          <button
+            type="button"
+            onClick={openTemplateModal}
+            className="btn-secondary"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              background: '#fff',
+              border: '1px solid var(--primary-border)',
+              color: 'var(--primary-text)',
+              fontWeight: 600,
+              padding: '0.6rem 1.1rem',
+              borderRadius: '8px',
+              cursor: 'pointer'
+            }}
+          >
+            <BookmarkPlus size={18} /> + Asignar desde Plantilla
+          </button>
+        </div>
       ) : (
         <form onSubmit={handleCreate} className="glass-panel animate-fade-in" style={{ marginBottom: '2rem', padding: '1.5rem' }}>
           <h3 style={{ marginTop: 0, color: 'var(--primary)', marginBottom: '1rem' }}>Nueva Tarea</h3>
@@ -250,28 +350,26 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                 {students.map(student => <option key={student.id} value={student.id}>{student.profile?.firstName} {student.profile?.lastName} ({student.email})</option>)}
               </select>
             </div>
+            <div style={{ flex: '1 1 180px', minWidth: 0 }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '500' }}>Fecha de Entrega (Opcional)</label>
+              <input type="date" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} min={new Date().toISOString().split('T')[0]} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }} />
+            </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-            <div style={{ flex: '1 1 220px', minWidth: 0 }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '500' }}>Material Vinculado (Opcional)</label>
-              {selectedCreateMaterial ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.65rem 0.75rem', border: '1px solid var(--primary-border)', borderRadius: '8px', background: 'var(--primary-light)', color: 'var(--primary-text)' }}>
-                  {materialIcon(selectedCreateMaterial.type)}
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.82rem', fontWeight: 700 }}>{selectedCreateMaterial.title}</span>
-                  <button type="button" onClick={() => openMaterialPicker('create')} style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}>✏️</button>
-                  <button type="button" onClick={() => setNewMaterialId('')} style={{ border: 'none', background: 'transparent', color: '#b91c1c', cursor: 'pointer' }}>🗑️</button>
-                </div>
-              ) : (
-                <button type="button" onClick={() => openMaterialPicker('create')} style={{ width: '100%', padding: '0.72rem', border: '2px dashed #cbd5e1', borderRadius: '8px', background: 'transparent', color: '#475569', cursor: 'pointer', textAlign: 'left' }}>
-                  📎 Seleccionar Material de Clase
-                </button>
-              )}
-            </div>
-            <div style={{ flex: '1 1 180px', minWidth: 0 }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '500' }}>Fecha de Vencimiento (Opcional)</label>
-              <input type="datetime-local" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }} />
-            </div>
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '500' }}>Material Vinculado (Opcional)</label>
+            {selectedCreateMaterial ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem', border: '1px solid var(--primary-border)', borderRadius: '8px', background: 'var(--primary-light)', color: 'var(--primary-text)' }}>
+                {materialIcon(selectedCreateMaterial.type)}
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.9rem', fontWeight: 600 }}>{selectedCreateMaterial.title} ({materialLabel(selectedCreateMaterial.type)})</span>
+                <button type="button" onClick={() => openMaterialPicker('create')} className="btn-secondary" style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem' }}>Cambiar</button>
+                <button type="button" onClick={() => setNewMaterialId('')} style={{ border: 'none', background: 'transparent', color: '#b91c1c', cursor: 'pointer', padding: '0.35rem' }}><Trash2 size={16} /></button>
+              </div>
+            ) : (
+              <button type="button" onClick={() => openMaterialPicker('create')} style={{ width: '100%', padding: '0.85rem 1rem', border: '2px dashed #cbd5e1', borderRadius: '8px', background: 'transparent', color: '#475569', cursor: 'pointer', textAlign: 'left', fontSize: '0.9rem' }}>
+                📎 Seleccionar Material de Clase (Examen, Audio, Vídeo o Documento)
+              </button>
+            )}
           </div>
           
           <div style={{ marginBottom: '1rem' }}>
@@ -287,6 +385,80 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
           </div>
         </form>
       )}
+
+      {/* Sección de Tareas Estructuradas / Multi-paso del Curso */}
+      <div style={{ marginBottom: '2.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '2px solid var(--primary)', paddingBottom: '0.5rem', marginBottom: '1.25rem' }}>
+          <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem', color: 'var(--text-main)', fontSize: '1.4rem' }}>
+            <ListChecks style={{ color: 'var(--primary)' }} /> Tareas Guiadas y Módulos Estructurados
+          </h2>
+          <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+            {structuredTasks.length} {structuredTasks.length === 1 ? 'actividad' : 'actividades'}
+          </span>
+        </div>
+
+        {structuredTasks.length === 0 ? (
+          <div style={{ padding: '2rem', border: '1px dashed var(--primary-border)', borderRadius: '12px', background: 'var(--primary-subtle)', textAlign: 'center', color: 'var(--text-muted)' }}>
+            <p style={{ margin: '0 0 0.75rem', fontSize: '0.92rem' }}>No hay tareas estructuradas asignadas a esta clase todavía.</p>
+            <button
+              type="button"
+              onClick={openTemplateModal}
+              className="btn-secondary"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}
+            >
+              <BookmarkPlus size={16} /> Asignar desde Catálogo de Plantillas
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            {structuredTasks.map((task) => {
+              const taskItem: TaskItem = {
+                id: task.id,
+                title: task.title,
+                description: task.description,
+                dueDate: task.dueDate,
+                category: task.category,
+                isSequential: task.isSequential,
+                isTemplate: task.isTemplate,
+                assignmentType: task.assignmentType,
+                assignedStudentName: task.assignedStudentName,
+                assignedStudentNames: task.assignedStudentNames,
+                courseId: task.courseId,
+                stats: task.stats,
+                steps: task.steps.map((s: any) => ({
+                  id: s.id,
+                  order: s.order,
+                  title: s.title,
+                  materialId: s.materialId,
+                  material: s.material
+                }))
+              };
+
+              return (
+                <TaskCard
+                  key={task.id}
+                  task={taskItem}
+                  mode="TEACHER"
+                  onDeleteTask={handleDeleteStructuredTask}
+                  onOpenStep={(step) => {
+                    if (step.material?.type === 'FORM' && step.material.formData) {
+                      setReviewingExam({
+                        title: step.material.title,
+                        questions: step.material.formData.questions || [],
+                        answers: {},
+                        score: null,
+                        total: step.material.formData.questions?.length || 0
+                      });
+                    } else if (step.material?.url) {
+                      window.open(step.material.url, '_blank', 'noopener,noreferrer');
+                    }
+                  }}
+                />
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
         {grouped.map(group => {
@@ -427,6 +599,62 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
           <button className="btn-primary" type="submit">Guardar cambios</button>
         </form>
       </div>, document.body)}
+
+      {isTemplateModalOpen && createPortal(
+        <div className="modal-backdrop" style={modalBackdropStyle} onClick={() => setIsTemplateModalOpen(false)}>
+          <div className="glass-panel modal-card modal-card--wide" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '780px', maxHeight: '88vh', display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1.75rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '1.3rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <BookmarkPlus style={{ color: 'var(--primary)' }} /> Catálogo de Plantillas Didácticas
+                </h2>
+                <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                  Selecciona una plantilla para clonarla y asignarla directamente a esta clase con 1 clic.
+                </p>
+              </div>
+              <button type="button" onClick={() => setIsTemplateModalOpen(false)} className="modal-close"><X size={20} /></button>
+            </div>
+
+            <div style={{ maxHeight: '60vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem', padding: '0.25rem' }}>
+              {templateLoading ? (
+                <p style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>Cargando catálogo...</p>
+              ) : templateCatalog.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
+                  <p>No hay plantillas guardadas en el catálogo central todavía.</p>
+                  <small>Puedes guardar tareas como plantilla desde la biblioteca de Material de Clase.</small>
+                </div>
+              ) : (
+                templateCatalog.map((tpl) => (
+                  <div key={tpl.id} style={{ border: '1px solid var(--border)', borderRadius: '10px', padding: '1rem', background: 'var(--surface)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: '240px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '8px', background: 'var(--primary-light)', color: 'var(--primary-text)' }}>
+                          {tpl.category || 'General'}
+                        </span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          {tpl.steps?.length || 0} pasos
+                        </span>
+                      </div>
+                      <h4 style={{ margin: '0 0 0.25rem', fontSize: '1.05rem', color: 'var(--text-main)' }}>{tpl.title}</h4>
+                      {tpl.description && (
+                        <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)' }}>{tpl.description}</p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleAssignTemplateToCourse(tpl.id)}
+                      className="btn-primary"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.55rem 1rem', fontSize: '0.85rem', whiteSpace: 'nowrap' }}
+                    >
+                      ✓ Asignar a esta clase
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>, document.body
+      )}
     </div>
   );
 };

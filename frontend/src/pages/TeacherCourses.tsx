@@ -56,7 +56,6 @@ const TeacherCourses: React.FC = () => {
   const [courseError, setCourseError] = useState('');
   const [structuredTasks, setStructuredTasks] = useState<StructuredTask[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
-  const [enrolledStudents, setEnrolledStudents] = useState<EnrolledStudent[]>([]);
   const [allStudents, setAllStudents] = useState<EnrolledStudent[]>([]);
   const [studentSearch, setStudentSearch] = useState('');
   const [isStudentPickerOpen, setIsStudentPickerOpen] = useState(false);
@@ -118,20 +117,7 @@ const TeacherCourses: React.FC = () => {
     }
   };
 
-  const fetchEnrolledStudents = async (courseId: string) => {
-    if (!courseId) {
-      setEnrolledStudents([]);
-      return;
-    }
-    try {
-      const token = localStorage.getItem('token');
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-      const res = await fetch(`${apiUrl}/api/courses/${courseId}/students`, { headers: { Authorization: `Bearer ${token}` } });
-      if (res.ok) setEnrolledStudents(await res.json());
-    } catch (err) {
-      console.error('Error fetching enrolled students', err);
-    }
-  };
+
 
   const fetchAllStudents = async () => {
     try {
@@ -214,7 +200,6 @@ const TeacherCourses: React.FC = () => {
     setAssignedStudentIds(task?.assignedStudentIds?.length ? task.assignedStudentIds : (task?.assignedStudentId ? [task.assignedStudentId] : []));
     setStudentSearch('');
     setIsStudentPickerOpen(false);
-    fetchEnrolledStudents(courseId);
     fetchAllStudents();
     setIsStructuredTaskModalOpen(true);
   };
@@ -538,7 +523,7 @@ const TeacherCourses: React.FC = () => {
             {structuredTaskAssignmentType === 'CLASS' && (
               <div>
                 <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Clase destinataria</label>
-                <select required value={structuredTaskCourseId} onChange={(event) => { setStructuredTaskCourseId(event.target.value); setAssignedStudentIds([]); fetchEnrolledStudents(event.target.value); }} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}>
+                <select required value={structuredTaskCourseId} onChange={(event) => { setStructuredTaskCourseId(event.target.value); setAssignedStudentIds([]); }} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}>
                   <option value="">Selecciona una clase</option>
                   {courses.map((course) => <option key={course.id} value={course.id}>{course.title}</option>)}
                 </select>

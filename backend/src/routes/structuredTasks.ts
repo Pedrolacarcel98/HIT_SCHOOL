@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { PrismaClient, StructuredTaskAssignmentType } from '@prisma/client';
+import { PrismaClient, StructuredTaskAssignmentType, SkillCategory } from '@prisma/client';
 import { authenticateToken, requireTeacher, AuthRequest } from '../middleware/auth';
 
 const router = Router();
@@ -15,7 +15,7 @@ const serializeTask = (task: any) => ({
   assignedStudentName: getStudentName(task.assignedStudent),
   assignedStudentIds: Array.isArray(task.assignedStudents) ? task.assignedStudents.map((item: any) => item.studentId) : (task.assignedStudentId ? [task.assignedStudentId] : []),
   assignedStudentNames: Array.isArray(task.assignedStudents) ? task.assignedStudents.map((item: any) => getStudentName(item.student)).filter(Boolean) : [],
-  steps: task.steps.map((step: any) => ({
+  steps: (task.steps || []).map((step: any) => ({
     id: step.id,
     order: step.order,
     title: step.title,
@@ -32,9 +32,22 @@ const getTaskInclude = (studentId?: string) => ({
   steps: {
     orderBy: { order: 'asc' as const },
     include: {
-      material: { select: { id: true, title: true, type: true, url: true, description: true, formData: true } },
-      progress: studentId ? { where: { studentId }, select: { id: true } } : false,
-      assignment: studentId ? { include: { submissions: { where: { studentId }, select: { id: true, content: true, grade: true, feedback: true, submittedAt: true } } } } : false
+      material: { select: { id: true, title: true, type: true, url: true, description: true, formData: true, level: true, category: true } },
+      progress: studentId ? { where: { studentId }, select: { id: true, completedAt: true } } : { select: { id: true, studentId: true, completedAt: true } },
+      assignment: studentId ? {
+        include: {
+          submissions: {
+            where: { studentId },
+            select: { id: true, content: true, grade: true, feedback: true, submittedAt: true }
+          }
+        }
+      } : {
+        include: {
+          submissions: {
+            select: { id: true, studentId: true, content: true, grade: true, feedback: true, submittedAt: true }
+          }
+        }
+      }
     }
   }
 });
@@ -100,12 +113,24 @@ const resolveVisibleStudentId = async (req: AuthRequest, requestedStudentId?: st
   return child?.id || null;
 };
 
+// 1. Tareas creadas por el profesor (o de sus cursos)
 router.get('/teacher', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
   try {
+    const isTemplateParam = req.query.isTemplate;
+    const whereClause: any = {
+      OR: [{ teacherId: req.user!.id }, { course: { teacherId: req.user!.id } }]
+    };
+
+    if (isTemplateParam === 'true') {
+      whereClause.isTemplate = true;
+    } else if (isTemplateParam === 'false') {
+      whereClause.isTemplate = false;
+    }
+
     const tasks = await prisma.structuredTask.findMany({
-      where: { OR: [{ teacherId: req.user!.id }, { course: { teacherId: req.user!.id } }] },
+      where: whereClause,
       include: getTaskInclude(),
-      orderBy: { createdAt: 'desc' }
+      orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }]
     });
     res.json(tasks.map(serializeTask));
   } catch (error) {
@@ -114,25 +139,116 @@ router.get('/teacher', authenticateToken, requireTeacher, async (req: AuthReques
   }
 });
 
+// 2. Plantillas del catálogo reutilizable
+router.get('/templates', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
+  try {
+    const templates = await prisma.structuredTask.findMany({
+      where: {
+        isTemplate: true,
+        OR: [{ teacherId: req.user!.id }, { teacherId: null }]
+      },
+      include: getTaskInclude(),
+      orderBy: { updatedAt: 'desc' }
+    });
+    res.json(templates.map(serializeTask));
+  } catch (error) {
+    console.error('Error al obtener plantillas:', error);
+    res.status(500).json({ error: 'Error al obtener plantillas.' });
+  }
+});
+
+// 3. Tareas estructuradas de un curso (para profesor con estadísticas, o para alumno/tutor)
 router.get('/course/:courseId', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const courseId = req.params.courseId as string;
+
+    if (req.user?.role === 'TEACHER' || req.user?.role === 'ADMIN') {
+      const tasks = await prisma.structuredTask.findMany({
+        where: { courseId, isTemplate: false },
+        include: {
+          assignedStudent: { select: { email: true, profile: { select: { firstName: true, lastName: true } } } },
+          assignedStudents: { include: { student: { select: { email: true, profile: { select: { firstName: true, lastName: true } } } } } },
+          steps: {
+            orderBy: { order: 'asc' },
+            include: {
+              material: { select: { id: true, title: true, type: true, url: true, description: true, formData: true, level: true, category: true } },
+              progress: {
+                select: { id: true, studentId: true, completedAt: true }
+              },
+              assignment: {
+                include: {
+                  submissions: {
+                    include: {
+                      student: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }]
+      });
+
+      const enrollmentsCount = await prisma.enrollment.count({ where: { courseId } });
+
+      const tasksWithStats = tasks.map((task) => {
+        const totalSteps = task.steps.length;
+        const stepProgressByStudent = new Map<string, number>();
+        task.steps.forEach(step => {
+          step.progress.forEach(p => {
+            stepProgressByStudent.set(p.studentId, (stepProgressByStudent.get(p.studentId) || 0) + 1);
+          });
+        });
+
+        let completedStudentsCount = 0;
+        stepProgressByStudent.forEach((completedSteps) => {
+          if (completedSteps >= totalSteps) completedStudentsCount++;
+        });
+
+        const targetCount = task.assignmentType === 'INDIVIDUAL'
+          ? (task.assignedStudents.length || (task.assignedStudentId ? 1 : 0))
+          : enrollmentsCount;
+
+        return {
+          ...serializeTask(task),
+          stats: {
+            totalTargetStudents: targetCount,
+            completedStudentsCount,
+            completionRate: targetCount > 0 ? Math.round((completedStudentsCount / targetCount) * 100) : 0
+          }
+        };
+      });
+
+      return res.json(tasksWithStats);
+    }
+
+    // Flujo Alumno / Tutor
     const requestedStudentId = typeof req.query.studentId === 'string' ? req.query.studentId : undefined;
     const studentId = await resolveVisibleStudentId(req, requestedStudentId);
     if (!studentId || !await isStudentInCourse(studentId, courseId)) return res.status(403).json({ error: 'No tienes acceso a estas tareas.' });
 
     const tasks = await prisma.structuredTask.findMany({
-      where: { courseId, OR: [{ assignmentType: StructuredTaskAssignmentType.CLASS }, { assignmentType: StructuredTaskAssignmentType.INDIVIDUAL, assignedStudentId: studentId }, { assignmentType: StructuredTaskAssignmentType.INDIVIDUAL, assignedStudents: { some: { studentId } } }] },
+      where: {
+        courseId,
+        isTemplate: false,
+        OR: [
+          { assignmentType: StructuredTaskAssignmentType.CLASS },
+          { assignmentType: StructuredTaskAssignmentType.INDIVIDUAL, assignedStudentId: studentId },
+          { assignmentType: StructuredTaskAssignmentType.INDIVIDUAL, assignedStudents: { some: { studentId } } }
+        ]
+      },
       include: getTaskInclude(studentId),
-      orderBy: { createdAt: 'desc' }
+      orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }]
     });
     res.json(tasks.map(serializeTask));
   } catch (error) {
-    console.error('Error al obtener tareas estructuradas del alumno:', error);
+    console.error('Error al obtener tareas estructuradas del curso:', error);
     res.status(500).json({ error: 'Error al obtener tareas estructuradas.' });
   }
 });
 
+// 4. Mis tareas (para alumno o tutor)
 router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const requestedStudentId = typeof req.query.studentId === 'string' ? req.query.studentId : undefined;
@@ -143,6 +259,7 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => 
     const courseIds = enrollments.map((enrollment) => enrollment.courseId);
     const tasks = await prisma.structuredTask.findMany({
       where: {
+        isTemplate: false,
         OR: [
           { courseId: { in: courseIds }, assignmentType: StructuredTaskAssignmentType.CLASS },
           { assignmentType: StructuredTaskAssignmentType.INDIVIDUAL, assignedStudentId: studentId },
@@ -150,7 +267,7 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => 
         ]
       },
       include: getTaskInclude(studentId),
-      orderBy: { createdAt: 'desc' }
+      orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }]
     });
     res.json(tasks.map(serializeTask));
   } catch (error) {
@@ -159,6 +276,7 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => 
   }
 });
 
+// 5. Entrega de formulario / examen autocorregible
 router.post('/steps/:stepId/submit-form', authenticateToken, async (req: AuthRequest, res: Response) => {
   if (req.user?.role !== 'STUDENT') return res.status(403).json({ error: 'Solo el alumno puede realizar el examen.' });
   const stepId = req.params.stepId as string;
@@ -185,10 +303,12 @@ router.post('/steps/:stepId/submit-form', authenticateToken, async (req: AuthReq
         materialId: step.material.id,
         structuredTaskStepId: step.id,
         title: `${step.material.title} (${step.task.title})`,
-        description: step.title,
-        category: step.material.category
+        description: step.task.description || step.title,
+        category: step.task.category || step.material.category
       },
-      update: {}
+      update: {
+        title: `${step.material.title} (${step.task.title})`
+      }
     });
     const existingSubmission = await prisma.submission.findUnique({ where: { assignmentId_studentId: { assignmentId: assignment.id, studentId: req.user.id } } });
     if (existingSubmission) return res.status(409).json({ error: 'Este examen ya ha sido realizado.', submission: existingSubmission });
@@ -220,6 +340,92 @@ router.post('/steps/:stepId/submit-form', authenticateToken, async (req: AuthReq
   }
 });
 
+// 6. Entrega de texto / enlace / archivo para cualquier paso
+router.post('/steps/:stepId/submit-delivery', authenticateToken, async (req: AuthRequest, res: Response) => {
+  if (req.user?.role !== 'STUDENT') return res.status(403).json({ error: 'Solo el alumno puede realizar entregas.' });
+  const stepId = req.params.stepId as string;
+  const { content, link, attachment } = req.body;
+
+  try {
+    const step = await prisma.structuredTaskStep.findUnique({
+      where: { id: stepId },
+      include: {
+        material: true,
+        task: { include: { course: { select: { teacherId: true } } } }
+      }
+    });
+
+    if (!step || !await canStudentAccessTask(req.user.id, step.task, step.taskId)) {
+      return res.status(403).json({ error: 'No tienes acceso a este paso.' });
+    }
+
+    const teacherId = step.task.course?.teacherId || step.task.teacherId;
+    if (!teacherId) return res.status(400).json({ error: 'La tarea no tiene profesor asociado.' });
+
+    const assignment = await prisma.assignment.upsert({
+      where: { structuredTaskStepId: step.id },
+      create: {
+        teacherId,
+        courseId: step.task.courseId,
+        studentId: step.task.assignmentType === StructuredTaskAssignmentType.INDIVIDUAL ? req.user.id : null,
+        materialId: step.materialId || null,
+        structuredTaskStepId: step.id,
+        title: `${step.title} (${step.task.title})`,
+        description: step.task.description || step.title,
+        category: step.task.category || step.material?.category || 'WRITING'
+      },
+      update: {
+        title: `${step.title} (${step.task.title})`
+      }
+    });
+
+    const normalizedContent = (() => {
+      if (!content && !attachment && !link) return null;
+      if (attachment && typeof attachment === 'object') {
+        return JSON.stringify({
+          text: typeof content === 'string' ? content : '',
+          link: typeof link === 'string' ? link : null,
+          attachment
+        });
+      }
+      if (link && typeof link === 'string') {
+        return JSON.stringify({ text: typeof content === 'string' ? content : '', link });
+      }
+      return typeof content === 'string' ? content : null;
+    })();
+
+    const submission = await prisma.$transaction(async (transaction) => {
+      const sub = await transaction.submission.upsert({
+        where: { assignmentId_studentId: { assignmentId: assignment.id, studentId: req.user!.id } },
+        create: {
+          assignmentId: assignment.id,
+          studentId: req.user!.id,
+          structuredTaskId: step.taskId,
+          content: normalizedContent
+        },
+        update: {
+          content: normalizedContent,
+          submittedAt: new Date()
+        }
+      });
+
+      await transaction.structuredTaskStepProgress.upsert({
+        where: { stepId_studentId: { stepId, studentId: req.user!.id } },
+        create: { stepId, studentId: req.user!.id },
+        update: { completedAt: new Date() }
+      });
+
+      return sub;
+    });
+
+    res.status(201).json({ submission, success: true });
+  } catch (error) {
+    console.error('Error al entregar paso:', error);
+    res.status(500).json({ error: 'Error al registrar la entrega.' });
+  }
+});
+
+// 7. Marcar paso simple como completado (Lecturas, Vídeos, Audios)
 router.post('/steps/:stepId/complete', authenticateToken, async (req: AuthRequest, res: Response) => {
   if (req.user?.role !== 'STUDENT') return res.status(403).json({ error: 'Solo el alumno puede completar pasos.' });
   try {
@@ -241,16 +447,22 @@ router.post('/steps/:stepId/complete', authenticateToken, async (req: AuthReques
   }
 });
 
+// 8. Crear nueva tarea o plantilla
 router.post('/', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
-  const { title, courseId, assignmentType, assignedStudentId, assignedStudentIds, isSequential, steps } = req.body;
+  const { title, description, dueDate, category, isTemplate, courseId, assignmentType, assignedStudentId, assignedStudentIds, isSequential, steps } = req.body;
+  const isTemplateTask = Boolean(isTemplate);
   const recipientIds = Array.isArray(assignedStudentIds) ? assignedStudentIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0) : (assignedStudentId ? [assignedStudentId] : []);
+
   if (!title?.trim() || !Array.isArray(steps) || steps.length === 0) return res.status(400).json({ error: 'Título y al menos un paso son obligatorios.' });
-  if (assignmentType !== 'CLASS' && assignmentType !== 'INDIVIDUAL') return res.status(400).json({ error: 'Tipo de asignación no válido.' });
-  if (assignmentType === 'CLASS' && !courseId) return res.status(400).json({ error: 'Selecciona la clase destinataria.' });
-  if (assignmentType === 'INDIVIDUAL' && recipientIds.length === 0) return res.status(400).json({ error: 'Selecciona al menos un alumno.' });
+
+  if (!isTemplateTask) {
+    if (assignmentType !== 'CLASS' && assignmentType !== 'INDIVIDUAL') return res.status(400).json({ error: 'Tipo de asignación no válido.' });
+    if (assignmentType === 'CLASS' && !courseId) return res.status(400).json({ error: 'Selecciona la clase destinataria.' });
+    if (assignmentType === 'INDIVIDUAL' && recipientIds.length === 0) return res.status(400).json({ error: 'Selecciona al menos un alumno.' });
+  }
 
   try {
-    if (assignmentType === 'CLASS') {
+    if (!isTemplateTask && assignmentType === 'CLASS') {
       const course = await prisma.course.findFirst({ where: { id: courseId, teacherId: req.user!.id } });
       if (!course) return res.status(403).json({ error: 'No puedes asignar tareas a esta clase.' });
     }
@@ -258,12 +470,16 @@ router.post('/', authenticateToken, requireTeacher, async (req: AuthRequest, res
     const task = await prisma.structuredTask.create({
       data: {
         title: title.trim(),
-        courseId: assignmentType === 'CLASS' ? courseId : null,
+        description: description?.trim() || null,
+        dueDate: dueDate ? new Date(dueDate) : null,
+        isTemplate: isTemplateTask,
+        category: (category as SkillCategory) || SkillCategory.GRAMMAR_VOCABULARY,
+        courseId: (!isTemplateTask && assignmentType === 'CLASS') ? courseId : null,
         teacherId: req.user!.id,
-        assignmentType,
+        assignmentType: isTemplateTask ? StructuredTaskAssignmentType.CLASS : assignmentType,
         isSequential: Boolean(isSequential),
-        assignedStudentId: assignmentType === 'INDIVIDUAL' ? recipientIds[0] : null,
-        assignedStudents: assignmentType === 'INDIVIDUAL' ? { create: recipientIds.map((studentId) => ({ studentId })) } : undefined,
+        assignedStudentId: (!isTemplateTask && assignmentType === 'INDIVIDUAL') ? recipientIds[0] : null,
+        assignedStudents: (!isTemplateTask && assignmentType === 'INDIVIDUAL') ? { create: recipientIds.map((studentId) => ({ studentId })) } : undefined,
         steps: { create: steps.filter((step: any) => step.title?.trim()).map((step: any, index: number) => ({ order: index + 1, title: step.title.trim(), materialId: step.materialId || null })) }
       },
       include: getTaskInclude()
@@ -275,46 +491,215 @@ router.post('/', authenticateToken, requireTeacher, async (req: AuthRequest, res
   }
 });
 
+// 9. Duplicar tarea o plantilla (Clonación)
+router.post('/:id/duplicate', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
+  try {
+    const taskId = req.params.id as string;
+    const { title, courseId, assignmentType, assignedStudentIds, dueDate, isTemplate } = req.body;
+
+    const sourceTask = await prisma.structuredTask.findUnique({
+      where: { id: taskId },
+      include: { steps: { orderBy: { order: 'asc' } } }
+    });
+
+    if (!sourceTask) {
+      return res.status(404).json({ error: 'Tarea no encontrada.' });
+    }
+
+    const targetIsTemplate = isTemplate !== undefined ? Boolean(isTemplate) : sourceTask.isTemplate;
+    const newTitle = title?.trim() || (targetIsTemplate ? `[Plantilla] ${sourceTask.title}` : `[Copia] ${sourceTask.title}`);
+    const newCourseId = courseId !== undefined ? courseId : sourceTask.courseId;
+    const newAssignmentType = assignmentType || sourceTask.assignmentType;
+    const recipientIds = Array.isArray(assignedStudentIds) ? assignedStudentIds : [];
+
+    const duplicatedTask = await prisma.structuredTask.create({
+      data: {
+        title: newTitle,
+        description: sourceTask.description,
+        dueDate: dueDate ? new Date(dueDate) : (!targetIsTemplate ? sourceTask.dueDate : null),
+        isTemplate: targetIsTemplate,
+        category: sourceTask.category,
+        courseId: (!targetIsTemplate && newAssignmentType === 'CLASS') ? newCourseId : null,
+        teacherId: req.user!.id,
+        assignmentType: targetIsTemplate ? StructuredTaskAssignmentType.CLASS : newAssignmentType,
+        isSequential: sourceTask.isSequential,
+        assignedStudentId: (!targetIsTemplate && newAssignmentType === 'INDIVIDUAL' && recipientIds.length > 0) ? recipientIds[0] : null,
+        assignedStudents: (!targetIsTemplate && newAssignmentType === 'INDIVIDUAL' && recipientIds.length > 0) ? {
+          create: recipientIds.map((studentId: string) => ({ studentId }))
+        } : undefined,
+        steps: {
+          create: sourceTask.steps.map((step) => ({
+            order: step.order,
+            title: step.title,
+            materialId: step.materialId
+          }))
+        }
+      },
+      include: getTaskInclude()
+    });
+
+    res.status(201).json(serializeTask(duplicatedTask));
+  } catch (error) {
+    console.error('Error al duplicar tarea estructurada:', error);
+    res.status(500).json({ error: 'Error al duplicar la tarea.' });
+  }
+});
+
+// 10. Guardar tarea como plantilla reutilizable
+router.post('/:id/save-as-template', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
+  try {
+    const taskId = req.params.id as string;
+    const { title } = req.body;
+
+    const sourceTask = await prisma.structuredTask.findUnique({
+      where: { id: taskId },
+      include: { steps: { orderBy: { order: 'asc' } } }
+    });
+
+    if (!sourceTask) {
+      return res.status(404).json({ error: 'Tarea no encontrada.' });
+    }
+
+    const templateTitle = title?.trim() || `[Plantilla] ${sourceTask.title}`;
+
+    const template = await prisma.structuredTask.create({
+      data: {
+        title: templateTitle,
+        description: sourceTask.description,
+        dueDate: null,
+        isTemplate: true,
+        category: sourceTask.category,
+        courseId: null,
+        teacherId: req.user!.id,
+        assignmentType: StructuredTaskAssignmentType.CLASS,
+        isSequential: sourceTask.isSequential,
+        steps: {
+          create: sourceTask.steps.map((step) => ({
+            order: step.order,
+            title: step.title,
+            materialId: step.materialId
+          }))
+        }
+      },
+      include: getTaskInclude()
+    });
+
+    res.status(201).json(serializeTask(template));
+  } catch (error) {
+    console.error('Error al guardar plantilla:', error);
+    res.status(500).json({ error: 'Error al guardar como plantilla.' });
+  }
+});
+
+// 11. Actualizar tarea estructurada (RECONCILIACIÓN SEGURA: no destruye progreso)
 router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
   const taskId = req.params.id as string;
-  const { title, courseId, assignmentType, assignedStudentId, assignedStudentIds, isSequential, steps } = req.body;
+  const { title, description, dueDate, category, isTemplate, courseId, assignmentType, assignedStudentId, assignedStudentIds, isSequential, steps } = req.body;
+  const isTemplateTask = Boolean(isTemplate);
   const recipientIds = Array.isArray(assignedStudentIds) ? assignedStudentIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0) : (assignedStudentId ? [assignedStudentId] : []);
-  if (!title?.trim() || !Array.isArray(steps) || steps.length === 0) return res.status(400).json({ error: 'Título y al menos un paso son obligatorios.' });
-  if (assignmentType === 'CLASS' && !courseId) return res.status(400).json({ error: 'Selecciona la clase destinataria.' });
 
+  if (!title?.trim() || !Array.isArray(steps) || steps.length === 0) return res.status(400).json({ error: 'Título y al menos un paso son obligatorios.' });
+
+  try {
+    const existing = await prisma.structuredTask.findFirst({
+      where: { id: taskId, OR: [{ teacherId: req.user!.id }, { course: { teacherId: req.user!.id } }] },
+      include: { steps: true }
+    });
+    if (!existing) return res.status(404).json({ error: 'Tarea no encontrada.' });
+
+    if (!isTemplateTask && assignmentType === 'CLASS') {
+      const course = await prisma.course.findFirst({ where: { id: courseId, teacherId: req.user!.id } });
+      if (!course) return res.status(404).json({ error: 'Clase no encontrada.' });
+    }
+
+    const task = await prisma.$transaction(async (transaction) => {
+      // 1. Reconciliar pasos existentes vs nuevos vs eliminados
+      const existingStepMap = new Map(existing.steps.map(s => [s.id, s]));
+      const incomingStepIds = new Set<string>();
+
+      for (let i = 0; i < steps.length; i++) {
+        const step = steps[i];
+        const stepTitle = (step.title || '').trim();
+        if (!stepTitle) continue;
+
+        if (step.id && existingStepMap.has(step.id)) {
+          incomingStepIds.add(step.id);
+          await transaction.structuredTaskStep.update({
+            where: { id: step.id },
+            data: {
+              order: i + 1,
+              title: stepTitle,
+              materialId: step.materialId || null
+            }
+          });
+        } else {
+          const createdStep = await transaction.structuredTaskStep.create({
+            data: {
+              taskId,
+              order: i + 1,
+              title: stepTitle,
+              materialId: step.materialId || null
+            }
+          });
+          incomingStepIds.add(createdStep.id);
+        }
+      }
+
+      // Eliminar pasos que ya no están
+      const stepsToDelete = existing.steps.filter(s => !incomingStepIds.has(s.id));
+      if (stepsToDelete.length > 0) {
+        await transaction.structuredTaskStep.deleteMany({
+          where: { id: { in: stepsToDelete.map(s => s.id) } }
+        });
+      }
+
+      // 2. Reconciliar alumnos asignados
+      await transaction.structuredTaskStudent.deleteMany({ where: { taskId } });
+      if (!isTemplateTask && assignmentType === 'INDIVIDUAL' && recipientIds.length > 0) {
+        await transaction.structuredTaskStudent.createMany({
+          data: recipientIds.map((studentId: string) => ({ taskId, studentId }))
+        });
+      }
+
+      // 3. Actualizar cabecera de la tarea
+      return transaction.structuredTask.update({
+        where: { id: taskId },
+        data: {
+          title: title.trim(),
+          description: description !== undefined ? (description?.trim() || null) : existing.description,
+          dueDate: dueDate !== undefined ? (dueDate ? new Date(dueDate) : null) : existing.dueDate,
+          category: category ? (category as SkillCategory) : existing.category,
+          isTemplate: isTemplateTask,
+          courseId: (!isTemplateTask && assignmentType === 'CLASS') ? courseId : null,
+          assignmentType: isTemplateTask ? StructuredTaskAssignmentType.CLASS : assignmentType,
+          isSequential: Boolean(isSequential),
+          assignedStudentId: (!isTemplateTask && assignmentType === 'INDIVIDUAL') ? recipientIds[0] : null
+        },
+        include: getTaskInclude()
+      });
+    });
+
+    res.json(serializeTask(task));
+  } catch (error) {
+    console.error('Error al actualizar tarea estructurada:', error);
+    res.status(500).json({ error: 'Error al actualizar la tarea estructurada.' });
+  }
+});
+
+// 12. Eliminar tarea estructurada
+router.delete('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
+  const taskId = req.params.id as string;
   try {
     const existing = await prisma.structuredTask.findFirst({
       where: { id: taskId, OR: [{ teacherId: req.user!.id }, { course: { teacherId: req.user!.id } }] }
     });
     if (!existing) return res.status(404).json({ error: 'Tarea no encontrada.' });
-    if (assignmentType === 'CLASS') {
-      const course = await prisma.course.findFirst({ where: { id: courseId, teacherId: req.user!.id } });
-      if (!course) return res.status(404).json({ error: 'Clase no encontrada.' });
-    }
-    if (assignmentType === 'INDIVIDUAL' && recipientIds.length === 0) return res.status(400).json({ error: 'Selecciona al menos un alumno.' });
 
-    const task = await prisma.$transaction(async (transaction) => {
-      await transaction.structuredTaskStep.deleteMany({ where: { taskId } });
-      await transaction.structuredTaskStudent.deleteMany({ where: { taskId } });
-      return transaction.structuredTask.update({
-        where: { id: taskId },
-        data: {
-          title: title.trim(),
-          courseId: assignmentType === 'CLASS' ? courseId : null,
-          teacherId: req.user!.id,
-          assignmentType,
-          isSequential: Boolean(isSequential),
-          assignedStudentId: assignmentType === 'INDIVIDUAL' ? recipientIds[0] : null,
-          assignedStudents: assignmentType === 'INDIVIDUAL' ? { create: recipientIds.map((studentId: string) => ({ studentId })) } : undefined,
-          steps: { create: steps.filter((step: any) => step.title?.trim()).map((step: any, index: number) => ({ order: index + 1, title: step.title.trim(), materialId: step.materialId || null })) }
-        },
-        include: getTaskInclude()
-      });
-    });
-    res.json(serializeTask(task));
+    await prisma.structuredTask.delete({ where: { id: taskId } });
+    res.json({ success: true, message: 'Tarea eliminada con éxito.' });
   } catch (error) {
-    console.error('Error al actualizar tarea estructurada:', error);
-    res.status(500).json({ error: 'Error al actualizar la tarea estructurada.' });
+    console.error('Error al eliminar tarea estructurada:', error);
+    res.status(500).json({ error: 'Error al eliminar tarea.' });
   }
 });
 

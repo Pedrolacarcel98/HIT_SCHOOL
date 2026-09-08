@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CheckCircle2, XCircle, RotateCcw, Award } from 'lucide-react';
+import { CheckCircle2, XCircle, RotateCcw, Award, X } from 'lucide-react';
 import AudioPlayer from './AudioPlayer';
 
 interface Question {
@@ -21,6 +21,7 @@ interface FormPlayerProps {
   description?: string;
   questions: Question[];
   onFinish?: (score: number, total: number, answers: { [key: string]: any }) => void;
+  onClose?: () => void;
   readOnly?: boolean;
   allowRetry?: boolean;
   initialAnswers?: { [key: string]: any };
@@ -38,7 +39,7 @@ const isTextCorrect = (answer: string, expected: string, caseSensitive = false) 
     : normalizedAnswer.toLowerCase() === normalizedExpected.toLowerCase();
 };
 
-const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions = [], onFinish, readOnly = false, allowRetry = true, initialAnswers = {} }) => {
+const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions = [], onFinish, onClose, readOnly = false, allowRetry = true, initialAnswers = {} }) => {
   const [answers, setAnswers] = useState<{ [key: string]: any }>(initialAnswers);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [score, setScore] = useState(0);
@@ -141,8 +142,30 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
             textAlign: modalStep === 'REVIEW' ? 'left' : 'center',
             boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
             border: '1px solid var(--border)',
-            overflow: 'hidden'
+            overflow: 'hidden',
+            position: 'relative'
           }}>
+            <button
+              type="button"
+              onClick={() => {
+                setShowResultModal(false);
+                onClose?.();
+              }}
+              aria-label="Cerrar resultados"
+              style={{
+                position: 'absolute',
+                top: '1rem',
+                right: '1rem',
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                padding: '0.4rem',
+                borderRadius: '6px'
+              }}
+            >
+              <X size={18} />
+            </button>
             {modalStep === 'COMPLETED' && (
               <div>
                 <div style={{
@@ -223,7 +246,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {allowRetry && <button
+                  <button
                     type="button"
                     onClick={() => setModalStep('REVIEW')}
                     className="btn-primary"
@@ -239,19 +262,23 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                     }}
                   >
                     <CheckCircle2 size={16} /> Revisar Respuestas (Aciertos y Fallos)
-                  </button>}
+                  </button>
 
-                  {allowRetry && <button
+                  <button
                     type="button"
-                    onClick={handleReset}
+                    onClick={() => {
+                      setShowResultModal(false);
+                      onClose?.();
+                    }}
                     style={{
                       width: '100%',
                       padding: '0.85rem',
                       borderRadius: '8px',
                       border: '1px solid var(--border)',
-                      background: 'transparent',
+                      background: 'var(--surface)',
                       color: 'var(--text)',
                       fontSize: '0.9rem',
+                      fontWeight: 600,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -259,7 +286,28 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                       cursor: 'pointer'
                     }}
                   >
-                    <RotateCcw size={16} /> Reintentar Examen
+                    ✓ Finalizar y Salir
+                  </button>
+
+                  {allowRetry && <button
+                    type="button"
+                    onClick={handleReset}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: 'transparent',
+                      color: 'var(--text-muted)',
+                      fontSize: '0.85rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.4rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <RotateCcw size={15} /> Reintentar Examen
                   </button>}
                 </div>
               </div>
@@ -367,8 +415,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                   })}
                 </div>
 
-                {/* Footer de Revisión */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: '0.5rem' }}>
                   <button
                     type="button"
                     onClick={() => setModalStep('GRADE')}
@@ -385,21 +432,43 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                     ← Volver a Calificación
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={handleReset}
-                    className="btn-primary"
-                    style={{
-                      padding: '0.6rem 1.25rem',
-                      fontSize: '0.85rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.4rem',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <RotateCcw size={15} /> Reintentar Examen
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowResultModal(false);
+                        onClose?.();
+                      }}
+                      className="btn-primary"
+                      style={{
+                        padding: '0.6rem 1.25rem',
+                        fontSize: '0.85rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ✓ Finalizar y Salir
+                    </button>
+                    {allowRetry && (
+                      <button
+                        type="button"
+                        onClick={handleReset}
+                        style={{
+                          padding: '0.6rem 1.1rem',
+                          fontSize: '0.85rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.4rem',
+                          border: '1px solid var(--border)',
+                          borderRadius: '8px',
+                          background: 'transparent',
+                          color: 'var(--text-muted)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <RotateCcw size={15} /> Reintentar
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             )}

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { BookOpen, CalendarDays, CheckCircle2, Clock3, ExternalLink, FileText, Link, ListChecks, Paperclip, PenTool, Send, X } from 'lucide-react';
 import FormPlayer from '../components/FormPlayer';
 import ExamReviewModal from '../components/ExamReviewModal';
+import TaskCard, { type TaskItem } from '../components/TaskCard';
 import { useParent } from '../context/ParentContext';
 import type { ReviewQuestion } from '../components/ExamReviewModal';
 
@@ -113,15 +114,20 @@ interface StructuredTaskStep {
   id: string;
   order: number;
   title: string;
+  materialId?: string | null;
   isCompleted: boolean;
-  material?: { id: string; title: string; type: string; url?: string | null; description?: string | null; formData?: { questions?: unknown[] } | null } | null;
+  material?: { id: string; title: string; type: 'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'FORM'; url?: string | null; description?: string | null; level?: string | null; category?: string | null; formData?: { questions?: unknown[] } | null } | null;
   submission?: { id: string; content: string | null; grade: number | null; feedback: string | null; submittedAt: string } | null;
 }
 
 interface StructuredTask {
   id: string;
   title: string;
+  description?: string | null;
+  dueDate?: string | null;
+  category?: string;
   isSequential: boolean;
+  isTemplate?: boolean;
   steps: StructuredTaskStep[];
 }
 
@@ -197,7 +203,14 @@ const StudentCourses: React.FC = () => {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
         body: JSON.stringify({ content: JSON.stringify({ answers, score, total }), grade: total ? (score / total) * 10 : 0 })
       });
-      if (response.ok) { setViewingContent(null); setViewingMaterialAssignment(null); }
+      if (response.ok) {
+        const token = localStorage.getItem('token');
+        const role = localStorage.getItem('userRole');
+        const activeStudentId = role === 'PARENT' ? selectedStudentId : null;
+        const query = activeStudentId ? `?studentId=${activeStudentId}` : '';
+        const coursesRes = await fetch(`${apiUrl}/api/courses${query}`, { headers: { Authorization: `Bearer ${token}` } });
+        if (coursesRes.ok) setCourses(await coursesRes.json());
+      }
     } catch (error) {
       console.error('Error al entregar el examen:', error);
     }
@@ -424,77 +437,56 @@ const StudentCourses: React.FC = () => {
       {structuredTasks.length > 0 && (
         <section style={{ marginTop: '2.5rem' }}>
           <h2 style={{ margin: '0 0 1rem', fontSize: '1.35rem', display: 'flex', alignItems: 'center', gap: '0.6rem', color: 'var(--text-main)' }}>
-            <ListChecks style={{ color: 'var(--primary)' }} /> Tareas Estructuradas
+            <ListChecks style={{ color: 'var(--primary)' }} /> Tareas Guiadas y Módulos Estructurados
           </h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             {structuredTasks.map((task) => {
-              const completedCount = task.steps.filter((step) => step.isCompleted).length;
-              const progress = task.steps.length ? Math.round((completedCount / task.steps.length) * 100) : 0;
-              return (
-                <article key={task.id} className="glass-panel" style={{ padding: '1.25rem', border: '1px solid var(--primary-border)' }}>
-                  <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-                    <div>
-                      <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-main)' }}>{task.title}</h3>
-                      <span style={{ display: 'block', marginTop: '0.3rem', color: 'var(--text-muted)', fontSize: '0.82rem' }}>{completedCount} de {task.steps.length} pasos completados - {progress}%</span>
-                    </div>
-                    <div style={{ width: 'min(180px, 100%)', height: '8px', borderRadius: '999px', overflow: 'hidden', background: 'var(--surface-alt)', border: '1px solid var(--border)' }}>
-                      <div style={{ width: `${progress}%`, height: '100%', background: 'var(--primary)', transition: 'width 0.2s ease' }} />
-                    </div>
-                  </header>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                    {(() => {
-                      let firstIncompleteFound = false;
-                      return task.steps.map((step) => {
-                        const isBlocked = task.isSequential && firstIncompleteFound;
-                        if (!step.isCompleted) firstIncompleteFound = true;
-                        
-                        const materialAction = step.material?.type === 'FORM'
-                          ? (step.isCompleted ? 'Ver Examen Corregido' : 'Realizar Test')
-                          : step.material?.type === 'VIDEO' ? 'Ver Vídeo' : step.material?.type === 'DOCUMENT' ? 'Ver Documento' : step.material ? 'Abrir Material' : 'Ver Paso';
+              const taskItem: TaskItem = {
+                id: task.id,
+                title: task.title,
+                description: task.description,
+                dueDate: task.dueDate,
+                category: task.category,
+                isSequential: task.isSequential,
+                isTemplate: task.isTemplate,
+                steps: task.steps.map((s) => ({
+                  id: s.id,
+                  order: s.order,
+                  title: s.title,
+                  materialId: s.materialId,
+                  material: s.material,
+                  isCompleted: s.isCompleted,
+                  submission: s.submission
+                }))
+              };
 
-                        return (
-                          <div key={step.id} style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.75rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)', opacity: isBlocked ? 0.6 : 1, pointerEvents: isBlocked ? 'none' : 'auto' }}>
-                            <input 
-                              type="checkbox" 
-                              checked={step.isCompleted} 
-                              disabled={isBlocked || step.isCompleted}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  if (step.material?.type === 'VIDEO' || !step.material) {
-                                    completeStructuredStep(step.id);
-                                  } else if (step.material?.type === 'DOCUMENT') {
-                                    setViewingStructuredUpload({ stepId: step.id, title: step.title });
-                                    setUploadUrl('');
-                                  } else if (step.material?.type === 'FORM') {
-                                    if (!step.isCompleted) setViewingStructuredForm({ stepId: step.id, material: step.material });
-                                  }
-                                }
-                              }}
-                              style={{ width: '22px', height: '22px', cursor: (isBlocked || step.isCompleted) ? 'default' : 'pointer', accentColor: 'var(--primary)' }}
-                            />
-                            
-                            <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', color: 'var(--text-main)', fontSize: '0.9rem' }}>
-                                <span style={{ textDecoration: step.isCompleted ? 'line-through' : 'none', color: step.isCompleted ? 'var(--text-muted)' : 'inherit' }}>
-                                  <strong style={{ marginRight: '0.35rem' }}>{step.order}.</strong>{step.title}
-                                </span>
-                              </div>
-                              <button 
-                                type="button" 
-                                onClick={() => openStructuredStep(step)} 
-                                disabled={(userRole === 'PARENT' && !step.material?.url) && step.material?.type !== 'FORM'} 
-                                className="btn-secondary" 
-                                style={{ padding: '0.4rem 0.7rem', fontSize: '0.8rem', opacity: (userRole === 'PARENT' && !step.material?.url && step.material?.type !== 'FORM') ? 0.55 : 1 }}
-                              >
-                                {step.isCompleted && step.material?.type !== 'FORM' ? 'Ver de nuevo' : materialAction}
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
-                </article>
+              return (
+                <TaskCard
+                  key={task.id}
+                  task={taskItem}
+                  mode="STUDENT"
+                  onOpenStep={(step) => {
+                    const origStep = task.steps.find((s) => s.id === step.id);
+                    if (origStep) {
+                      if (origStep.material?.type === 'FORM') {
+                        if (!origStep.isCompleted) {
+                          setViewingStructuredForm({ stepId: origStep.id, material: origStep.material });
+                        } else {
+                          openStructuredStep(origStep);
+                        }
+                      } else if (origStep.material?.type === 'DOCUMENT') {
+                        setViewingStructuredUpload({ stepId: origStep.id, title: origStep.title });
+                        setUploadUrl('');
+                      } else {
+                        completeStructuredStep(origStep.id);
+                      }
+                    }
+                  }}
+                  onReviewStep={(step) => {
+                    const origStep = task.steps.find((s) => s.id === step.id);
+                    if (origStep) openStructuredStep(origStep);
+                  }}
+                />
               );
             })}
           </div>
@@ -672,27 +664,27 @@ const StudentCourses: React.FC = () => {
           </div>
         </div>, document.body
       )}
-      {viewingContent?.material?.type === 'FORM' && viewingContent.material.formData && createPortal(<div className="modal-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: '0.75rem 1rem 0', background: 'rgba(255,255,255,0.2)' }}>
-        <div className="modal-card modal-card--player" style={{ width: '100%', maxWidth: '980px', height: 'calc(100vh - 0.75rem)', overflowY: 'auto', background: 'var(--background)', borderRadius: '12px 12px 0 0', padding: '1rem' }}>
+      {viewingContent?.material?.type === 'FORM' && viewingContent.material.formData && createPortal(<div className="modal-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.25rem', background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)' }}>
+        <div className="modal-card modal-card--player" style={{ width: '100%', maxWidth: '980px', maxHeight: '90vh', overflowY: 'auto', background: 'var(--background)', borderRadius: '14px', padding: '1.5rem', margin: 'auto', position: 'relative' }}>
           <button onClick={() => setViewingContent(null)} aria-label="Cerrar examen" className="modal-close"><X size={22} /></button>
           {userRole === 'PARENT' ? (
             <div style={{ padding: '2rem', textAlign: 'center', color: '#24583e', background: '#eaf4ef', borderRadius: '10px', border: '1px solid #bfe0d0', margin: '2rem 0', fontWeight: 600 }}>
               🛡️ Vista del Tutor (Modo Solo Lectura): Los exámenes interactivos deben ser realizados directamente por el alumno desde su propia cuenta.
             </div>
           ) : (
-            <FormPlayer title={viewingContent.title} description={viewingContent.description} questions={viewingContent.material.formData.questions as never[] || []} onFinish={handleExamFinish} />
+            <FormPlayer title={viewingContent.title} description={viewingContent.description} questions={viewingContent.material.formData.questions as never[] || []} onFinish={handleExamFinish} onClose={() => setViewingContent(null)} />
           )}
         </div>
       </div>, document.body)}
-      {viewingMaterialAssignment?.material.type === 'FORM' && viewingMaterialAssignment.material.formData && createPortal(<div className="modal-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: '0.75rem 1rem 0', background: 'rgba(255,255,255,0.2)' }}>
-        <div className="modal-card modal-card--player" style={{ width: '100%', maxWidth: '980px', height: 'calc(100vh - 0.75rem)', overflowY: 'auto', background: 'var(--background)', borderRadius: '12px 12px 0 0', padding: '1rem' }}>
+      {viewingMaterialAssignment?.material.type === 'FORM' && viewingMaterialAssignment.material.formData && createPortal(<div className="modal-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.25rem', background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)' }}>
+        <div className="modal-card modal-card--player" style={{ width: '100%', maxWidth: '980px', maxHeight: '90vh', overflowY: 'auto', background: 'var(--background)', borderRadius: '14px', padding: '1.5rem', margin: 'auto', position: 'relative' }}>
           <button onClick={() => setViewingMaterialAssignment(null)} aria-label="Cerrar examen" className="modal-close"><X size={22} /></button>
           {userRole === 'PARENT' ? (
             <div style={{ padding: '2rem', textAlign: 'center', color: '#24583e', background: '#eaf4ef', borderRadius: '10px', border: '1px solid #bfe0d0', margin: '2rem 0', fontWeight: 600 }}>
               🛡️ Vista del Tutor (Modo Solo Lectura): Los exámenes interactivos deben ser realizados directamente por el alumno desde su propia cuenta.
             </div>
           ) : (
-            <FormPlayer title={viewingMaterialAssignment.material.title} description={viewingMaterialAssignment.material.description || undefined} questions={(viewingMaterialAssignment.material.formData.questions || []) as any[]} onFinish={handleExamFinish} />
+            <FormPlayer title={viewingMaterialAssignment.material.title} description={viewingMaterialAssignment.material.description || undefined} questions={(viewingMaterialAssignment.material.formData.questions || []) as any[]} onFinish={handleExamFinish} onClose={() => setViewingMaterialAssignment(null)} />
           )}
         </div>
       </div>, document.body)}
@@ -706,8 +698,8 @@ const StudentCourses: React.FC = () => {
           onClose={() => setReviewingContent(null)}
         />
       )}
-      {viewingStructuredForm && createPortal(<div className="modal-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: '0.75rem 1rem 0', background: 'rgba(255,255,255,0.2)' }}>
-        <div className="modal-card modal-card--player" style={{ width: '100%', maxWidth: '980px', height: 'calc(100vh - 0.75rem)', overflowY: 'auto', background: 'var(--background)', borderRadius: '12px 12px 0 0', padding: '1rem' }}>
+      {viewingStructuredForm && createPortal(<div className="modal-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.25rem', background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)' }}>
+        <div className="modal-card modal-card--player" style={{ width: '100%', maxWidth: '980px', maxHeight: '90vh', overflowY: 'auto', background: 'var(--background)', borderRadius: '14px', padding: '1.5rem', margin: 'auto', position: 'relative' }}>
           <button onClick={() => setViewingStructuredForm(null)} aria-label="Cerrar examen" className="modal-close"><X size={22} /></button>
           {userRole === 'PARENT' ? (
             <div style={{ padding: '2rem', textAlign: 'center', color: '#24583e', background: '#eaf4ef', borderRadius: '10px', border: '1px solid #bfe0d0', margin: '2rem 0', fontWeight: 600 }}>Vista del Tutor: el examen debe realizarlo el alumno.</div>
@@ -728,9 +720,9 @@ const StudentCourses: React.FC = () => {
                     ...task,
                     steps: task.steps.map((step) => step.id === viewingStructuredForm.stepId ? { ...step, isCompleted: true, submission: result.submission } : step)
                   })));
-                  setViewingStructuredForm(null);
                 }
               }}
+              onClose={() => setViewingStructuredForm(null)}
             />
           )}
         </div>

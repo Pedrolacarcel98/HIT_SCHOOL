@@ -4,6 +4,7 @@ import { CalendarDays, CheckCircle2, Clock3, FileText, Search, X, ExternalLink, 
 import DocumentViewer from './DocumentViewer';
 import FormPlayer from './FormPlayer';
 import ExamReviewModal from './ExamReviewModal';
+import TaskCard, { type TaskItem } from './TaskCard';
 import { useParent } from '../context/ParentContext';
 import type { ReviewQuestion } from './ExamReviewModal';
 
@@ -32,15 +33,20 @@ interface AssignedMaterial {
 interface StructuredTask {
   id: string;
   title: string;
+  description?: string | null;
+  dueDate?: string | null;
+  category?: string;
   assignmentType: 'CLASS' | 'INDIVIDUAL';
   isSequential: boolean;
+  isTemplate?: boolean;
   steps: Array<{
     id: string;
     order: number;
     title: string;
+    materialId?: string | null;
     isCompleted?: boolean;
     submission?: any;
-    material?: { id: string; title: string; type: string; url?: string | null; description?: string; level?: string; category?: string; formData?: any } | null;
+    material?: { id: string; title: string; type: 'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'FORM'; url?: string | null; description?: string; level?: string; category?: string; formData?: any } | null;
   }>;
 }
 
@@ -250,16 +256,6 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     }
   };
 
-  const handleTick = (step: any, task: StructuredTask) => {
-    if (step.isCompleted) return;
-    
-    if (step.material?.type === 'VIDEO' || !step.material) {
-      submitDirectly(step.id);
-    } else {
-      openActionModal(step, task);
-    }
-  };
-
   const handleSubmitAssignment = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!viewingMaterial) return;
@@ -390,7 +386,6 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
       });
       if (res.ok) {
         await fetchAssignedMaterials();
-        setViewingMaterial(null);
       }
     } catch (err) {
       console.error(err);
@@ -486,88 +481,64 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
       )}
 
       {structuredTasks.length > 0 && (
-        <section style={{ marginTop: '2rem' }}>
-          <h2 style={{ margin: '0 0 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-main)', fontSize: '1.2rem' }}>
-            <FileText size={20} style={{ color: 'var(--primary)' }} /> Tareas Estructuradas
+        <section style={{ marginTop: '2.5rem' }}>
+          <h2 style={{ margin: '0 0 1.25rem', display: 'flex', alignItems: 'center', gap: '0.65rem', color: 'var(--text-main)', fontSize: '1.25rem' }}>
+            <FileText size={22} style={{ color: 'var(--primary)' }} /> Módulos y Tareas Guiadas (Paso a Paso)
           </h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-            {structuredTasks.map((task) => (
-              <article key={task.id} className="glass-panel" style={{ padding: '1rem 1.15rem', border: '1px solid var(--primary-border)' }}>
-                <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
-                  <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1rem' }}>{task.title}</h3>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    {task.isSequential && <span style={{ padding: '0.2rem 0.55rem', borderRadius: '12px', background: '#fef3c7', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}>Paso a paso</span>}
-                    <span style={{ padding: '0.2rem 0.55rem', borderRadius: '12px', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.72rem', fontWeight: 700 }}>{task.steps.length} pasos</span>
-                  </div>
-                </header>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-                  {(() => {
-                    let firstIncompleteFound = false;
-                    return task.steps.map((step) => {
-                      const isBlocked = task.isSequential && firstIncompleteFound;
-                      if (!step.isCompleted) firstIncompleteFound = true;
-                      
-                      return (
-                        <div key={step.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.85rem', padding: '0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)', opacity: isBlocked ? 0.6 : 1, pointerEvents: isBlocked ? 'none' : 'auto' }}>
-                          <div style={{ paddingTop: '0.15rem' }}>
-                            <input 
-                              type="checkbox" 
-                              checked={step.isCompleted} 
-                              disabled={isBlocked || step.isCompleted}
-                              onChange={(e) => {
-                                if (e.target.checked) handleTick(step, task);
-                              }}
-                              style={{ width: '22px', height: '22px', cursor: (isBlocked || step.isCompleted) ? 'default' : 'pointer', accentColor: 'var(--primary)' }}
-                            />
-                          </div>
-                          
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', color: 'var(--text-main)', fontSize: '0.95rem' }}>
-                              <span style={{ fontWeight: 600, textDecoration: step.isCompleted ? 'line-through' : 'none', color: step.isCompleted ? 'var(--text-muted)' : 'inherit' }}>
-                                {step.order}. {step.title}
-                              </span>
-                            </div>
-                            
-                            {step.material && (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                <button 
-                                  type="button" 
-                                  onClick={() => {
-                                    if (step.material?.type === 'FORM') {
-                                      openActionModal(step, task);
-                                    } else if (step.material?.url) {
-                                      window.open(step.material.url, '_blank', 'noopener,noreferrer');
-                                    }
-                                  }} 
-                                  disabled={!step.material?.url && step.material?.type !== 'FORM'} 
-                                  style={{ padding: '0.35rem 0.65rem', borderRadius: '10px', border: '1px solid var(--primary-border)', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.78rem', fontWeight: 700, cursor: (step.material?.url || step.material?.type === 'FORM') ? 'pointer' : 'default', opacity: (step.material?.url || step.material?.type === 'FORM') ? 1 : 0.6 }}
-                                >
-                                  [ {step.material.type} ] {step.material.title}
-                                </button>
-                                
-                                {step.isCompleted && step.material.type !== 'VIDEO' && (
-                                  <button type="button" onClick={() => openActionModal(step, task)} style={{ padding: '0.35rem 0.65rem', borderRadius: '10px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>
-                                    Ver Entrega / Resultados
-                                  </button>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-              </article>
-            ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            {structuredTasks.map((task) => {
+              const taskItem: TaskItem = {
+                id: task.id,
+                title: task.title,
+                description: task.description,
+                dueDate: task.dueDate,
+                category: task.category,
+                isSequential: task.isSequential,
+                isTemplate: task.isTemplate,
+                steps: task.steps.map((s) => ({
+                  id: s.id,
+                  order: s.order,
+                  title: s.title,
+                  materialId: s.materialId,
+                  material: s.material,
+                  isCompleted: s.isCompleted,
+                  submission: s.submission
+                }))
+              };
+
+              return (
+                <TaskCard
+                  key={task.id}
+                  task={taskItem}
+                  mode="STUDENT"
+                  onOpenStep={(step) => {
+                    const origStep = task.steps.find((s) => s.id === step.id);
+                    if (origStep) {
+                      if (origStep.material?.type === 'FORM') {
+                        openActionModal(origStep, task);
+                      } else if (origStep.material?.type === 'VIDEO' || !origStep.material) {
+                        if (!origStep.isCompleted) submitDirectly(origStep.id);
+                        if (origStep.material?.url) window.open(origStep.material.url, '_blank', 'noopener,noreferrer');
+                      } else {
+                        openActionModal(origStep, task);
+                      }
+                    }
+                  }}
+                  onReviewStep={(step) => {
+                    const origStep = task.steps.find((s) => s.id === step.id);
+                    if (origStep) openActionModal(origStep, task);
+                  }}
+                />
+              );
+            })}
           </div>
         </section>
       )}
 
       {/* Modal Principal de Tarea / Entrega */}
       {viewingMaterial && createPortal(
-        <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'stretch', justifyContent: 'center', zIndex: 100, padding: '0.75rem 1rem 0', overflow: 'hidden' }}>
-          <div className="modal-card modal-card--player" style={{ width: '100%', maxWidth: viewingMaterial.type === 'FORM' ? '980px' : '920px', height: 'calc(100vh - 0.75rem)', background: 'var(--background)', borderRadius: '12px 12px 0 0', overflow: 'hidden', display: 'flex', flexDirection: 'column', margin: '0 auto', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
+        <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1.25rem', overflow: 'hidden' }}>
+          <div className="modal-card modal-card--player" style={{ width: '100%', maxWidth: viewingMaterial.type === 'FORM' ? '980px' : '920px', maxHeight: '90vh', background: 'var(--background)', borderRadius: '14px', overflow: 'hidden', display: 'flex', flexDirection: 'column', margin: 'auto', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
             
             {/* Header del Modal */}
             <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface)' }}>
@@ -609,6 +580,7 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                     description={viewingMaterial.description} 
                     questions={viewingMaterial.formData.questions} 
                     onFinish={handleFormFinish} 
+                    onClose={() => setViewingMaterial(null)}
                   />
                 )
               ) : (

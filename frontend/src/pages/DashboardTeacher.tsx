@@ -143,7 +143,7 @@ const DashboardTeacher: React.FC = () => {
                     </td>
                     <td style={{ padding: '1rem 0.75rem', textAlign: 'right' }}>
                       <button
-                        onClick={() => navigate('/teacher/grades')}
+                        onClick={() => navigate(`/teacher/grades?student=${encodeURIComponent(sub.studentName)}`)}
                         style={{
                           background: 'var(--primary)',
                           color: '#fff',

@@ -367,10 +367,37 @@ router.delete('/:id', authenticateToken, requireTeacher, async (req: AuthRequest
       await transaction.material.delete({ where: { id } });
     });
 
-    res.json({ message: 'Material eliminado con éxito' });
+    res.json({ message: 'Material eliminado correctamente' });
   } catch (error) {
     console.error('Error al eliminar material:', error);
-    res.status(500).json({ error: 'Error al eliminar el material' });
+    res.status(500).json({ error: 'Error interno al eliminar el material' });
+  }
+});
+
+// Duplicar material / examen
+router.post('/:id/duplicate', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const original = await prisma.material.findUnique({ where: { id } });
+    if (!original) return res.status(404).json({ error: 'Material no encontrado' });
+
+    const duplicated = await prisma.material.create({
+      data: {
+        title: req.body.title || `[Copia] ${original.title}`,
+        description: original.description,
+        type: original.type,
+        level: original.level,
+        category: original.category,
+        url: original.url,
+        formData: original.formData ? JSON.parse(JSON.stringify(original.formData)) : null,
+        teacherId: req.user!.id
+      }
+    });
+
+    res.status(201).json(duplicated);
+  } catch (error) {
+    console.error('Error al duplicar material:', error);
+    res.status(500).json({ error: 'Error al duplicar el material' });
   }
 });
 

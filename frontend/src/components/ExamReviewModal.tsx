@@ -195,7 +195,7 @@ const ExamReviewModal: React.FC<ExamReviewModalProps> = ({ title, questions = []
   );
 };
 
-const backdropStyle: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.75rem', background: '#aeb4b7' };
+const backdropStyle: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.75rem', background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(6px)' };
 const modalStyle: React.CSSProperties = { width: 'min(92vw, 570px)', height: 'min(90vh, 620px)', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: '1rem 1.5rem 0.9rem', background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '12px', boxShadow: '0 12px 28px rgba(31, 41, 55, 0.16)' };
 const headerStyle: React.CSSProperties = { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', paddingBottom: '0.65rem', borderBottom: '1px solid #e5e7eb' };
 const scoreStyle: React.CSSProperties = { margin: '0.55rem auto 0.2rem', padding: '0.55rem 1.5rem', minWidth: '180px', textAlign: 'center', borderRadius: '9px', background: '#f3f4f6', border: '1px solid #e5e7eb' };
