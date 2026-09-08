@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, CalendarDays, CheckCircle2, Clock3, FileText, ListChecks, X } from 'lucide-react';
+import { BookOpen, CalendarDays, CheckCircle2, Clock3, ExternalLink, FileText, Link, ListChecks, Paperclip, PenTool, Send, X } from 'lucide-react';
 import FormPlayer from '../components/FormPlayer';
 import ExamReviewModal from '../components/ExamReviewModal';
 import { useParent } from '../context/ParentContext';
@@ -14,6 +14,43 @@ interface ParsedExamData {
   score?: number | null;
   total?: number | null;
 }
+
+interface SubmissionAttachment {
+  name: string;
+  mimeType: string;
+  dataUrl: string;
+  size?: number;
+}
+
+const parseSubmissionContent = (content?: string | null): { text: string; link: string | null; attachment: SubmissionAttachment | null } => {
+  if (!content) return { text: '', link: null, attachment: null };
+
+  try {
+    const parsed = JSON.parse(content);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const attachment = parsed.attachment && typeof parsed.attachment === 'object' ? {
+        name: typeof parsed.attachment.name === 'string' ? parsed.attachment.name : 'archivo-adjunto',
+        mimeType: typeof parsed.attachment.mimeType === 'string' ? parsed.attachment.mimeType : 'application/octet-stream',
+        dataUrl: typeof parsed.attachment.dataUrl === 'string' ? parsed.attachment.dataUrl : '',
+        size: typeof parsed.attachment.size === 'number' ? parsed.attachment.size : undefined
+      } : null;
+
+      return {
+        text: typeof parsed.text === 'string' ? parsed.text : (typeof parsed.content === 'string' ? parsed.content : ''),
+        link: typeof parsed.link === 'string' ? parsed.link : (typeof parsed.url === 'string' ? parsed.url : null),
+        attachment
+      };
+    }
+  } catch {
+    // Legacy plain text and URL payloads
+  }
+
+  return {
+    text: content,
+    link: /^https?:\/\//i.test(content) ? content : null,
+    attachment: null
+  };
+};
 
 const parseSavedExam = (content?: string | null): ParsedExamData | null => {
   if (!content) return null;
@@ -51,13 +88,25 @@ interface IndividualContent {
   category?: string;
   dueDate?: string;
   material?: { id?: string; title: string; type: string; level?: string; description?: string; url?: string; formData?: { questions?: unknown[] } } | null;
-  submissions?: { grade?: number | null; content?: string | null }[];
+  submissions?: { grade?: number | null; content?: string | null; submittedAt?: string | null }[];
 }
 
 interface AssignedMaterial {
   id: string;
   deadline?: string | null;
+  status?: 'PENDING' | 'COMPLETED';
   material: { id: string; title: string; type: string; level?: string; description?: string | null; url?: string | null; formData?: { questions?: unknown[] } | null };
+}
+
+interface DeliveryTarget {
+  source: 'ASSIGNMENT' | 'MATERIAL_ASSIGNMENT';
+  id: string;
+  title: string;
+  description?: string | null;
+  materialUrl?: string | null;
+  completed: boolean;
+  submissionContent?: string | null;
+  submittedAt?: string | null;
 }
 
 interface StructuredTaskStep {
@@ -86,6 +135,13 @@ const StudentCourses: React.FC = () => {
   const [viewingContent, setViewingContent] = useState<IndividualContent | null>(null);
   const [viewingMaterialAssignment, setViewingMaterialAssignment] = useState<AssignedMaterial | null>(null);
   const [reviewingContent, setReviewingContent] = useState<IndividualContent | null>(null);
+  const [deliveryTarget, setDeliveryTarget] = useState<DeliveryTarget | null>(null);
+  const [deliveryType, setDeliveryType] = useState<'TEXT' | 'LINK' | 'SIMPLE'>('TEXT');
+  const [deliveryText, setDeliveryText] = useState('');
+  const [deliveryLink, setDeliveryLink] = useState('');
+  const [deliveryAttachment, setDeliveryAttachment] = useState<SubmissionAttachment | null>(null);
+  const [deliveryError, setDeliveryError] = useState('');
+  const [isSavingDelivery, setIsSavingDelivery] = useState(false);
   const [viewingStructuredForm, setViewingStructuredForm] = useState<{ stepId: string; material: NonNullable<StructuredTaskStep['material']> } | null>(null);
   const [reviewingStructuredForm, setReviewingStructuredForm] = useState<{ title: string; material: NonNullable<StructuredTaskStep['material']>; submission: NonNullable<StructuredTaskStep['submission']> } | null>(null);
   const [viewingStructuredUpload, setViewingStructuredUpload] = useState<{ stepId: string; title: string } | null>(null);
@@ -147,17 +203,137 @@ const StudentCourses: React.FC = () => {
     }
   };
 
+  const resetDeliveryForm = () => {
+    setDeliveryType('TEXT');
+    setDeliveryText('');
+    setDeliveryLink('');
+    setDeliveryAttachment(null);
+    setDeliveryError('');
+  };
+
+  const openDeliveryModal = (target: DeliveryTarget) => {
+    setDeliveryTarget(target);
+    resetDeliveryForm();
+  };
+
+  const handleDeliveryAttachment = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      setDeliveryAttachment(null);
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      setDeliveryError('El archivo adjunto no puede superar 10 MB.');
+      setDeliveryAttachment(null);
+      event.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setDeliveryAttachment({
+        name: file.name,
+        mimeType: file.type || 'application/octet-stream',
+        dataUrl: String(reader.result || ''),
+        size: file.size
+      });
+      setDeliveryError('');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const submitDelivery = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!deliveryTarget || userRole !== 'STUDENT') return;
+
+    let content = '';
+    let link = '';
+    if (deliveryType === 'TEXT') {
+      if (!deliveryText.trim() && !deliveryAttachment) {
+        setDeliveryError('Escribe una respuesta o adjunta un archivo antes de entregar.');
+        return;
+      }
+      content = deliveryText.trim();
+    } else if (deliveryType === 'LINK') {
+      if (!deliveryLink.trim() && !deliveryAttachment) {
+        setDeliveryError('Introduce un enlace o adjunta un archivo antes de entregar.');
+        return;
+      }
+      if (deliveryLink.trim() && !/^https?:\/\//i.test(deliveryLink.trim())) {
+        setDeliveryError('El enlace debe comenzar por http:// o https://.');
+        return;
+      }
+      link = deliveryLink.trim();
+      content = link;
+    } else {
+      content = 'Tarea completada por el alumno.';
+    }
+
+    const responseBody = deliveryAttachment
+      ? { content, link: link || undefined, attachment: deliveryAttachment }
+      : { content };
+
+    try {
+      setIsSavingDelivery(true);
+      setDeliveryError('');
+      const response = await fetch(`${apiUrl}${deliveryTarget.source === 'MATERIAL_ASSIGNMENT' ? `/api/materials/assignments/${deliveryTarget.id}/submit` : `/api/assignments/${deliveryTarget.id}/submit`}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+        body: JSON.stringify(responseBody)
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        setDeliveryError(data.error || 'No se pudo entregar el recurso.');
+        return;
+      }
+      const studentParam = selectedStudentId ? `?studentId=${selectedStudentId}` : '';
+      const [assignmentsResponse, materialsResponse] = await Promise.all([
+        fetch(`${apiUrl}/api/assignments/me${studentParam}`, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }),
+        fetch(`${apiUrl}/api/materials/assigned-to-me${studentParam}`, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
+      ]);
+      if (assignmentsResponse.ok) {
+        const assignments = await assignmentsResponse.json();
+        setIndividualContent(assignments.filter((assignment: IndividualContent & { courseId?: string }) => !assignment.courseId));
+      }
+      if (materialsResponse.ok) setAssignedMaterials(await materialsResponse.json());
+      setDeliveryTarget(null);
+      resetDeliveryForm();
+    } catch (error) {
+      console.error('Error al entregar recurso:', error);
+      setDeliveryError('Error de conexión al entregar el recurso.');
+    } finally {
+      setIsSavingDelivery(false);
+    }
+  };
+
   const openAssignedMaterial = (content: IndividualContent) => {
     if (content.material?.type === 'FORM') {
       if (content.submissions?.length) setReviewingContent(content);
       else setViewingContent(content);
     }
-    else if (content.material?.url) window.open(content.material.url, '_blank', 'noopener,noreferrer');
+    else openDeliveryModal({
+      source: 'ASSIGNMENT',
+      id: content.id,
+      title: content.title || content.material?.title || 'Tarea',
+      description: content.description || content.material?.description,
+      materialUrl: content.material?.url || null,
+      completed: Boolean(content.submissions?.length),
+      submissionContent: content.submissions?.[0]?.content || null,
+      submittedAt: content.submissions?.[0]?.submittedAt || null
+    });
   };
 
   const openMaterialAssignment = (assignment: AssignedMaterial) => {
     if (assignment.material.type === 'FORM') setViewingMaterialAssignment(assignment);
-    else if (assignment.material.url) window.open(assignment.material.url, '_blank', 'noopener,noreferrer');
+    else openDeliveryModal({
+      source: 'MATERIAL_ASSIGNMENT',
+      id: assignment.id,
+      title: assignment.material.title,
+      description: assignment.material.description,
+      materialUrl: assignment.material.url || null,
+      completed: assignment.status === 'COMPLETED'
+    });
   };
 
   const completeStructuredStep = async (stepId: string, submissionContent?: string) => {
@@ -348,7 +524,7 @@ const StudentCourses: React.FC = () => {
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: completed ? '#24583e' : '#8d5b12', background: completed ? 'var(--primary-light)' : '#fef7e8', padding: '0.3rem 0.65rem', borderRadius: '14px', border: completed ? '1px solid var(--primary-border)' : '1px solid #fae0b0', fontSize: '0.82rem', fontWeight: 700 }}>
                   {completed ? <><CheckCircle2 size={16} /> Entregado</> : <><Clock3 size={16} /> Pendiente</>}
                 </span>
-                <button className="btn-primary" onClick={() => openAssignedMaterial(content)} style={{ padding: '0.55rem 0.9rem', fontSize: '0.84rem' }}>{isExam ? (completed ? 'Ver Examen' : 'Realizar Examen') : 'Ver / Abrir'}</button>
+                <button className="btn-primary" onClick={() => openAssignedMaterial(content)} style={{ padding: '0.55rem 0.9rem', fontSize: '0.84rem' }}>{isExam ? (completed ? 'Ver Examen' : 'Realizar Examen') : (completed ? 'Ver Entrega' : 'Ver / Entregar')}</button>
               </div>
             </article>;
           })}
@@ -359,6 +535,7 @@ const StudentCourses: React.FC = () => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '1.25rem' }}>
           {assignedMaterials.filter(assignment => !assignedMaterialIds.has(assignment.material.id)).map(assignment => {
             const isExam = assignment.material.type === 'FORM';
+            const completed = assignment.status === 'COMPLETED';
             return <article key={assignment.id} className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: '310px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.15rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#2b6cb0', fontSize: '0.76rem', fontWeight: 700, textTransform: 'uppercase' }}>
@@ -373,13 +550,128 @@ const StudentCourses: React.FC = () => {
                 {assignment.deadline && <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><CalendarDays size={14} /> Entrega: {new Date(assignment.deadline).toLocaleDateString('es-ES')}</span>}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginTop: '1.25rem' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#8d5b12', background: '#fef7e8', padding: '0.3rem 0.65rem', borderRadius: '14px', border: '1px solid #fae0b0', fontSize: '0.82rem', fontWeight: 700 }}><Clock3 size={16} /> Pendiente</span>
-                <button className="btn-primary" onClick={() => openMaterialAssignment(assignment)} disabled={!isExam && !assignment.material.url} style={{ padding: '0.55rem 0.9rem', fontSize: '0.84rem', opacity: isExam || assignment.material.url ? 1 : 0.6 }}>{isExam ? 'Realizar Examen' : 'Ver / Abrir'}</button>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: completed ? '#24583e' : '#8d5b12', background: completed ? 'var(--primary-light)' : '#fef7e8', padding: '0.3rem 0.65rem', borderRadius: '14px', border: completed ? '1px solid var(--primary-border)' : '1px solid #fae0b0', fontSize: '0.82rem', fontWeight: 700 }}>
+                  {completed ? <><CheckCircle2 size={16} /> Entregado</> : <><Clock3 size={16} /> Pendiente</>}
+                </span>
+                <button className="btn-primary" onClick={() => openMaterialAssignment(assignment)} style={{ padding: '0.55rem 0.9rem', fontSize: '0.84rem' }}>{isExam ? 'Realizar Examen' : (completed ? 'Ver Entrega' : 'Ver / Entregar')}</button>
               </div>
             </article>;
           })}
         </div>
       </section>}
+      {deliveryTarget && createPortal(
+        <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.65)' }}>
+          <div className="modal-card" style={{ width: '100%', maxWidth: '620px', maxHeight: 'calc(100vh - 2rem)', overflowY: 'auto', background: 'var(--background)', borderRadius: '12px', padding: '1.5rem', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '1rem' }}>
+              <div>
+                <span style={{ color: 'var(--primary)', fontSize: '0.76rem', fontWeight: 700, textTransform: 'uppercase' }}>Trabajo de clase y entrega</span>
+                <h2 style={{ margin: '0.2rem 0 0', fontSize: '1.25rem', color: 'var(--text-main)' }}>{deliveryTarget.title}</h2>
+              </div>
+              <button onClick={() => setDeliveryTarget(null)} aria-label="Cerrar entrega" className="modal-close"><X size={22} /></button>
+            </div>
+
+            {deliveryTarget.description && (
+              <div style={{ padding: '0.9rem 1rem', background: 'var(--surface-alt)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-main)', fontSize: '0.9rem', lineHeight: 1.5, marginBottom: '1rem' }}>
+                {deliveryTarget.description}
+              </div>
+            )}
+
+            {deliveryTarget.materialUrl && (
+              <a href={deliveryTarget.materialUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', textDecoration: 'none', marginBottom: '1rem' }}>
+                <ExternalLink size={15} /> Abrir material de consulta
+              </a>
+            )}
+
+            {deliveryTarget.completed ? (() => {
+              const submitted = parseSubmissionContent(deliveryTarget.submissionContent);
+              const submittedText = submitted.text.trim();
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', alignSelf: 'flex-start', padding: '0.35rem 0.75rem', borderRadius: '16px', background: 'var(--primary-light)', color: 'var(--primary-text)', border: '1px solid var(--primary-border)', fontWeight: 700, fontSize: '0.85rem' }}>
+                    <CheckCircle2 size={15} /> Entregado
+                  </div>
+                  <div style={{ padding: '1rem', background: 'var(--surface-alt)', border: '1px solid var(--border)', borderRadius: '8px' }}>
+                    <strong style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.88rem' }}>Contenido enviado</strong>
+                    {submitted.link ? (
+                      <a href={submitted.link} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--primary)', fontWeight: 700, textDecoration: 'none' }}>
+                        <ExternalLink size={14} /> Abrir enlace entregado
+                      </a>
+                    ) : submittedText ? (
+                      <p style={{ margin: 0, whiteSpace: 'pre-wrap', color: 'var(--text-main)', lineHeight: 1.5 }}>{submittedText}</p>
+                    ) : (
+                      <p style={{ margin: 0, color: 'var(--text-muted)' }}>Tarea marcada como completada.</p>
+                    )}
+                    {submitted.attachment && submitted.attachment.dataUrl && (
+                      <div style={{ marginTop: '0.75rem' }}>
+                        <a href={submitted.attachment.dataUrl} target="_blank" rel="noopener noreferrer" download={submitted.attachment.name} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--primary)', fontWeight: 700, textDecoration: 'none' }}>
+                          <Paperclip size={14} /> Descargar adjunto: {submitted.attachment.name}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })() : userRole === 'PARENT' ? (
+              <div style={{ padding: '1rem', background: '#eaf4ef', border: '1px solid #bfe0d0', borderRadius: '8px', color: '#24583e', fontWeight: 600, fontSize: '0.9rem' }}>
+                Vista del Tutor: esta tarea está pendiente de entrega por parte del alumno.
+              </div>
+            ) : (
+              <form onSubmit={submitDelivery} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {deliveryError && <div style={{ padding: '0.75rem 1rem', background: '#fdf0f0', color: '#9e2a2b', border: '1px solid #f7caca', borderRadius: '8px', fontSize: '0.88rem' }}>{deliveryError}</div>}
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.5rem' }}>¿Cómo deseas realizar tu entrega?</label>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    {([
+                      ['TEXT', <PenTool size={15} />, 'Escribir texto'],
+                      ['LINK', <Link size={15} />, 'Enlace en la nube'],
+                      ['SIMPLE', <CheckCircle2 size={15} />, 'Solo marcar realizada']
+                    ] as const).map(([type, icon, label]) => (
+                      <button key={type} type="button" onClick={() => setDeliveryType(type)} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.9rem', borderRadius: '8px', border: deliveryType === type ? '1px solid var(--primary)' : '1px solid var(--border)', background: deliveryType === type ? 'var(--primary-light)' : 'var(--surface-alt)', color: deliveryType === type ? 'var(--primary-text)' : 'var(--text-main)', fontWeight: deliveryType === type ? 700 : 500, fontSize: '0.85rem', cursor: 'pointer' }}>
+                        {icon} {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {deliveryType === 'TEXT' && (
+                  <textarea rows={5} value={deliveryText} onChange={event => setDeliveryText(event.target.value)} placeholder="Escribe tu respuesta o comentario para el profesor..." style={{ width: '100%', padding: '0.85rem 1rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', fontSize: '0.92rem', resize: 'vertical', outline: 'none' }} />
+                )}
+
+                {deliveryType === 'LINK' && (
+                  <input type="url" value={deliveryLink} onChange={event => setDeliveryLink(event.target.value)} placeholder="https://docs.google.com/..." style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', fontSize: '0.9rem', outline: 'none' }} />
+                )}
+
+                {deliveryType === 'SIMPLE' && (
+                  <div style={{ padding: '0.85rem 1rem', background: 'var(--surface-alt)', borderRadius: '8px', fontSize: '0.88rem', color: 'var(--text-muted)' }}>
+                    Al pulsar en Entregar, se notificará a tu profesor de que has completado la actividad.
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+                  <label style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <Paperclip size={15} /> Archivo adjunto opcional
+                  </label>
+                  <input type="file" onChange={handleDeliveryAttachment} style={{ width: '100%', padding: '0.7rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }} />
+                  {deliveryAttachment && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', padding: '0.65rem 0.8rem', borderRadius: '8px', background: 'var(--primary-light)', border: '1px solid var(--primary-border)', color: 'var(--primary-text)', fontSize: '0.83rem', fontWeight: 600 }}>
+                      <Paperclip size={15} /> {deliveryAttachment.name}
+                      <button type="button" onClick={() => setDeliveryAttachment(null)} style={{ background: 'transparent', border: 'none', color: 'var(--primary-text)', cursor: 'pointer', fontWeight: 800, padding: 0 }}>Quitar</button>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.25rem' }}>
+                  <button type="button" onClick={() => setDeliveryTarget(null)} style={{ padding: '0.6rem 1rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-main)', cursor: 'pointer', fontWeight: 600 }}>Cancelar</button>
+                  <button type="submit" disabled={isSavingDelivery} className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', padding: '0.6rem 1.2rem', fontWeight: 700 }}>
+                    <Send size={15} /> {isSavingDelivery ? 'Entregando...' : 'Entregar'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>, document.body
+      )}
       {viewingContent?.material?.type === 'FORM' && viewingContent.material.formData && createPortal(<div className="modal-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: '0.75rem 1rem 0', background: 'rgba(255,255,255,0.2)' }}>
         <div className="modal-card modal-card--player" style={{ width: '100%', maxWidth: '980px', height: 'calc(100vh - 0.75rem)', overflowY: 'auto', background: 'var(--background)', borderRadius: '12px 12px 0 0', padding: '1rem' }}>
           <button onClick={() => setViewingContent(null)} aria-label="Cerrar examen" className="modal-close"><X size={22} /></button>

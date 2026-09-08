@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Check, CircleDollarSign, FileText, LoaderCircle, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { AlertTriangle, ArrowLeft, CalendarDays, Check, ChevronRight, CircleDollarSign, Clock3, FileText, GraduationCap, Laptop, LoaderCircle, Users, X } from 'lucide-react';
 import { generateInvoicePDF, generateStatementPDF } from '../utils/invoice';
 import { getPaymentVisualStatus } from '../utils/paymentStatus';
 
@@ -31,6 +32,7 @@ interface PaymentStudent {
   firstName: string;
   lastName: string;
   dni?: string | null;
+  modality?: 'PRESENCIAL' | 'ONLINE' | null;
   parent?: {
     profile?: {
       firstName: string;
@@ -52,6 +54,7 @@ const TeacherPayments: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [updatingKey, setUpdatingKey] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [selectedStudentPaymentId, setSelectedStudentPaymentId] = useState<string | null>(null);
 
   const monthLabel = (month: number, year: number) => {
     const date = new Date(year, month - 1, 1);
@@ -177,6 +180,11 @@ const TeacherPayments: React.FC = () => {
     [students]
   );
 
+  const selectedStudent = useMemo(
+    () => students.find((student) => student.id === selectedStudentPaymentId) || null,
+    [students, selectedStudentPaymentId]
+  );
+
   const togglePayment = async (studentId: string, payment: StudentPaymentItem) => {
     try {
       setUpdatingKey(`${studentId}-${payment.year}-${payment.month}`);
@@ -278,227 +286,312 @@ const TeacherPayments: React.FC = () => {
       )}
 
       <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
-        <div className="table-responsive">
-          <table style={{ width: '100%', minWidth: '600px', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead>
-              <tr style={{ background: 'var(--surface-alt)', borderBottom: '1px solid var(--border)' }}>
-              <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.85rem' }}>ALUMNO</th>
-              <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.85rem' }}>TARIFA</th>
-              <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.85rem' }}>PAGOS</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={3} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  Cargando pagos...
-                </td>
-              </tr>
-            ) : students.length === 0 ? (
-              <tr>
-                <td colSpan={3} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  No hay alumnos registrados.
-                </td>
-              </tr>
-            ) : (
-              students.map((student) => {
-                const initials = `${student.firstName[0] || ''}${student.lastName[0] || ''}`.toUpperCase() || 'AL';
+        <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)', fontWeight: 600, fontSize: '0.88rem', color: 'var(--text-muted)' }}>
+          ALUMNOS REGISTRADOS ({students.length})
+        </div>
 
-                const activeEnrollment = student.enrollments?.find(e => !e.endDate);
-                const pastEnrollments = student.enrollments?.filter(e => e.endDate) || [];
+        {loading ? (
+          <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>Cargando pagos...</div>
+        ) : students.length === 0 ? (
+          <div style={{ padding: '3rem 2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+            <Users size={48} style={{ color: 'var(--primary)', opacity: 0.35, marginBottom: '1rem' }} />
+            <p style={{ margin: 0 }}>No hay alumnos registrados.</p>
+          </div>
+        ) : (
+          students.map((student) => {
+            const initials = `${student.firstName[0] || ''}${student.lastName[0] || ''}`.toUpperCase() || 'AL';
+            const activeEnrollment = student.enrollments?.find((enrollment) => !enrollment.endDate);
+            const pastEnrollments = student.enrollments?.filter((enrollment) => enrollment.endDate) || [];
+            const isSelected = selectedStudentPaymentId === student.id;
+            const isOnline = student.modality === 'ONLINE';
+            const hasEnrollment = (student.enrollments?.length || 0) > 0;
+            const unpaidCount = student.payments.filter(
+              (payment) => payment.isApplicable && getPaymentVisualStatus(payment.isPaid, payment.month, payment.year) !== 'PAID'
+            ).length;
 
-                return (
-                  <tr key={student.id} style={{ borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
-                    <td style={{ padding: '1rem 1.5rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <div
-                          style={{
-                            width: '36px',
-                            height: '36px',
-                            borderRadius: '50%',
-                            background: 'var(--primary)',
-                            color: '#fff',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontWeight: 'bold',
-                            fontSize: '0.85rem'
-                          }}
-                        >
-                          {initials}
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{student.firstName} {student.lastName}</div>
-                          <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>{student.email}</div>
-                        </div>
+            return (
+              <div
+                key={student.id}
+                onClick={() => setSelectedStudentPaymentId(student.id)}
+                style={{
+                  padding: '1.1rem 1.25rem',
+                  borderBottom: '1px solid var(--border)',
+                  cursor: 'pointer',
+                  background: isSelected ? 'var(--primary-subtle)' : 'transparent',
+                  borderLeft: isSelected ? '4px solid var(--primary)' : '4px solid transparent',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', width: '100%' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.85rem', flexShrink: 0 }}>
+                      {initials}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <strong style={{ fontSize: '0.98rem', color: 'var(--text-main)', display: 'block' }}>
+                        {student.firstName} {student.lastName}
+                      </strong>
+                      <small style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{student.email}</small>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'center', flex: 1 }}>
+                    {hasEnrollment && (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.375rem',
+                        fontSize: '0.75rem',
+                        fontWeight: unpaidCount === 0 ? 500 : 600,
+                        padding: '0.25rem 0.75rem',
+                        borderRadius: '999px',
+                        whiteSpace: 'nowrap',
+                        background: unpaidCount === 0 ? '#ecfdf5' : '#fff1f2',
+                        color: unpaidCount === 0 ? '#047857' : '#be123c',
+                        border: `1px solid ${unpaidCount === 0 ? 'rgba(167, 243, 208, 0.8)' : 'rgba(254, 205, 211, 0.8)'}`,
+                        boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)'
+                      }}>
+                        {unpaidCount === 0
+                          ? '✓ Pagos al día'
+                          : unpaidCount === 1
+                            ? '⚠️ Falta 1 pago'
+                            : `⚠️ Faltan ${unpaidCount} pagos`}
+                      </span>
+                    )}
+                  </div>
+
+                  <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.25rem',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    flexShrink: 0,
+                    background: isOnline ? '#eef2ff' : '#f0fdf4',
+                    color: isOnline ? '#4338ca' : '#15803d',
+                    border: `1px solid ${isOnline ? '#c7d2fe' : '#bbf7d0'}`
+                  }}>
+                    {isOnline ? <Laptop size={12} /> : <GraduationCap size={12} />}
+                    {isOnline ? 'Online' : 'Presencial'}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.6rem', paddingTop: '0.45rem', borderTop: '1px dashed var(--border)', fontSize: '0.82rem' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>
+                    {activeEnrollment ? (
+                      <><strong style={{ color: 'var(--text-main)' }}>{activeEnrollment.monthlyFee} € / mes</strong> · Matrícula Activa</>
+                    ) : pastEnrollments.length > 0 ? (
+                      <>Inactivo · Última: {pastEnrollments[0].monthlyFee} € / mes</>
+                    ) : (
+                      'Sin matrícula'
+                    )}
+                  </span>
+                  <ChevronRight size={16} style={{ color: 'var(--text-muted)' }} />
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {selectedStudent && createPortal(
+        <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: '260px', zIndex: 50, minHeight: '100vh', overflowY: 'auto', background: '#f8fafc', padding: '2rem' }}>
+          <div className="animate-fade-in" style={{ maxWidth: '1024px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div>
+              <button
+                type="button"
+                onClick={() => setSelectedStudentPaymentId(null)}
+                className="btn-secondary"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+              >
+                <ArrowLeft size={17} /> Volver a Control de Pagos
+              </button>
+            </div>
+
+            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+              <div>
+                <h1 style={{ margin: 0, fontSize: '1.8rem', color: 'var(--text-main)' }}>
+                  Pagos de {selectedStudent.firstName} {selectedStudent.lastName}
+                </h1>
+                <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)' }}>
+                  Consulta y gestiona las mensualidades de {selectedStudent.firstName} {selectedStudent.lastName}.
+                </p>
+              </div>
+
+              {selectedStudent.payments.filter((payment) => payment.isApplicable).length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => handleDownloadStatement(selectedStudent)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.45rem',
+                    padding: '0.55rem 0.95rem',
+                    fontSize: '0.9rem',
+                    borderRadius: '8px',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text-main)',
+                    cursor: 'pointer',
+                    fontWeight: 600
+                  }}
+                >
+                  <FileText size={16} /> Generar Extracto Global
+                </button>
+              )}
+            </header>
+
+            {(() => {
+              const activeEnrollment = selectedStudent.enrollments?.find((enrollment) => !enrollment.endDate);
+              const pastEnrollments = selectedStudent.enrollments?.filter((enrollment) => enrollment.endDate) || [];
+              const reference = activeEnrollment || pastEnrollments[pastEnrollments.length - 1] || null;
+
+              return (
+                <div style={{ background: '#fff', border: '1px solid rgba(226, 232, 240, 0.8)', borderRadius: '16px', boxShadow: 'var(--shadow-sm)', padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <CalendarDays size={20} style={{ color: 'var(--primary)' }} />
+                    <span style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                      {reference
+                        ? `Periodo de Matrícula: ${new Date(reference.startDate).toLocaleDateString('es-ES')} (${activeEnrollment ? 'Activa' : 'Inactiva'})`
+                        : 'Sin periodo de matrícula registrado'}
+                    </span>
+                  </div>
+
+                  <span style={{ background: 'var(--surface-alt)', border: '1px solid var(--border)', padding: '0.25rem 0.75rem', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                    {reference ? `${reference.monthlyFee} € / mes` : 'Sin tarifa'}
+                  </span>
+                </div>
+              );
+            })()}
+
+            <div style={{ background: '#fff', border: '1px solid rgba(226, 232, 240, 0.8)', borderRadius: '16px', boxShadow: 'var(--shadow-sm)', padding: '1.5rem' }}>
+              <h4 style={{ margin: '0 0 1rem', fontSize: '1rem', color: 'var(--text-main)' }}>
+                Historial de Mensualidades ({selectedStudent.payments.length})
+              </h4>
+
+              <div style={{ display: 'grid', gap: '1rem' }}>
+                {selectedStudent.payments.map((payment) => {
+                  const styles = getStatusStyles(payment);
+                  const paymentKey = `${selectedStudent.id}-${payment.year}-${payment.month}`;
+                  const isUpdating = updatingKey === paymentKey;
+
+                  let amount = payment.amount;
+                  if (!amount) {
+                    const cardDate = new Date(payment.year, payment.month - 1, 1);
+                    const enr = selectedStudent.enrollments?.find(e => {
+                       const sd = new Date(e.startDate);
+                       const sdMonth = new Date(sd.getFullYear(), sd.getMonth(), 1);
+                       let edMonth = new Date(3000, 0, 1);
+                       if (e.endDate) {
+                         const ed = new Date(e.endDate);
+                         edMonth = new Date(ed.getFullYear(), ed.getMonth(), 1);
+                       }
+                       return cardDate.getTime() >= sdMonth.getTime() && cardDate.getTime() <= edMonth.getTime();
+                    });
+                    amount = enr?.monthlyFee || 35;
+                  }
+
+                  return (
+                    <div
+                      key={paymentKey}
+                      style={{
+                        border: '1px solid var(--border)',
+                        background: 'var(--surface-alt)',
+                        borderRadius: '12px',
+                        padding: '1.25rem',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: '1rem',
+                        flexWrap: 'wrap',
+                        opacity: payment.isApplicable ? 1 : 0.55
+                      }}
+                    >
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-main)' }}>
+                          {monthLabel(payment.month, payment.year)}
+                        </h3>
+                        <p style={{ margin: '0.45rem 0 0', color: 'var(--text-main)', fontSize: '0.95rem', fontWeight: 600 }}>
+                          {amount} €
+                        </p>
+                        {!payment.isApplicable && (
+                          <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', marginTop: '0.25rem' }}>
+                            Fuera de periodo de matrícula.
+                          </div>
+                        )}
                       </div>
-                    </td>
-                    <td style={{ padding: '1rem 1.5rem' }}>
-                      {activeEnrollment ? (
-                        <div>
-                          <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>{activeEnrollment.monthlyFee} € / mes</span>
-                          <div style={{ marginTop: '0.35rem', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 400 }}>
-                            Matrícula Activa
-                          </div>
-                        </div>
-                      ) : pastEnrollments.length > 0 ? (
-                        <div>
-                          <span style={{ color: 'var(--text-main)', fontWeight: 600, opacity: 0.7 }}>Inactivo</span>
-                          <div style={{ marginTop: '0.35rem', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 400 }}>
-                            Última: {pastEnrollments[0].monthlyFee} €/mes
-                          </div>
-                        </div>
-                      ) : (
-                        <span style={{ color: 'var(--text-muted)' }}>Sin matrícula</span>
-                      )}
-                      
-                      {student.payments.filter(p => p.isApplicable).length > 0 && (
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <Clock3 size={14} /> Actualizado automáticamente
+                        </span>
+                        {(() => {
+                          const isPaid = getPaymentVisualStatus(payment.isPaid, payment.month, payment.year) === 'PAID';
+                          return (
+                            <button
+                              type="button"
+                              disabled={!isPaid}
+                              onClick={() => isPaid && handleDownloadInvoice(selectedStudent, payment)}
+                              className="btn-secondary"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.45rem',
+                                padding: '0.45rem 0.85rem',
+                                fontSize: '0.85rem',
+                                borderRadius: '8px',
+                                opacity: isPaid ? 1 : 0.5,
+                                cursor: isPaid ? 'pointer' : 'not-allowed'
+                              }}
+                              title={isPaid ? 'Descargar Factura Oficial en PDF' : 'Factura disponible únicamente tras registrar el pago'}
+                            >
+                              <FileText size={16} /> Factura PDF
+                            </button>
+                          );
+                        })()}
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: styles.color, background: styles.background, borderRadius: '20px', padding: '0.4rem 0.85rem', fontWeight: 700 }}>
+                          {styles.icon}
+                          {styles.label}
+                        </span>
                         <button
-                          onClick={() => handleDownloadStatement(student)}
+                          disabled={isUpdating || !payment.isApplicable}
+                          onClick={() => togglePayment(selectedStudent.id, payment)}
+                          aria-label={payment.isPaid ? 'Quitar tick de pagado' : 'Poner tick de pagado'}
+                          title={payment.isPaid ? 'Quitar tick de pagado' : 'Poner tick de pagado'}
                           style={{
-                            marginTop: '1rem',
+                            width: '42px',
+                            height: '42px',
+                            borderRadius: '10px',
+                            border: `1px solid ${payment.isPaid ? 'var(--primary)' : 'var(--border)'}`,
+                            background: payment.isPaid ? 'var(--primary-light)' : 'var(--surface)',
+                            color: payment.isPaid ? 'var(--primary-text)' : 'var(--text-muted)',
                             display: 'inline-flex',
                             alignItems: 'center',
-                            gap: '0.35rem',
-                            padding: '0.4rem 0.75rem',
-                            fontSize: '0.8rem',
-                            borderRadius: '6px',
-                            background: 'var(--surface)',
-                            border: '1px solid var(--border)',
-                            color: 'var(--text-main)',
-                            cursor: 'pointer'
+                            justifyContent: 'center',
+                            opacity: isUpdating || !payment.isApplicable ? 0.7 : 1,
+                            cursor: isUpdating || !payment.isApplicable ? 'not-allowed' : 'pointer'
                           }}
                         >
-                          <FileText size={14} /> Extracto
+                          {isUpdating ? (
+                            <LoaderCircle size={18} className="spin" />
+                          ) : payment.isPaid ? (
+                            <Check size={20} />
+                          ) : (
+                            <span style={{ width: '18px', height: '18px', borderRadius: '6px', border: '1px solid var(--border)' }} />
+                          )}
                         </button>
-                      )}
-                    </td>
-                    <td style={{ padding: '1rem 1.5rem' }}>
-                      <div style={{ display: 'grid', gap: '0.75rem' }}>
-                        {student.payments.map((payment) => {
-                          const styles = getStatusStyles(payment);
-                          const paymentKey = `${student.id}-${payment.year}-${payment.month}`;
-                          const isUpdating = updatingKey === paymentKey;
-
-                          let amount = payment.amount;
-                          if (!amount) {
-                            const cardDate = new Date(payment.year, payment.month - 1, 1);
-                            const enr = student.enrollments?.find(e => {
-                               const sd = new Date(e.startDate);
-                               const sdMonth = new Date(sd.getFullYear(), sd.getMonth(), 1);
-                               let edMonth = new Date(3000, 0, 1);
-                               if (e.endDate) {
-                                 const ed = new Date(e.endDate);
-                                 edMonth = new Date(ed.getFullYear(), ed.getMonth(), 1);
-                               }
-                               return cardDate.getTime() >= sdMonth.getTime() && cardDate.getTime() <= edMonth.getTime();
-                            });
-                            amount = enr?.monthlyFee || 35;
-                          }
-
-                          return (
-                            <div
-                              key={paymentKey}
-                              style={{
-                                border: `1px solid ${styles.border}`,
-                                background: styles.background,
-                                borderRadius: '12px',
-                                padding: '0.9rem 1rem',
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                gap: '1rem',
-                                flexWrap: 'wrap',
-                                opacity: payment.isApplicable ? 1 : 0.55
-                              }}
-                            >
-                              <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: styles.color, fontWeight: 700, marginBottom: '0.25rem' }}>
-                                  {styles.icon}
-                                  {monthLabel(payment.month, payment.year)}
-                                </div>
-                                <div style={{ color: 'var(--text-main)', fontSize: '0.92rem' }}>
-                                  {amount} €
-                                </div>
-                                <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', marginTop: '0.25rem' }}>
-                                  Vence el {payment.dueDate ? new Date(payment.dueDate).toLocaleDateString('es-ES') : '1 del mes'}
-                                </div>
-                                {!payment.isApplicable && (
-                                  <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', marginTop: '0.25rem' }}>
-                                    Fuera de periodo de matrícula.
-                                  </div>
-                                )}
-                              </div>
-
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                                {(() => {
-                                  const isPaid = getPaymentVisualStatus(payment.isPaid, payment.month, payment.year) === 'PAID';
-                                  return (
-                                    <button
-                                      type="button"
-                                      disabled={!isPaid}
-                                      onClick={() => isPaid && handleDownloadInvoice(student, payment)}
-                                      className="btn-secondary"
-                                      style={{
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '0.35rem',
-                                        padding: '0.35rem 0.65rem',
-                                        fontSize: '0.8rem',
-                                        borderRadius: '6px',
-                                        opacity: isPaid ? 1 : 0.5,
-                                        cursor: isPaid ? 'pointer' : 'not-allowed'
-                                      }}
-                                      title={isPaid ? 'Descargar Factura Oficial en PDF' : 'Factura disponible únicamente tras registrar el pago'}
-                                    >
-                                      <FileText size={14} /> Factura
-                                    </button>
-                                  );
-                                })()}
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: styles.color, background: styles.background, border: `1px solid ${styles.border}`, borderRadius: '20px', padding: '0.35rem 0.65rem', fontWeight: 700 }}>
-                                  {styles.icon}
-                                  {styles.label}
-                                </span>
-                                <button
-                                  disabled={isUpdating || !payment.isApplicable}
-                                  onClick={() => togglePayment(student.id, payment)}
-                                  aria-label={payment.isPaid ? 'Quitar tick de pagado' : 'Poner tick de pagado'}
-                                  title={payment.isPaid ? 'Quitar tick de pagado' : 'Poner tick de pagado'}
-                                  style={{
-                                    width: '42px',
-                                    height: '42px',
-                                    borderRadius: '10px',
-                                    border: `1px solid ${payment.isPaid ? 'var(--primary)' : 'var(--border)'}`,
-                                    background: payment.isPaid ? 'var(--primary-light)' : 'var(--surface)',
-                                    color: payment.isPaid ? 'var(--primary-text)' : 'var(--text-muted)',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    opacity: isUpdating || !payment.isApplicable ? 0.7 : 1,
-                                    cursor: isUpdating || !payment.isApplicable ? 'not-allowed' : 'pointer'
-                                  }}
-                                >
-                                  {isUpdating ? (
-                                    <LoaderCircle size={18} className="spin" />
-                                  ) : payment.isPaid ? (
-                                    <Check size={20} />
-                                  ) : (
-                                    <span style={{ width: '18px', height: '18px', borderRadius: '6px', border: '1px solid var(--border)' }} />
-                                  )}
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
                       </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-        </div>
-      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

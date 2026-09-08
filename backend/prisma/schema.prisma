@@ -77,6 +77,7 @@ model User {
   receivedChatMessages ChatMessage[] @relation("ReceivedChatMessages")
   finalEvaluation FinalEvaluation? @relation("StudentFinalEvaluation")
   structuredTasks StructuredTask[] @relation("AssignedStructuredTasks")
+  createdStructuredTasks StructuredTask[] @relation("TeacherStructuredTasks")
   structuredTaskAssignments StructuredTaskStudent[]
   structuredTaskStepProgress StructuredTaskStepProgress[]
 }
@@ -223,18 +224,21 @@ enum StructuredTaskAssignmentType {
 model StructuredTask {
   id                    String                       @id @default(uuid())
   title                 String
-  courseId              String
+  courseId              String?
+  teacherId             String?
   assignmentType        StructuredTaskAssignmentType @default(CLASS)
   isSequential           Boolean                      @default(false)
   assignedStudentId     String?
   createdAt             DateTime                     @default(now())
   updatedAt             DateTime                     @updatedAt
-  course                Course                       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course                Course?                      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  teacher               User?                        @relation("TeacherStructuredTasks", fields: [teacherId], references: [id], onDelete: Cascade)
   assignedStudent       User?                        @relation("AssignedStructuredTasks", fields: [assignedStudentId], references: [id], onDelete: SetNull)
   assignedStudents      StructuredTaskStudent[]
   steps                 StructuredTaskStep[]
 
   @@index([courseId])
+  @@index([teacherId])
   @@index([assignedStudentId])
 }
 

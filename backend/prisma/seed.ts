@@ -1,6 +1,21 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
-import { ensureStudentPaymentSchedule, getVisibleMonthTargets } from '../src/services/payments';
+import { ensureStudentPaymentScheduleById, getVisibleMonthTargets } from '../src/services/payments';
+
+const COURSE_START = new Date('2026-06-01T12:00:00.000Z');
+
+async function ensureAcademyEnrollment(
+  prisma: PrismaClient,
+  studentId: string,
+  startDate: Date,
+  monthlyFee: number
+) {
+  const existing = await prisma.academyEnrollment.findFirst({ where: { studentId } });
+  if (existing) return existing;
+  return prisma.academyEnrollment.create({
+    data: { studentId, startDate, monthlyFee }
+  });
+}
 
 const prisma = new PrismaClient();
 
@@ -27,18 +42,11 @@ async function main() {
 
   const student = await prisma.user.upsert({
     where: { email: 'alumno@hitschool.com' },
-    update: {
-      monthlyFee: 35,
-      courseDurationMonths: 9,
-      courseStartDate: new Date('2026-06-01T12:00:00.000Z')
-    },
+    update: {},
     create: {
       email: 'alumno@hitschool.com',
       passwordHash: hashedPassword, // 1234
       role: 'STUDENT',
-      monthlyFee: 35,
-      courseDurationMonths: 9,
-      courseStartDate: new Date('2026-06-01T12:00:00.000Z'),
       profile: {
         create: {
           firstName: 'Laura',
@@ -81,16 +89,12 @@ async function main() {
   const secondStudent = await prisma.user.upsert({
     where: { email: 'marta02.pardo@gmail.com' },
     update: {
-      monthlyFee: 35,
-      courseDurationMonths: 9,
       parentId: parentUser.id
     },
     create: {
       email: 'marta02.pardo@gmail.com',
       passwordHash: hashedPassword, // 1234
       role: 'STUDENT',
-      monthlyFee: 35,
-      courseDurationMonths: 9,
       parentId: parentUser.id,
       profile: {
         create: {
@@ -103,23 +107,11 @@ async function main() {
     }
   });
 
-  await ensureStudentPaymentSchedule(prisma, {
-    id: secondStudent.id,
-    role: secondStudent.role,
-    createdAt: secondStudent.createdAt,
-    courseDurationMonths: secondStudent.courseDurationMonths,
-    monthlyFee: secondStudent.monthlyFee,
-    courseStartDate: secondStudent.courseStartDate
-  });
+  await ensureAcademyEnrollment(prisma, student.id, COURSE_START, 35);
+  await ensureAcademyEnrollment(prisma, secondStudent.id, COURSE_START, 35);
 
-  await ensureStudentPaymentSchedule(prisma, {
-    id: student.id,
-    role: student.role,
-    createdAt: student.createdAt,
-    courseDurationMonths: student.courseDurationMonths,
-    monthlyFee: student.monthlyFee,
-    courseStartDate: student.courseStartDate
-  });
+  await ensureStudentPaymentScheduleById(prisma, secondStudent.id);
+  await ensureStudentPaymentScheduleById(prisma, student.id);
 
   const visibleMonths = getVisibleMonthTargets(3, new Date('2026-08-21T12:00:00.000Z'));
 

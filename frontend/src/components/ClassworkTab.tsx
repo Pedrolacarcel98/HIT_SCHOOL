@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Calendar, CheckCircle2, ClipboardCheck, Clock3, FileText, Headphones, Pencil, Plus, Search, Trash2, Video, X } from 'lucide-react';
+import { Calendar, CheckCircle2, ChevronDown, ChevronUp, ClipboardCheck, Clock3, FileText, Headphones, Pencil, Plus, Search, Trash2, Video, X } from 'lucide-react';
 import ExamReviewModal from './ExamReviewModal';
 
 const SKILL_CATEGORIES = [
@@ -62,12 +62,23 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const [materialSearch, setMaterialSearch] = useState('');
   const [materialTypeFilter, setMaterialTypeFilter] = useState<'ALL' | MaterialItem['type']>('ALL');
   const [reviewingExam, setReviewingExam] = useState<ExamReviewData | null>(null);
+  const [expandedTopics, setExpandedTopics] = useState<Record<string, boolean>>(
+    () => Object.fromEntries(SKILL_CATEGORIES.map(cat => [cat.id, false]))
+  );
 
   useEffect(() => {
     fetchAssignments();
     fetchMaterials();
     fetchStudents();
   }, [courseId]);
+
+  useEffect(() => {
+    setExpandedTopics(Object.fromEntries(SKILL_CATEGORIES.map(cat => [cat.id, false])));
+  }, [courseId]);
+
+  const toggleTopic = (topicId: string) => {
+    setExpandedTopics(prev => ({ ...prev, [topicId]: !prev[topicId] }));
+  };
 
   const fetchStudents = async () => {
     const token = localStorage.getItem('token');
@@ -278,12 +289,27 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-        {grouped.map(group => (
+        {grouped.map(group => {
+          const isExpanded = !!expandedTopics[group.id];
+          return (
           <div key={group.id}>
-            <h2 style={{ color: 'var(--primary)', borderBottom: '2px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '1rem', fontSize: '1.5rem' }}>
-              {group.label}
+            <h2
+              onClick={() => toggleTopic(group.id)}
+              role="button"
+              tabIndex={0}
+              aria-expanded={isExpanded}
+              onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleTopic(group.id); } }}
+              className="cursor-pointer select-none flex items-center justify-between hover:opacity-80 transition-opacity"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', cursor: 'pointer', userSelect: 'none', color: 'var(--primary)', borderBottom: '2px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '1rem', fontSize: '1.5rem' }}
+            >
+              <span>{group.label}</span>
+              {isExpanded ? <ChevronUp size={22} /> : <ChevronDown size={22} />}
             </h2>
-            
+
+            <div
+              className="transition-all duration-200 ease-in-out"
+              style={{ overflow: 'hidden', maxHeight: isExpanded ? '6000px' : '0', opacity: isExpanded ? 1 : 0, transition: 'max-height 200ms ease-in-out, opacity 200ms ease-in-out' }}
+            >
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '1.25rem' }}>
               {group.items.length === 0 ? (
                 <p style={{ color: 'var(--text-muted)', fontStyle: 'italic', margin: 0, paddingLeft: '1rem' }}>Sin contenido</p>
@@ -326,8 +352,10 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                 })
               )}
             </div>
+            </div>
           </div>
-        ))}
+          );
+        })}
       </div>
       {materialPickerMode && createPortal(
         <div className="modal-backdrop" style={{ zIndex: 110 }} onClick={() => setMaterialPickerMode(null)}>

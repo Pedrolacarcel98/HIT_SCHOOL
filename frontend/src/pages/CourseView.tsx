@@ -39,7 +39,7 @@ const CourseView: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1.5rem', borderBottom: '1px solid var(--border)', gap: '1rem', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', minWidth: 0 }}>
             <button
-              onClick={() => navigate('/teacher')}
+              onClick={() => navigate('/teacher/courses')}
               style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--text-main)', padding: '4px' }}
               aria-label="Volver a mis clases"
             >

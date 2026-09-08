@@ -50,6 +50,49 @@ interface ParsedExamData {
   total?: number | null;
 }
 
+interface SubmissionAttachment {
+  name: string;
+  mimeType: string;
+  dataUrl: string;
+  size?: number;
+}
+
+interface ParsedSubmissionData {
+  text: string;
+  link: string | null;
+  attachment: SubmissionAttachment | null;
+}
+
+const parseSubmissionContent = (content?: string | null): ParsedSubmissionData => {
+  if (!content) return { text: '', link: null, attachment: null };
+
+  try {
+    const parsed = JSON.parse(content);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const attachment = parsed.attachment && typeof parsed.attachment === 'object' ? {
+        name: typeof parsed.attachment.name === 'string' ? parsed.attachment.name : 'archivo-adjunto',
+        mimeType: typeof parsed.attachment.mimeType === 'string' ? parsed.attachment.mimeType : 'application/octet-stream',
+        dataUrl: typeof parsed.attachment.dataUrl === 'string' ? parsed.attachment.dataUrl : '',
+        size: typeof parsed.attachment.size === 'number' ? parsed.attachment.size : undefined
+      } : null;
+
+      return {
+        text: typeof parsed.text === 'string' ? parsed.text : (typeof parsed.content === 'string' ? parsed.content : ''),
+        link: typeof parsed.link === 'string' ? parsed.link : (typeof parsed.url === 'string' ? parsed.url : null),
+        attachment
+      };
+    }
+  } catch {
+    // Legacy plain text and URL payloads
+  }
+
+  return {
+    text: content,
+    link: /^https?:\/\//i.test(content) ? content : null,
+    attachment: null
+  };
+};
+
 const parseSavedExam = (content?: string | null): ParsedExamData | null => {
   if (!content) return null;
   try {
@@ -82,6 +125,7 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const [deliveryType, setDeliveryType] = useState<'TEXT' | 'LINK' | 'SIMPLE'>('TEXT');
   const [textSubmission, setTextSubmission] = useState('');
   const [urlSubmission, setUrlSubmission] = useState('');
+  const [attachmentFile, setAttachmentFile] = useState<SubmissionAttachment | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
@@ -150,6 +194,7 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     setViewingMaterial(material);
     setTextSubmission('');
     setUrlSubmission('');
+    setAttachmentFile(null);
     setSubmitError('');
     setDeliveryType('TEXT');
   };
@@ -176,6 +221,7 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     });
     setTextSubmission('');
     setUrlSubmission('');
+    setAttachmentFile(null);
     setSubmitError('');
     if (step.material?.type === 'FORM') {
        setDeliveryType('TEXT'); 
@@ -219,25 +265,35 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     if (!viewingMaterial) return;
 
     let finalContent = '';
+    let finalLink = '';
     if (deliveryType === 'TEXT') {
-      if (!textSubmission.trim()) {
+      if (!textSubmission.trim() && !attachmentFile) {
         setSubmitError('Por favor, escribe tu respuesta o redacción antes de entregar.');
         return;
       }
       finalContent = textSubmission.trim();
     } else if (deliveryType === 'LINK') {
-      if (!urlSubmission.trim()) {
+      if (!urlSubmission.trim() && !attachmentFile) {
         setSubmitError('Por favor, introduce el enlace a tu documento en la nube.');
         return;
       }
-      if (!/^https?:\/\//i.test(urlSubmission.trim())) {
+      if (urlSubmission.trim() && !/^https?:\/\//i.test(urlSubmission.trim())) {
         setSubmitError('El enlace debe ser una URL válida (ej. https://docs.google.com/...)');
         return;
       }
-      finalContent = urlSubmission.trim();
+      finalLink = urlSubmission.trim();
+      finalContent = finalLink;
     } else {
       finalContent = viewingMaterial.structuredStepId ? '' : 'Tarea completada por el alumno.';
     }
+
+    const payload = attachmentFile
+      ? JSON.stringify({
+          text: finalContent,
+          link: finalLink || null,
+          attachment: attachmentFile
+        })
+      : finalContent;
 
     try {
       setIsSubmitting(true);
@@ -252,7 +308,7 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
       
       const body = isStructured
         ? { submissionContent: finalContent }
-        : { content: finalContent };
+        : { content: attachmentFile ? finalContent : payload, link: finalLink || undefined, attachment: attachmentFile || undefined };
 
       const res = await fetch(url, {
         method: 'POST',
@@ -271,12 +327,40 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
 
       await fetchAssignedMaterials();
       setViewingMaterial(null);
+      setAttachmentFile(null);
     } catch (err) {
       console.error(err);
       setSubmitError('Error de conexión al enviar la tarea.');
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleAttachmentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      setAttachmentFile(null);
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      setSubmitError('El archivo adjunto no puede superar 10 MB.');
+      setAttachmentFile(null);
+      event.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setAttachmentFile({
+        name: file.name,
+        mimeType: file.type || 'application/octet-stream',
+        dataUrl: String(reader.result || ''),
+        size: file.size
+      });
+      setSubmitError('');
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleFormFinish = async (score: number, total: number, answers: { [key: string]: any }) => {
@@ -591,36 +675,75 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                     {/* Caso A: Tarea ya completada */}
                     {viewingMaterial.status === 'COMPLETED' ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        <div style={{ padding: '1rem', background: 'var(--surface-alt)', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                          <span style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
-                            Contenido que enviaste:
-                          </span>
-                          {viewingMaterial.submissionContent && /^https?:\/\//i.test(viewingMaterial.submissionContent) ? (
-                            <a
-                              href={viewingMaterial.submissionContent}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.4rem',
-                                color: 'var(--primary)',
-                                fontWeight: 600,
-                                textDecoration: 'none',
-                                padding: '0.5rem 0.85rem',
-                                background: 'var(--surface)',
-                                borderRadius: '6px',
-                                border: '1px solid var(--border)'
-                              }}
-                            >
-                              <ExternalLink size={15} /> Abrir documento entregado en la nube
-                            </a>
-                          ) : (
-                            <p style={{ margin: 0, color: 'var(--text-main)', fontSize: '0.92rem', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
-                              {viewingMaterial.submissionContent || 'Tarea marcada como completada.'}
-                            </p>
-                          )}
-                        </div>
+                        {(() => {
+                          const submissionDetails = parseSubmissionContent(viewingMaterial.submissionContent);
+                          const hasLink = Boolean(submissionDetails.link);
+                          const hasAttachment = Boolean(submissionDetails.attachment && submissionDetails.attachment.dataUrl);
+                          const renderedText = submissionDetails.text?.trim();
+
+                          return (
+                            <div style={{ padding: '1rem', background: 'var(--surface-alt)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                              <span style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
+                                Contenido que enviaste:
+                              </span>
+                              {hasLink ? (
+                                <a
+                                  href={submissionDetails.link!}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.4rem',
+                                    color: 'var(--primary)',
+                                    fontWeight: 600,
+                                    textDecoration: 'none',
+                                    padding: '0.5rem 0.85rem',
+                                    background: 'var(--surface)',
+                                    borderRadius: '6px',
+                                    border: '1px solid var(--border)'
+                                  }}
+                                >
+                                  <ExternalLink size={15} /> Abrir documento entregado en la nube
+                                </a>
+                              ) : renderedText ? (
+                                <p style={{ margin: 0, color: 'var(--text-main)', fontSize: '0.92rem', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                                  {renderedText}
+                                </p>
+                              ) : hasAttachment ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+                                  <span style={{ color: 'var(--text-main)', fontSize: '0.92rem' }}>Archivo adjunto enviado:</span>
+                                  <a
+                                    href={submissionDetails.attachment!.dataUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    download={submissionDetails.attachment!.name}
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}
+                                  >
+                                    <FileText size={15} /> {submissionDetails.attachment!.name}
+                                  </a>
+                                </div>
+                              ) : (
+                                <p style={{ margin: 0, color: 'var(--text-main)', fontSize: '0.92rem', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                                  Tarea marcada como completada.
+                                </p>
+                              )}
+                              {hasAttachment && submissionDetails.attachment && (
+                                <div style={{ marginTop: '0.75rem' }}>
+                                  <a
+                                    href={submissionDetails.attachment.dataUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    download={submissionDetails.attachment.name}
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: 'var(--primary)', fontWeight: 700, textDecoration: 'none' }}
+                                  >
+                                    <ExternalLink size={14} /> Descargar archivo adjunto
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         {/* Calificación y feedback del profesor si existe */}
                         {viewingMaterial.submissionGrade !== null && viewingMaterial.submissionGrade !== undefined ? (
@@ -757,6 +880,28 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                               }}
                               autoFocus
                             />
+                          </div>
+                        )}
+
+                        {viewingMaterial.type !== 'FORM' && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                              Archivo adjunto opcional
+                            </label>
+                            <input
+                              type="file"
+                              onChange={handleAttachmentChange}
+                              style={{ width: '100%', padding: '0.7rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
+                            />
+                            {attachmentFile && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', padding: '0.7rem 0.8rem', borderRadius: '8px', background: 'var(--primary-light)', border: '1px solid var(--primary-border)', color: 'var(--primary-text)', fontSize: '0.83rem' }}>
+                                <Check size={15} />
+                                <span>{attachmentFile.name}</span>
+                                <button type="button" onClick={() => setAttachmentFile(null)} style={{ background: 'transparent', border: 'none', color: 'var(--primary-text)', cursor: 'pointer', fontWeight: 700, padding: 0 }}>
+                                  Quitar
+                                </button>
+                              </div>
+                            )}
                           </div>
                         )}
 

@@ -12,7 +12,7 @@ interface Course {
 interface StructuredTask {
   id: string;
   title: string;
-  courseId: string;
+  courseId: string | null;
   assignmentType: 'CLASS' | 'INDIVIDUAL';
   assignedStudentId: string | null;
   assignedStudentName: string | null;
@@ -57,6 +57,9 @@ const TeacherCourses: React.FC = () => {
   const [structuredTasks, setStructuredTasks] = useState<StructuredTask[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [enrolledStudents, setEnrolledStudents] = useState<EnrolledStudent[]>([]);
+  const [allStudents, setAllStudents] = useState<EnrolledStudent[]>([]);
+  const [studentSearch, setStudentSearch] = useState('');
+  const [isStudentPickerOpen, setIsStudentPickerOpen] = useState(false);
   const [editingStructuredTask, setEditingStructuredTask] = useState<StructuredTask | null>(null);
   const [isStructuredTaskModalOpen, setIsStructuredTaskModalOpen] = useState(false);
   const [structuredTaskTitle, setStructuredTaskTitle] = useState('');
@@ -130,6 +133,17 @@ const TeacherCourses: React.FC = () => {
     }
   };
 
+  const fetchAllStudents = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+      const res = await fetch(`${apiUrl}/api/students`, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) setAllStudents(await res.json());
+    } catch (err) {
+      console.error('Error fetching students', err);
+    }
+  };
+
   const handleCreateCourse = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCourseTitle) return;
@@ -192,12 +206,16 @@ const TeacherCourses: React.FC = () => {
     setEditingStructuredTask(task || null);
     setStructuredTaskTitle(task?.title || '');
     setStructuredTaskSteps(task?.steps.map((step, index) => ({ ...step, order: index + 1 })) || [{ id: `step-${Date.now()}`, order: 1, title: '', materialId: null }]);
-    const courseId = task?.courseId || courses[0]?.id || '';
+    const assignmentType = task?.assignmentType || 'CLASS';
+    const courseId = task?.courseId || (assignmentType === 'CLASS' ? courses[0]?.id || '' : '');
     setStructuredTaskCourseId(courseId);
-    setStructuredTaskAssignmentType(task?.assignmentType || 'CLASS');
+    setStructuredTaskAssignmentType(assignmentType);
     setStructuredTaskIsSequential(task?.isSequential || false);
     setAssignedStudentIds(task?.assignedStudentIds?.length ? task.assignedStudentIds : (task?.assignedStudentId ? [task.assignedStudentId] : []));
+    setStudentSearch('');
+    setIsStudentPickerOpen(false);
     fetchEnrolledStudents(courseId);
+    fetchAllStudents();
     setIsStructuredTaskModalOpen(true);
   };
 
@@ -219,7 +237,9 @@ const TeacherCourses: React.FC = () => {
     const steps = structuredTaskSteps
       .map((step, index) => ({ ...step, title: step.title.trim(), order: index + 1 }))
       .filter((step) => step.title);
-    if (!title || !structuredTaskCourseId || steps.length === 0 || (structuredTaskAssignmentType === 'INDIVIDUAL' && assignedStudentIds.length === 0)) return;
+    if (!title || steps.length === 0) return;
+    if (structuredTaskAssignmentType === 'CLASS' && !structuredTaskCourseId) return;
+    if (structuredTaskAssignmentType === 'INDIVIDUAL' && assignedStudentIds.length === 0) return;
 
     try {
       const token = localStorage.getItem('token');
@@ -227,7 +247,7 @@ const TeacherCourses: React.FC = () => {
       const res = await fetch(`${apiUrl}/api/structured-tasks${editingStructuredTask ? `/${editingStructuredTask.id}` : ''}`, {
         method: editingStructuredTask ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ title, courseId: structuredTaskCourseId, assignmentType: structuredTaskAssignmentType, isSequential: structuredTaskIsSequential, assignedStudentIds: structuredTaskAssignmentType === 'INDIVIDUAL' ? assignedStudentIds : [], steps })
+        body: JSON.stringify({ title, courseId: structuredTaskAssignmentType === 'CLASS' ? structuredTaskCourseId : null, assignmentType: structuredTaskAssignmentType, isSequential: structuredTaskIsSequential, assignedStudentIds: structuredTaskAssignmentType === 'INDIVIDUAL' ? assignedStudentIds : [], steps })
       });
       if (!res.ok) throw new Error('No se pudo guardar la tarea estructurada.');
       await fetchStructuredTasks();
@@ -238,6 +258,12 @@ const TeacherCourses: React.FC = () => {
   };
 
   const getMaterial = (materialId: string | null) => materials.find((material) => material.id === materialId);
+
+  const formatAssignedStudents = (task: StructuredTask) => {
+    const names = task.assignedStudentNames?.length ? task.assignedStudentNames : (task.assignedStudentName ? [task.assignedStudentName] : []);
+    if (names.length === 0) return 'Alumno';
+    return names.length > 2 ? `${names.slice(0, 2).join(', ')}...` : names.join(', ');
+  };
 
   const getMaterialIcon = (type: Material['type']) => {
     if (type === 'FORM') return <ClipboardCheck size={16} />;
@@ -438,15 +464,15 @@ const TeacherCourses: React.FC = () => {
                       <div style={{ display: 'flex', gap: '0.45rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
                         <span style={{ display: 'inline-flex', padding: '0.18rem 0.5rem', borderRadius: '12px', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.72rem', fontWeight: 700 }}>Pasos Numerados</span>
                         {task.isSequential && <span style={{ display: 'inline-flex', padding: '0.18rem 0.5rem', borderRadius: '12px', background: '#fef3c7', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}>Paso a paso</span>}
-                        <span style={{ display: 'inline-flex', padding: '0.18rem 0.5rem', borderRadius: '12px', background: task.assignmentType === 'INDIVIDUAL' ? '#eef2ff' : '#ecfdf5', color: task.assignmentType === 'INDIVIDUAL' ? '#3730a3' : '#047857', fontSize: '0.72rem', fontWeight: 700 }}>
-                          {task.assignmentType === 'INDIVIDUAL' ? `Asignado a: ${(task.assignedStudentNames?.length ? task.assignedStudentNames.join(', ') : task.assignedStudentName) || 'Alumno'}` : 'Toda la clase'}
+                        <span title={task.assignedStudentNames?.join(', ')} style={{ display: 'inline-flex', padding: '0.18rem 0.5rem', borderRadius: '12px', background: task.assignmentType === 'INDIVIDUAL' ? '#eef2ff' : '#ecfdf5', color: task.assignmentType === 'INDIVIDUAL' ? '#3730a3' : '#047857', fontSize: '0.72rem', fontWeight: 700 }}>
+                          {task.assignmentType === 'INDIVIDUAL' ? `Asignado a: ${formatAssignedStudents(task)}` : 'Toda la clase'}
                         </span>
                         <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{task.steps.length} {task.steps.length === 1 ? 'paso' : 'pasos'}</span>
                       </div>
                     </div>
                   </div>
                   <button type="button" onClick={() => openStructuredTaskModal(task)} className="btn-secondary" style={{ padding: '0.4rem 0.7rem', fontSize: '0.8rem' }}>
-                    <Pencil size={14} /> Gestionar Pasos
+                    <Pencil size={14} /> Modificar
                   </button>
                 </header>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
@@ -503,19 +529,21 @@ const TeacherCourses: React.FC = () => {
           <input required value={structuredTaskTitle} onChange={(event) => setStructuredTaskTitle(event.target.value)} placeholder="Ej. Ensayo B2 Writing" style={inputStyle} />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '0.75rem', marginTop: '1rem' }}>
             <div>
-              <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Clase destinataria</label>
-              <select required value={structuredTaskCourseId} onChange={(event) => { setStructuredTaskCourseId(event.target.value); setAssignedStudentIds([]); fetchEnrolledStudents(event.target.value); }} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}>
-                <option value="">Selecciona una clase</option>
-                {courses.map((course) => <option key={course.id} value={course.id}>{course.title}</option>)}
-              </select>
-            </div>
-            <div>
               <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Asignar a</label>
-              <select value={structuredTaskAssignmentType} onChange={(event) => { setStructuredTaskAssignmentType(event.target.value as 'CLASS' | 'INDIVIDUAL'); setAssignedStudentIds([]); }} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}>
-                <option value="CLASS">Toda la clase</option>
-                <option value="INDIVIDUAL">Alumno individual</option>
+              <select value={structuredTaskAssignmentType} onChange={(event) => { setStructuredTaskAssignmentType(event.target.value as 'CLASS' | 'INDIVIDUAL'); setAssignedStudentIds([]); setStudentSearch(''); }} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}>
+                <option value="CLASS">Toda una Clase</option>
+                <option value="INDIVIDUAL">Alumno(s) Individuales</option>
               </select>
             </div>
+            {structuredTaskAssignmentType === 'CLASS' && (
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Clase destinataria</label>
+                <select required value={structuredTaskCourseId} onChange={(event) => { setStructuredTaskCourseId(event.target.value); setAssignedStudentIds([]); fetchEnrolledStudents(event.target.value); }} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}>
+                  <option value="">Selecciona una clase</option>
+                  {courses.map((course) => <option key={course.id} value={course.id}>{course.title}</option>)}
+                </select>
+              </div>
+            )}
             <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '0.3rem' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>
                 <input type="checkbox" checked={structuredTaskIsSequential} onChange={(e) => setStructuredTaskIsSequential(e.target.checked)} style={{ width: '16px', height: '16px', accentColor: 'var(--primary)' }} />
@@ -523,20 +551,73 @@ const TeacherCourses: React.FC = () => {
               </label>
             </div>
           </div>
-          {structuredTaskAssignmentType === 'INDIVIDUAL' && (
-            <div style={{ marginTop: '0.75rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Alumno</label>
-              <div style={{ display: 'grid', gap: '0.45rem', maxHeight: '150px', overflowY: 'auto', padding: '0.5rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)' }}>
-                {enrolledStudents.map((student) => {
-                  const studentName = student.profile ? `${student.profile.firstName} ${student.profile.lastName}`.trim() : student.email;
-                  const selected = assignedStudentIds.includes(student.id);
-                  return <label key={student.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.35rem', cursor: 'pointer' }}><input type="checkbox" checked={selected} onChange={() => setAssignedStudentIds((ids) => selected ? ids.filter((id) => id !== student.id) : [...ids, student.id])} /><span>{studentName}</span></label>;
-                })}
-                {enrolledStudents.length === 0 && <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>No hay alumnos matriculados.</span>}
+          {structuredTaskAssignmentType === 'INDIVIDUAL' && (() => {
+            const query = studentSearch.trim().toLowerCase();
+            const studentLabel = (student: EnrolledStudent) => student.profile ? `${student.profile.firstName} ${student.profile.lastName}`.trim() : student.email;
+            const selectedStudents = allStudents.filter((student) => assignedStudentIds.includes(student.id));
+            const suggestions = allStudents.filter((student) => {
+              if (assignedStudentIds.includes(student.id)) return false;
+              if (!query) return true;
+              return `${studentLabel(student)} ${student.email}`.toLowerCase().includes(query);
+            });
+
+            return (
+              <div style={{ marginTop: '0.75rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Alumno(s)</label>
+
+                {selectedStudents.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginBottom: '0.45rem' }}>
+                    {selectedStudents.map((student) => (
+                      <span key={student.id} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.25rem 0.625rem', borderRadius: '8px', background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: '0.75rem', fontWeight: 500 }}>
+                        {studentLabel(student)}
+                        <button
+                          type="button"
+                          onClick={() => setAssignedStudentIds((ids) => ids.filter((id) => id !== student.id))}
+                          aria-label={`Quitar ${studentLabel(student)}`}
+                          style={{ border: 'none', background: 'transparent', color: '#047857', cursor: 'pointer', padding: 0, lineHeight: 1, display: 'inline-flex' }}
+                        >
+                          <X size={13} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="text"
+                    value={studentSearch}
+                    onFocus={() => setIsStudentPickerOpen(true)}
+                    onBlur={() => window.setTimeout(() => setIsStudentPickerOpen(false), 120)}
+                    onChange={(event) => { setStudentSearch(event.target.value); setIsStudentPickerOpen(true); }}
+                    placeholder="🔍 Buscar alumno por nombre o correo..."
+                    style={{ ...inputStyle, marginBottom: 0 }}
+                  />
+
+                  {isStudentPickerOpen && (
+                    <div style={{ position: 'absolute', zIndex: 30, top: 'calc(100% + 0.25rem)', left: 0, width: '100%', maxHeight: '12rem', overflowY: 'auto', background: '#fff', border: '1px solid var(--border)', borderRadius: '12px', boxShadow: 'var(--shadow-md, 0 10px 25px rgba(15, 23, 42, 0.12))' }}>
+                      {suggestions.length === 0 ? (
+                        <div style={{ padding: '0.6rem 0.75rem', color: 'var(--text-muted)', fontSize: '0.82rem' }}>No hay alumnos que coincidan.</div>
+                      ) : suggestions.map((student) => (
+                        <button
+                          key={student.id}
+                          type="button"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => { setAssignedStudentIds((ids) => [...ids, student.id]); setStudentSearch(''); }}
+                          style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.55rem 0.75rem', border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.85rem' }}
+                        >
+                          {studentLabel(student)}
+                          <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.75rem' }}>{student.email}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <small style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-muted)' }}>{assignedStudentIds.length} alumno(s) seleccionado(s)</small>
               </div>
-              <small style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-muted)' }}>{assignedStudentIds.length} alumno(s) seleccionado(s)</small>
-            </div>
-          )}
+            );
+          })()}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', marginTop: '1rem' }}>
             <label style={{ color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Pasos</label>
             {structuredTaskSteps.map((step, index) => (

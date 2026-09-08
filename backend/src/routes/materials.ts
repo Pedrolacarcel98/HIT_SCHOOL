@@ -120,7 +120,7 @@ router.get('/assigned-to-me', authenticateToken, async (req: AuthRequest, res: R
 router.post('/assignments/:id/submit', authenticateToken, async (req: AuthRequest, res: Response) => {
   if (req.user?.role !== 'STUDENT') return res.status(403).json({ error: 'Solo los alumnos pueden entregar este material' });
   const materialAssignmentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const { grade, content } = req.body as { grade?: number; content?: string };
+  const { grade, content, link, attachment } = req.body as { grade?: number; content?: string; link?: string; attachment?: any };
 
   try {
     const materialAssignment = await prisma.materialAssignment.findFirst({
@@ -144,8 +144,24 @@ router.post('/assignments/:id/submit', authenticateToken, async (req: AuthReques
     }
     const existingSubmission = await prisma.submission.findFirst({ where: { assignmentId: assignment.id, studentId: req.user.id } });
     if (existingSubmission) return res.status(400).json({ error: 'Este examen ya ha sido entregado.' });
+    const normalizedContent = (() => {
+      if (!content && !attachment) return null;
+      if (attachment && typeof attachment === 'object') {
+        return JSON.stringify({
+          text: typeof content === 'string' ? content : '',
+          link: typeof link === 'string' ? link : null,
+          attachment: {
+            name: typeof attachment.name === 'string' ? attachment.name : 'archivo-adjunto',
+            mimeType: typeof attachment.mimeType === 'string' ? attachment.mimeType : 'application/octet-stream',
+            dataUrl: typeof attachment.dataUrl === 'string' ? attachment.dataUrl : '',
+            size: typeof attachment.size === 'number' ? attachment.size : undefined
+          }
+        });
+      }
+      return typeof content === 'string' ? content : null;
+    })();
     const submission = await prisma.submission.create({
-      data: { assignmentId: assignment.id, studentId: req.user.id, content: content || null, grade: typeof grade === 'number' ? grade : null }
+      data: { assignmentId: assignment.id, studentId: req.user.id, content: normalizedContent, grade: typeof grade === 'number' ? grade : null }
     });
     await prisma.materialAssignment.update({ where: { id: materialAssignment.id }, data: { status: 'COMPLETED' } });
     res.status(201).json(submission);

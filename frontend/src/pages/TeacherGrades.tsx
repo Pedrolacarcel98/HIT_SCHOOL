@@ -112,6 +112,43 @@ interface ParsedExamData {
   total: number | null;
 }
 
+interface SubmissionAttachment {
+  name: string;
+  mimeType: string;
+  dataUrl: string;
+  size?: number;
+}
+
+const parseSubmissionContent = (content?: string | null): { text: string; link: string | null; attachment: SubmissionAttachment | null } => {
+  if (!content) return { text: '', link: null, attachment: null };
+
+  try {
+    const parsed = JSON.parse(content);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const attachment = parsed.attachment && typeof parsed.attachment === 'object' ? {
+        name: typeof parsed.attachment.name === 'string' ? parsed.attachment.name : 'archivo-adjunto',
+        mimeType: typeof parsed.attachment.mimeType === 'string' ? parsed.attachment.mimeType : 'application/octet-stream',
+        dataUrl: typeof parsed.attachment.dataUrl === 'string' ? parsed.attachment.dataUrl : '',
+        size: typeof parsed.attachment.size === 'number' ? parsed.attachment.size : undefined
+      } : null;
+
+      return {
+        text: typeof parsed.text === 'string' ? parsed.text : (typeof parsed.content === 'string' ? parsed.content : ''),
+        link: typeof parsed.link === 'string' ? parsed.link : (typeof parsed.url === 'string' ? parsed.url : null),
+        attachment
+      };
+    }
+  } catch {
+    // plain content or legacy URL
+  }
+
+  return {
+    text: content,
+    link: /^https?:\/\//i.test(content) ? content : null,
+    attachment: null
+  };
+};
+
 const parseSavedExam = (content?: string | null): ParsedExamData | null => {
   if (!content) return null;
   try {
@@ -911,7 +948,8 @@ const TeacherGrades: React.FC = () => {
                         const examData = parseSavedExam(sub.content);
                         const isExam = sub.materialType === 'FORM' || Boolean(examData);
                         const hasGrade = sub.grade !== null && sub.grade !== undefined;
-                        const documentUrl = (sub.content && /^https?:\/\//i.test(sub.content)) ? sub.content : sub.materialUrl;
+                        const submissionDetails = parseSubmissionContent(sub.content);
+                        const documentUrl = submissionDetails.link || submissionDetails.attachment?.dataUrl || sub.materialUrl;
 
                         return (
                           <div
@@ -1024,10 +1062,30 @@ const TeacherGrades: React.FC = () => {
                                 );
                               }
 
-                              if (/^https?:\/\//i.test(sub.content)) {
+                              if (submissionDetails.attachment && submissionDetails.attachment.dataUrl) {
                                 return (
                                   <div style={{ margin: '0.5rem 0', padding: '0.6rem 0.8rem', background: 'var(--surface-alt)', borderRadius: '6px', fontSize: '0.85rem' }}>
-                                    <a href={sub.content} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                      <FileText size={15} style={{ color: 'var(--primary)' }} />
+                                      <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>Archivo adjunto:</span>
+                                      <a
+                                        href={submissionDetails.attachment.dataUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        download={submissionDetails.attachment.name}
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}
+                                      >
+                                        <ExternalLink size={14} /> {submissionDetails.attachment.name}
+                                      </a>
+                                    </div>
+                                  </div>
+                                );
+                              }
+
+                              if (submissionDetails.link) {
+                                return (
+                                  <div style={{ margin: '0.5rem 0', padding: '0.6rem 0.8rem', background: 'var(--surface-alt)', borderRadius: '6px', fontSize: '0.85rem' }}>
+                                    <a href={submissionDetails.link} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
                                       <ExternalLink size={14} /> Abrir documento entregado en la nube
                                     </a>
                                   </div>
@@ -1037,7 +1095,7 @@ const TeacherGrades: React.FC = () => {
                               return (
                                 <div style={{ margin: '0.5rem 0', padding: '0.6rem 0.8rem', background: 'var(--surface-alt)', borderRadius: '6px', fontSize: '0.85rem' }}>
                                   <p style={{ margin: 0, color: 'var(--text-main)', whiteSpace: 'pre-wrap' }}>
-                                    {sub.content}
+                                    {submissionDetails.text || sub.content}
                                   </p>
                                 </div>
                               );

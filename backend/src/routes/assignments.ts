@@ -132,7 +132,7 @@ router.post('/:id/submit', authenticateToken, async (req: AuthRequest, res: Resp
   if (req.user?.role !== 'STUDENT') return res.status(403).json({ error: 'Solo los alumnos pueden entregar tareas' });
   const assignmentId = req.params.id as string;
   const studentId = req.user!.id;
-  const { content, grade } = req.body;
+  const { content, attachment, link, grade } = req.body;
 
   try {
     // Check if assignment exists
@@ -156,11 +156,32 @@ router.post('/:id/submit', authenticateToken, async (req: AuthRequest, res: Resp
 
     if (existing) return res.status(400).json({ error: 'Ya has entregado esta tarea' });
 
+    const normalizedContent = (() => {
+      if (!content && !attachment) return null;
+
+      if (attachment && typeof attachment === 'object') {
+        const payload = {
+          text: typeof content === 'string' ? content : '',
+          link: typeof link === 'string' ? link : null,
+          attachment: {
+            name: typeof attachment.name === 'string' ? attachment.name : 'archivo-adjunto',
+            mimeType: typeof attachment.mimeType === 'string' ? attachment.mimeType : 'application/octet-stream',
+            dataUrl: typeof attachment.dataUrl === 'string' ? attachment.dataUrl : '',
+            size: typeof attachment.size === 'number' ? attachment.size : undefined
+          }
+        };
+
+        return JSON.stringify(payload);
+      }
+
+      return typeof content === 'string' ? content : null;
+    })();
+
     const submission = await prisma.submission.create({
       data: {
         assignmentId,
         studentId,
-        content: content || null,
+        content: normalizedContent,
         grade: typeof grade === 'number' ? grade : null
       }
     });

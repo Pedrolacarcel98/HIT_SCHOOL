@@ -190,6 +190,7 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
         id: true,
         email: true,
         status: true,
+        modality: true,
         createdAt: true,
         profile: { select: { firstName: true, lastName: true, dni: true } },
         parent: { select: { profile: { select: { dni: true, firstName: true, lastName: true } } } },
@@ -254,6 +255,7 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
         dni: student.profile?.dni ?? null,
         parent: student.parent ?? null,
         status: student.status,
+        modality: student.modality,
         enrollments: student.academyEnrollments,
         payments
       };
