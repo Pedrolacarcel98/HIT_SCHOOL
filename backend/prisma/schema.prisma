@@ -80,6 +80,8 @@ model User {
   createdStructuredTasks StructuredTask[] @relation("TeacherStructuredTasks")
   structuredTaskAssignments StructuredTaskStudent[]
   structuredTaskStepProgress StructuredTaskStepProgress[]
+  taskDeliveries  TaskDelivery[]
+  termGrades      TermGrade[]
 }
 
 model ChatMessage {
@@ -128,6 +130,7 @@ model Course {
   assignments Assignment[]
   posts       Post[]
   structuredTasks StructuredTask[]
+  termGrades  TermGrade[]
 }
 
 model Post {
@@ -226,6 +229,7 @@ model StructuredTask {
   title                 String
   description           String?
   dueDate               DateTime?
+  term                  Int                          @default(1)
   isTemplate            Boolean                      @default(false)
   category              SkillCategory                @default(GRAMMAR_VOCABULARY)
   courseId              String?
@@ -240,6 +244,7 @@ model StructuredTask {
   assignedStudent       User?                        @relation("AssignedStructuredTasks", fields: [assignedStudentId], references: [id], onDelete: SetNull)
   assignedStudents      StructuredTaskStudent[]
   steps                 StructuredTaskStep[]
+  deliveries            TaskDelivery[]
 
   @@index([courseId])
   @@index([teacherId])
@@ -259,15 +264,16 @@ model StructuredTaskStudent {
 }
 
 model StructuredTaskStep {
-  id               String         @id @default(uuid())
-  taskId           String
-  order            Int
-  title            String
-  materialId       String?
-  task             StructuredTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  material         Material?      @relation(fields: [materialId], references: [id], onDelete: SetNull)
-  progress         StructuredTaskStepProgress[]
-  assignment       Assignment?
+  id                 String         @id @default(uuid())
+  taskId             String
+  order              Int
+  title              String
+  materialId         String?
+  requiresSubmission Boolean        @default(false)
+  task               StructuredTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  material           Material?      @relation(fields: [materialId], references: [id], onDelete: SetNull)
+  progress           StructuredTaskStepProgress[]
+  assignment         Assignment?
 
   @@index([taskId, order])
 }
@@ -338,4 +344,56 @@ model FinalEvaluation {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   student      User     @relation("StudentFinalEvaluation", fields: [studentId], references: [id], onDelete: Cascade)
+}
+
+model TaskDelivery {
+  id           String         @id @default(uuid())
+  taskId       String
+  studentId    String
+  grade        Float?         // Nota final / media de la tarea
+  feedback     String?        // Feedback global del docente para la tarea completa
+  status       String         @default("COMPLETED") // IN_PROGRESS, COMPLETED, GRADED
+  deliveredAt  DateTime       @default(now())
+  gradedAt     DateTime?
+  
+  task         StructuredTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  student      User           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, studentId])
+  @@index([studentId])
+  @@index([taskId])
+}
+
+model TermGrade {
+  id              String    @id @default(uuid())
+  studentId       String
+  courseId        String
+  term            Int       // 1, 2, 3
+  academicYear    String    @default("2025-2026")
+  
+  // Notas formales para alumnos presenciales (evaluaciones de Laura / profesores)
+  middleExamGrade Float?
+  finalExamGrade  Float?
+  
+  // Medias calculadas
+  tasksAverage    Float?    // Media calculada continua de las tareas del trimestre
+  overallGrade    Float?    // Nota trimestral definitiva (Presencial: 50% exámenes + 50% tareas | Online: 100% tareas)
+  
+  // Desglose por competencias CEFR (para el boletín)
+  grammar         Float?
+  reading         Float?
+  writing         Float?
+  listening       Float?
+  speaking        Float?
+
+  observations    String?   // Feedback pedagógico general del docente para el trimestre
+  updatedAt       DateTime  @updatedAt
+  createdAt       DateTime  @default(now())
+
+  student         User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  course          Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, courseId, term, academicYear])
+  @@index([courseId, term])
+  @@index([studentId])
 }

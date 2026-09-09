@@ -12,23 +12,32 @@ const getStudentName = (student: { profile: { firstName: string; lastName: strin
 
 const serializeTask = (task: any) => ({
   ...task,
+  term: task.term || 1,
+  delivery: Array.isArray(task.deliveries) && task.deliveries.length > 0 ? task.deliveries[0] : null,
   assignedStudentName: getStudentName(task.assignedStudent),
   assignedStudentIds: Array.isArray(task.assignedStudents) ? task.assignedStudents.map((item: any) => item.studentId) : (task.assignedStudentId ? [task.assignedStudentId] : []),
   assignedStudentNames: Array.isArray(task.assignedStudents) ? task.assignedStudents.map((item: any) => getStudentName(item.student)).filter(Boolean) : [],
-  steps: (task.steps || []).map((step: any) => ({
-    id: step.id,
-    order: step.order,
-    title: step.title,
-    materialId: step.materialId,
-    material: step.material,
-    isCompleted: Array.isArray(step.progress) && step.progress.length > 0,
-    submission: step.assignment?.submissions?.[0] || null
-  }))
+  steps: (task.steps || []).map((step: any) => {
+    const isPassiveMedia = Boolean(step.material && ['VIDEO', 'AUDIO', 'IMAGE'].includes(step.material.type));
+    const isEvaluable = !isPassiveMedia && Boolean(step.requiresSubmission || step.material?.type === 'FORM');
+    return {
+      id: step.id,
+      order: step.order,
+      title: step.title,
+      materialId: step.materialId,
+      material: step.material,
+      requiresSubmission: !isPassiveMedia && Boolean(step.requiresSubmission),
+      isEvaluable,
+      isCompleted: (Array.isArray(step.progress) && step.progress.length > 0) || Boolean(step.assignment?.submissions?.[0]),
+      submission: step.assignment?.submissions?.[0] || null
+    };
+  })
 });
 
 const getTaskInclude = (studentId?: string) => ({
   assignedStudent: { select: { email: true, profile: { select: { firstName: true, lastName: true } } } },
   assignedStudents: { include: { student: { select: { email: true, profile: { select: { firstName: true, lastName: true } } } } } },
+  deliveries: studentId ? { where: { studentId } } : true,
   steps: {
     orderBy: { order: 'asc' as const },
     include: {
@@ -51,6 +60,69 @@ const getTaskInclude = (studentId?: string) => ({
     }
   }
 });
+
+const syncTaskDeliveryOnStepCompletion = async (taskId: string, studentId: string) => {
+  try {
+    const task = await prisma.structuredTask.findUnique({
+      where: { id: taskId },
+      include: {
+        steps: {
+          include: {
+            material: true,
+            progress: { where: { studentId } },
+            assignment: {
+              include: {
+                submissions: { where: { studentId } }
+              }
+            }
+          }
+        },
+        deliveries: { where: { studentId } }
+      }
+    });
+
+    if (!task) return;
+
+    const existingDelivery = task.deliveries[0];
+    const evaluableSteps = task.steps.filter((s) => {
+      const isPassiveMedia = Boolean(s.material && ['VIDEO', 'AUDIO', 'IMAGE'].includes(s.material.type));
+      return !isPassiveMedia && (s.requiresSubmission || s.material?.type === 'FORM');
+    });
+    const gradedSubmissions = evaluableSteps
+      .map((s) => s.assignment?.submissions[0]?.grade)
+      .filter((g): g is number => typeof g === 'number' && !isNaN(g));
+
+    let autoGrade: number | null = null;
+    if (gradedSubmissions.length > 0) {
+      const sum = gradedSubmissions.reduce((a, b) => a + b, 0);
+      autoGrade = Number((sum / gradedSubmissions.length).toFixed(2));
+    }
+
+    const finalGrade = existingDelivery?.grade !== null && existingDelivery?.grade !== undefined
+      ? existingDelivery.grade
+      : autoGrade;
+
+    const allStepsCompleted = task.steps.length > 0 && task.steps.every(
+      (s) => s.progress.length > 0 || (s.assignment && s.assignment.submissions.length > 0)
+    );
+
+    await prisma.taskDelivery.upsert({
+      where: { taskId_studentId: { taskId, studentId } },
+      create: {
+        taskId,
+        studentId,
+        grade: finalGrade,
+        status: allStepsCompleted ? 'COMPLETED' : 'IN_PROGRESS'
+      },
+      update: {
+        grade: finalGrade,
+        status: allStepsCompleted ? (existingDelivery?.status === 'GRADED' ? 'GRADED' : 'COMPLETED') : 'IN_PROGRESS'
+      }
+    });
+  } catch (err) {
+    console.error('Error al sincronizar TaskDelivery:', err);
+  }
+};
 
 const isStudentInCourse = async (studentId: string, courseId: string) => Boolean(await prisma.enrollment.findUnique({
   where: { studentId_courseId: { studentId, courseId } },
@@ -333,6 +405,7 @@ router.post('/steps/:stepId/submit-form', authenticateToken, async (req: AuthReq
       });
       return created;
     });
+    await syncTaskDeliveryOnStepCompletion(step.taskId, req.user!.id);
     res.status(201).json({ submission, score: result.score, total: result.total, grade: result.grade });
   } catch (error) {
     console.error('Error al entregar examen estructurado:', error);
@@ -418,6 +491,7 @@ router.post('/steps/:stepId/submit-delivery', authenticateToken, async (req: Aut
       return sub;
     });
 
+    await syncTaskDeliveryOnStepCompletion(step.taskId, req.user!.id);
     res.status(201).json({ submission, success: true });
   } catch (error) {
     console.error('Error al entregar paso:', error);
@@ -440,6 +514,7 @@ router.post('/steps/:stepId/complete', authenticateToken, async (req: AuthReques
       create: { stepId, studentId: req.user.id },
       update: { completedAt: new Date() }
     });
+    await syncTaskDeliveryOnStepCompletion(step.taskId, req.user!.id);
     res.json(progress);
   } catch (error) {
     console.error('Error al completar paso estructurado:', error);
@@ -449,7 +524,7 @@ router.post('/steps/:stepId/complete', authenticateToken, async (req: AuthReques
 
 // 8. Crear nueva tarea o plantilla
 router.post('/', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
-  const { title, description, dueDate, category, isTemplate, courseId, assignmentType, assignedStudentId, assignedStudentIds, isSequential, steps } = req.body;
+  const { title, description, dueDate, term, category, isTemplate, courseId, assignmentType, assignedStudentId, assignedStudentIds, isSequential, steps } = req.body;
   const isTemplateTask = Boolean(isTemplate);
   const recipientIds = Array.isArray(assignedStudentIds) ? assignedStudentIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0) : (assignedStudentId ? [assignedStudentId] : []);
 
@@ -472,6 +547,7 @@ router.post('/', authenticateToken, requireTeacher, async (req: AuthRequest, res
         title: title.trim(),
         description: description?.trim() || null,
         dueDate: dueDate ? new Date(dueDate) : null,
+        term: typeof term === 'number' ? term : (parseInt(term) || 1),
         isTemplate: isTemplateTask,
         category: (category as SkillCategory) || SkillCategory.GRAMMAR_VOCABULARY,
         courseId: (!isTemplateTask && assignmentType === 'CLASS') ? courseId : null,
@@ -480,7 +556,7 @@ router.post('/', authenticateToken, requireTeacher, async (req: AuthRequest, res
         isSequential: Boolean(isSequential),
         assignedStudentId: (!isTemplateTask && assignmentType === 'INDIVIDUAL') ? recipientIds[0] : null,
         assignedStudents: (!isTemplateTask && assignmentType === 'INDIVIDUAL') ? { create: recipientIds.map((studentId) => ({ studentId })) } : undefined,
-        steps: { create: steps.filter((step: any) => step.title?.trim()).map((step: any, index: number) => ({ order: index + 1, title: step.title.trim(), materialId: step.materialId || null })) }
+        steps: { create: steps.filter((step: any) => step.title?.trim()).map((step: any, index: number) => ({ order: index + 1, title: step.title.trim(), materialId: step.materialId || null, requiresSubmission: Boolean(step.requiresSubmission) })) }
       },
       include: getTaskInclude()
     });
@@ -517,6 +593,7 @@ router.post('/:id/duplicate', authenticateToken, requireTeacher, async (req: Aut
         title: newTitle,
         description: sourceTask.description,
         dueDate: dueDate ? new Date(dueDate) : (!targetIsTemplate ? sourceTask.dueDate : null),
+        term: sourceTask.term,
         isTemplate: targetIsTemplate,
         category: sourceTask.category,
         courseId: (!targetIsTemplate && newAssignmentType === 'CLASS') ? newCourseId : null,
@@ -531,7 +608,8 @@ router.post('/:id/duplicate', authenticateToken, requireTeacher, async (req: Aut
           create: sourceTask.steps.map((step) => ({
             order: step.order,
             title: step.title,
-            materialId: step.materialId
+            materialId: step.materialId,
+            requiresSubmission: step.requiresSubmission
           }))
         }
       },
@@ -594,7 +672,7 @@ router.post('/:id/save-as-template', authenticateToken, requireTeacher, async (r
 // 11. Actualizar tarea estructurada (RECONCILIACIÓN SEGURA: no destruye progreso)
 router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
   const taskId = req.params.id as string;
-  const { title, description, dueDate, category, isTemplate, courseId, assignmentType, assignedStudentId, assignedStudentIds, isSequential, steps } = req.body;
+  const { title, description, dueDate, term, category, isTemplate, courseId, assignmentType, assignedStudentId, assignedStudentIds, isSequential, steps } = req.body;
   const isTemplateTask = Boolean(isTemplate);
   const recipientIds = Array.isArray(assignedStudentIds) ? assignedStudentIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0) : (assignedStudentId ? [assignedStudentId] : []);
 
@@ -629,7 +707,8 @@ router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, r
             data: {
               order: i + 1,
               title: stepTitle,
-              materialId: step.materialId || null
+              materialId: step.materialId || null,
+              requiresSubmission: Boolean(step.requiresSubmission)
             }
           });
         } else {
@@ -638,7 +717,8 @@ router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, r
               taskId,
               order: i + 1,
               title: stepTitle,
-              materialId: step.materialId || null
+              materialId: step.materialId || null,
+              requiresSubmission: Boolean(step.requiresSubmission)
             }
           });
           incomingStepIds.add(createdStep.id);
@@ -668,6 +748,7 @@ router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, r
           title: title.trim(),
           description: description !== undefined ? (description?.trim() || null) : existing.description,
           dueDate: dueDate !== undefined ? (dueDate ? new Date(dueDate) : null) : existing.dueDate,
+          term: term !== undefined ? (typeof term === 'number' ? term : (parseInt(term) || 1)) : existing.term,
           category: category ? (category as SkillCategory) : existing.category,
           isTemplate: isTemplateTask,
           courseId: (!isTemplateTask && assignmentType === 'CLASS') ? courseId : null,
@@ -683,6 +764,150 @@ router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, r
   } catch (error) {
     console.error('Error al actualizar tarea estructurada:', error);
     res.status(500).json({ error: 'Error al actualizar la tarea estructurada.' });
+  }
+});
+
+// 12. Obtener entrega detallada de un alumno para una tarea estructurada
+router.get('/:id/student/:studentId', authenticateToken, async (req: AuthRequest, res: Response) => {
+  const taskId = req.params.id as string;
+  const studentId = req.params.studentId as string;
+
+  try {
+    if (req.user?.role === 'STUDENT' && req.user.id !== studentId) {
+      return res.status(403).json({ error: 'No autorizado para ver esta entrega.' });
+    }
+
+    const task = await prisma.structuredTask.findUnique({
+      where: { id: taskId },
+      include: {
+        course: { select: { id: true, title: true, teacherId: true } },
+        steps: {
+          orderBy: { order: 'asc' },
+          include: {
+            material: true,
+            progress: { where: { studentId } },
+            assignment: {
+              include: {
+                submissions: { where: { studentId } }
+              }
+            }
+          }
+        },
+        deliveries: { where: { studentId } }
+      }
+    });
+
+    if (!task) return res.status(404).json({ error: 'Tarea no encontrada.' });
+
+    const student = await prisma.user.findUnique({
+      where: { id: studentId },
+      select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } }
+    });
+
+    res.json({
+      task: serializeTask(task),
+      student,
+      delivery: task.deliveries[0] || null
+    });
+  } catch (error) {
+    console.error('Error al obtener entrega detallada:', error);
+    res.status(500).json({ error: 'Error al obtener la entrega.' });
+  }
+});
+
+// 13. Calificar entrega global de tarea estructurada y guardar feedback pedagógico paso a paso
+router.post('/:id/grade-delivery', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
+  const taskId = req.params.id as string;
+  const { studentId, grade, feedback, status, stepEvaluations } = req.body;
+
+  if (!studentId) return res.status(400).json({ error: 'El ID de alumno es obligatorio.' });
+
+  try {
+    const task = await prisma.structuredTask.findFirst({
+      where: { id: taskId, OR: [{ teacherId: req.user!.id }, { course: { teacherId: req.user!.id } }] },
+      include: {
+        course: true,
+        steps: {
+          include: { assignment: true }
+        }
+      }
+    });
+    if (!task) return res.status(404).json({ error: 'Tarea no encontrada o no autorizada.' });
+
+    const parsedGrade = grade !== undefined && grade !== null && grade !== '' ? Number(grade) : null;
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Guardar o actualizar calificaciones individuales de cada paso evaluable si se enviaron
+      if (Array.isArray(stepEvaluations) && stepEvaluations.length > 0) {
+        for (const item of stepEvaluations) {
+          if (!item.stepId) continue;
+          const step = task.steps.find((s) => s.id === item.stepId);
+          if (!step) continue;
+
+          let assignmentId = step.assignment?.id;
+          if (!assignmentId) {
+            const teacherId = task.course?.teacherId || task.teacherId || req.user!.id;
+            const createdAssignment = await tx.assignment.create({
+              data: {
+                teacherId,
+                courseId: task.courseId,
+                studentId: task.assignmentType === StructuredTaskAssignmentType.INDIVIDUAL ? studentId : null,
+                materialId: step.materialId || null,
+                structuredTaskStepId: step.id,
+                title: `${step.title} (${task.title})`,
+                description: task.description || step.title,
+                category: task.category || 'WRITING'
+              }
+            });
+            assignmentId = createdAssignment.id;
+          }
+
+          const parsedStepGrade = item.grade !== undefined && item.grade !== null && item.grade !== '' ? Number(item.grade) : null;
+          const stepFeedback = typeof item.feedback === 'string' ? item.feedback.trim() : null;
+
+          await tx.submission.upsert({
+            where: { assignmentId_studentId: { assignmentId, studentId } },
+            create: {
+              assignmentId,
+              studentId,
+              structuredTaskId: taskId,
+              grade: parsedStepGrade,
+              feedback: stepFeedback
+            },
+            update: {
+              grade: parsedStepGrade,
+              feedback: stepFeedback !== undefined ? stepFeedback : undefined
+            }
+          });
+        }
+      }
+
+      // 2. Guardar entrega y nota global de la tarea
+      const delivery = await tx.taskDelivery.upsert({
+        where: { taskId_studentId: { taskId, studentId } },
+        create: {
+          taskId,
+          studentId,
+          grade: parsedGrade,
+          feedback: feedback ? String(feedback).trim() : null,
+          status: status || (parsedGrade !== null ? 'GRADED' : 'COMPLETED'),
+          gradedAt: parsedGrade !== null ? new Date() : null
+        },
+        update: {
+          grade: parsedGrade,
+          feedback: feedback !== undefined ? (feedback ? String(feedback).trim() : null) : undefined,
+          status: status || (parsedGrade !== null ? 'GRADED' : undefined),
+          gradedAt: parsedGrade !== null ? new Date() : undefined
+        }
+      });
+
+      return delivery;
+    });
+
+    res.json({ success: true, delivery: result });
+  } catch (error) {
+    console.error('Error al calificar entrega de tarea:', error);
+    res.status(500).json({ error: 'Error al registrar la calificación de la tarea.' });
   }
 });
 

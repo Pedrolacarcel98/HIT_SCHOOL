@@ -1,6 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Calendar, CheckCircle2, ChevronDown, ChevronUp, ClipboardCheck, Clock3, FileText, Headphones, Pencil, Plus, Search, Trash2, Video, X, BookmarkPlus, ListChecks } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronUp,
+  Plus,
+  Search,
+  Trash2,
+  X,
+  BookmarkPlus,
+  ListChecks,
+  FileText,
+  Video,
+  Headphones,
+  ClipboardCheck,
+  Image as ImageIcon
+} from 'lucide-react';
 import ExamReviewModal from './ExamReviewModal';
 import TaskCard, { type TaskItem } from './TaskCard';
 
@@ -12,6 +26,7 @@ const SKILL_CATEGORIES = [
   { id: 'LISTENING', label: 'Listening' },
   { id: 'MOCK_EXAM', label: 'Mock Exams' }
 ];
+
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 interface MaterialItem {
@@ -20,6 +35,7 @@ interface MaterialItem {
   type: 'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'FORM';
   level?: string;
   description?: string | null;
+  url?: string | null;
   formData?: { questions?: any[] } | null;
 }
 
@@ -31,55 +47,51 @@ interface ExamReviewData {
   total?: number | null;
 }
 
-const parseSavedExam = (content?: string | null) => {
-  if (!content) return null;
-  try {
-    const parsed = JSON.parse(content);
-    return parsed.answers || typeof parsed.score === 'number' ? parsed : null;
-  } catch {
-    return null;
-  }
-};
+interface StepDraft {
+  id: string;
+  title: string;
+  materialId?: string | null;
+  requiresSubmission: boolean;
+}
 
 const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
-  const [assignments, setAssignments] = useState<any[]>([]);
+  const [structuredTasks, setStructuredTasks] = useState<any[]>([]);
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
-  const [isCreating, setIsCreating] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formError, setFormError] = useState('');
-  const [newTitle, setNewTitle] = useState('');
-  const [newDesc, setNewDesc] = useState('');
-  const [newCategory, setNewCategory] = useState('GRAMMAR_VOCABULARY');
-  const [newDueDate, setNewDueDate] = useState('');
-  const [newMaterialId, setNewMaterialId] = useState('');
-  const [newRecipient, setNewRecipient] = useState(courseId);
-  const [editingAssignment, setEditingAssignment] = useState<any | null>(null);
-  const [editTitle, setEditTitle] = useState('');
-  const [editCategory, setEditCategory] = useState('GRAMMAR_VOCABULARY');
-  const [editRecipient, setEditRecipient] = useState(courseId);
-  const [editMaterialId, setEditMaterialId] = useState('');
-  const [students, setStudents] = useState<any[]>([]);
-  const [materialPickerMode, setMaterialPickerMode] = useState<'create' | 'edit' | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [expandedTopics, setExpandedTopics] = useState<Record<string, boolean>>(
+    () => Object.fromEntries(SKILL_CATEGORIES.map(cat => [cat.id, true]))
+  );
+
+  // Modal para Crear / Editar Tarea en esta clase
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<any | null>(null);
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskDescription, setTaskDescription] = useState('');
+  const [taskCategory, setTaskCategory] = useState('GRAMMAR_VOCABULARY');
+  const [taskDueDate, setTaskDueDate] = useState('');
+  const [taskTerm, setTaskTerm] = useState(1);
+  const [taskIsSequential, setTaskIsSequential] = useState(false);
+  const [taskIsTemplate, setTaskIsTemplate] = useState(false);
+  const [taskSteps, setTaskSteps] = useState<StepDraft[]>([]);
+  const [isSavingTask, setIsSavingTask] = useState(false);
+  const [taskFormError, setTaskFormError] = useState('');
+
+  // Selector de Material para un paso
+  const [materialPickerStepIndex, setMaterialPickerStepIndex] = useState<number | null>(null);
   const [materialSearch, setMaterialSearch] = useState('');
   const [materialTypeFilter, setMaterialTypeFilter] = useState<'ALL' | MaterialItem['type']>('ALL');
-  const [reviewingExam, setReviewingExam] = useState<ExamReviewData | null>(null);
-  const [structuredTasks, setStructuredTasks] = useState<any[]>([]);
+
+  // Catálogo de Plantillas
   const [templateCatalog, setTemplateCatalog] = useState<any[]>([]);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [templateLoading, setTemplateLoading] = useState(false);
-  const [expandedTopics, setExpandedTopics] = useState<Record<string, boolean>>(
-    () => Object.fromEntries(SKILL_CATEGORIES.map(cat => [cat.id, false]))
-  );
+
+  // Visor de Examen de un paso
+  const [reviewingExam, setReviewingExam] = useState<ExamReviewData | null>(null);
 
   useEffect(() => {
-    fetchAssignments();
-    fetchMaterials();
-    fetchStudents();
     fetchStructuredTasks();
-  }, [courseId]);
-
-  useEffect(() => {
-    setExpandedTopics(Object.fromEntries(SKILL_CATEGORIES.map(cat => [cat.id, false])));
+    fetchMaterials();
   }, [courseId]);
 
   const toggleTopic = (topicId: string) => {
@@ -88,6 +100,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
 
   const fetchStructuredTasks = async () => {
     try {
+      setLoading(true);
       const token = localStorage.getItem('token');
       const res = await fetch(`${apiUrl}/api/structured-tasks/course/${courseId}`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -96,7 +109,200 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
         setStructuredTasks(await res.json());
       }
     } catch (err) {
-      console.error('Error fetching course structured tasks', err);
+      console.error('Error fetching course tasks', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchMaterials = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${apiUrl}/api/materials`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setMaterials(await res.json());
+      }
+    } catch (err) {
+      console.error('Error fetching materials', err);
+    }
+  };
+
+  // Abrir Modal de Creación
+  const openCreateTask = (categoryPreset?: string) => {
+    setEditingTask(null);
+    setTaskTitle('');
+    setTaskDescription('');
+    setTaskCategory(categoryPreset || 'GRAMMAR_VOCABULARY');
+    setTaskDueDate('');
+    setTaskTerm(1);
+    setTaskIsSequential(false);
+    setTaskIsTemplate(false);
+    setTaskFormError('');
+    setTaskSteps([
+      { id: crypto.randomUUID(), title: 'Paso 1: Instrucciones / Actividad', materialId: null, requiresSubmission: false }
+    ]);
+    setIsTaskModalOpen(true);
+  };
+
+  // Abrir Modal de Edición
+  const openEditTask = (task: TaskItem) => {
+    const orig = structuredTasks.find(t => t.id === task.id);
+    if (!orig) return;
+    setEditingTask(orig);
+    setTaskTitle(orig.title || '');
+    setTaskDescription(orig.description || '');
+    setTaskCategory(orig.category || 'GRAMMAR_VOCABULARY');
+    setTaskDueDate(orig.dueDate ? new Date(orig.dueDate).toISOString().slice(0, 16) : '');
+    setTaskTerm(orig.term || 1);
+    setTaskIsSequential(Boolean(orig.isSequential));
+    setTaskIsTemplate(Boolean(orig.isTemplate));
+    setTaskFormError('');
+    setTaskSteps(
+      (orig.steps || []).map((s: any) => {
+        const mat = materials.find(m => m.id === s.materialId) || s.material;
+        const isPassive = mat && (mat.type === 'VIDEO' || mat.type === 'AUDIO' || mat.type === 'IMAGE');
+        return {
+          id: s.id,
+          title: s.title,
+          materialId: s.materialId || null,
+          requiresSubmission: !isPassive && Boolean(s.requiresSubmission)
+        };
+      })
+    );
+    setIsTaskModalOpen(true);
+  };
+
+  const addStep = () => {
+    const nextOrder = taskSteps.length + 1;
+    setTaskSteps(prev => [
+      ...prev,
+      { id: crypto.randomUUID(), title: `Paso ${nextOrder}`, materialId: null, requiresSubmission: false }
+    ]);
+  };
+
+  const removeStep = (index: number) => {
+    setTaskSteps(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const updateStep = (index: number, patch: Partial<StepDraft>) => {
+    setTaskSteps(prev => prev.map((step, i) => i === index ? { ...step, ...patch } : step));
+  };
+
+  const saveTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!taskTitle.trim()) {
+      setTaskFormError('El título de la tarea es obligatorio.');
+      return;
+    }
+    const validSteps = taskSteps.filter(s => s.title.trim());
+    if (validSteps.length === 0) {
+      setTaskFormError('Debes añadir al menos un paso a la tarea.');
+      return;
+    }
+
+    try {
+      setIsSavingTask(true);
+      setTaskFormError('');
+      const token = localStorage.getItem('token');
+      const payload = {
+        title: taskTitle.trim(),
+        description: taskDescription.trim() || null,
+        dueDate: taskDueDate ? new Date(taskDueDate).toISOString() : null,
+        term: taskTerm,
+        category: taskCategory,
+        isTemplate: taskIsTemplate,
+        courseId,
+        assignmentType: 'CLASS',
+        isSequential: taskIsSequential,
+        steps: validSteps.map((s, idx) => {
+          const mat = materials.find(m => m.id === s.materialId);
+          const isPassive = mat && (mat.type === 'VIDEO' || mat.type === 'AUDIO' || mat.type === 'IMAGE');
+          return {
+            title: s.title.trim(),
+            materialId: s.materialId || null,
+            order: idx + 1,
+            requiresSubmission: !isPassive && (mat?.type === 'FORM' || Boolean(s.requiresSubmission))
+          };
+        })
+      };
+
+      const res = await fetch(`${apiUrl}/api/structured-tasks${editingTask ? `/${editingTask.id}` : ''}`, {
+        method: editingTask ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'No se pudo guardar la tarea.');
+      }
+
+      await fetchStructuredTasks();
+      setIsTaskModalOpen(false);
+    } catch (err: any) {
+      setTaskFormError(err.message || 'Error al guardar la tarea.');
+    } finally {
+      setIsSavingTask(false);
+    }
+  };
+
+  const handleDeleteTask = async (task: TaskItem) => {
+    if (!window.confirm(`¿Eliminar la tarea "${task.title}" de esta clase?`)) return;
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${apiUrl}/api/structured-tasks/${task.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        await fetchStructuredTasks();
+      }
+    } catch (err) {
+      console.error('Error al eliminar tarea', err);
+    }
+  };
+
+  const handleDuplicateTask = async (task: TaskItem) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${apiUrl}/api/structured-tasks/${task.id}/duplicate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          courseId,
+          assignmentType: 'CLASS',
+          isTemplate: false
+        })
+      });
+      if (res.ok) {
+        await fetchStructuredTasks();
+        window.alert('¡Tarea duplicada con éxito en esta clase!');
+      } else {
+        window.alert('No se pudo duplicar la tarea.');
+      }
+    } catch (err) {
+      console.error(err);
+      window.alert('Error de conexión.');
+    }
+  };
+
+  const handleSaveAsTemplate = async (task: TaskItem) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${apiUrl}/api/structured-tasks/${task.id}/save-as-template`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        window.alert('¡Tarea guardada con éxito en el Catálogo Central de Plantillas!');
+      } else {
+        window.alert('No se pudo guardar como plantilla.');
+      }
+    } catch (err) {
+      console.error(err);
+      window.alert('Error de conexión.');
     }
   };
 
@@ -143,163 +349,51 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     }
   };
 
-  const handleDeleteStructuredTask = async (task: TaskItem) => {
-    if (!window.confirm(`¿Eliminar la tarea "${task.title}" de esta clase?`)) return;
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${apiUrl}/api/structured-tasks/${task.id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        await fetchStructuredTasks();
-      }
-    } catch (err) {
-      console.error(err);
+  const getMaterial = (id?: string | null) => materials.find(m => m.id === id);
+
+  const getMaterialIcon = (type?: string, size = 16) => {
+    switch (type) {
+      case 'FORM': return <ClipboardCheck size={size} style={{ color: '#059669' }} />;
+      case 'VIDEO': return <Video size={size} style={{ color: '#ef4444' }} />;
+      case 'AUDIO': return <Headphones size={size} style={{ color: '#f59e0b' }} />;
+      case 'IMAGE': return <ImageIcon size={size} style={{ color: '#8b5cf6' }} />;
+      default: return <FileText size={size} style={{ color: '#0284c7' }} />;
     }
   };
 
-  const fetchStudents = async () => {
-    const token = localStorage.getItem('token');
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-    const res = await fetch(`${apiUrl}/api/students`, { headers: { Authorization: `Bearer ${token}` } });
-    if (res.ok) setStudents(await res.json());
-  };
-
-  const openEdit = (assignment: any) => {
-    setEditingAssignment(assignment);
-    setEditTitle(assignment.title);
-    setEditCategory(assignment.category);
-    setEditRecipient(assignment.studentId || assignment.courseId || courseId);
-    setEditMaterialId(assignment.materialId || '');
-  };
-
-  const saveEdit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!editingAssignment || !editTitle.trim()) return;
-    const recipient = editRecipient === courseId ? { courseId, studentId: null } : { courseId: null, studentId: editRecipient };
-    const res = await fetch(`${apiUrl}/api/assignments/${editingAssignment.id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
-      body: JSON.stringify({ title: editTitle.trim(), category: editCategory, ...recipient, materialId: editMaterialId || null, description: editingAssignment.description || '', dueDate: editingAssignment.dueDate || null })
-    });
-    if (res.ok) { setEditingAssignment(null); fetchAssignments(); }
-  };
-
-  const deleteAssignment = async (assignment: any) => {
-    if (!window.confirm(`¿Eliminar “${assignment.title}”?`)) return;
-    const res = await fetch(`${apiUrl}/api/assignments/${assignment.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
-    if (res.ok) fetchAssignments();
-  };
-
-  const fetchAssignments = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-      const res = await fetch(`${apiUrl}/api/courses/${courseId}/assignments`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) setAssignments(await res.json());
-    } catch (err) {
-      console.error(err);
+  const getMaterialTypeLabel = (type?: string) => {
+    switch (type) {
+      case 'FORM': return 'Examen / Formulario';
+      case 'VIDEO': return 'Vídeo';
+      case 'AUDIO': return 'Audio / Listening';
+      case 'IMAGE': return 'Imagen / Infografía';
+      default: return 'Documento';
     }
   };
 
-  const fetchMaterials = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-      const res = await fetch(`${apiUrl}/api/materials`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        setMaterials(await res.json());
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  const filteredPickerMaterials = materials.filter(m => {
+    const matchesSearch = !materialSearch || m.title.toLowerCase().includes(materialSearch.toLowerCase()) || (m.description && m.description.toLowerCase().includes(materialSearch.toLowerCase()));
+    const matchesType = materialTypeFilter === 'ALL' || m.type === materialTypeFilter;
+    return matchesSearch && matchesType;
+  });
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTitle.trim()) {
-      setFormError('El titulo es obligatorio.');
-      return;
-    }
-
-    try {
-      setIsSubmitting(true);
-      setFormError('');
-      const token = localStorage.getItem('token');
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-      const isIndividual = newRecipient !== courseId;
-      const res = await fetch(`${apiUrl}${isIndividual ? '/api/assignments' : `/api/courses/${courseId}/assignments`}`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          title: newTitle.trim(), 
-          description: newDesc, 
-          category: newCategory,
-          dueDate: newDueDate || null,
-          materialId: newMaterialId || null,
-          ...(isIndividual ? { studentId: newRecipient } : { courseId })
-        }),
-      });
-
-      if (res.ok) {
-        setIsCreating(false);
-        setNewTitle('');
-        setNewDesc('');
-        setNewDueDate('');
-        setNewMaterialId('');
-        setNewRecipient(courseId);
-        fetchAssignments();
-      } else {
-        const data = await res.json().catch(() => ({}));
-        setFormError(data.error || 'No se pudo crear la tarea. Revisa los datos e intentalo de nuevo.');
-      }
-    } catch (err) {
-      console.error(err);
-      setFormError('Error de conexion con el servidor.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // Agrupar tareas por categoría
-  const grouped = SKILL_CATEGORIES.map(cat => ({
+  // Agrupación directa de Tareas por Disciplina / Categoría
+  const groupedTasks = SKILL_CATEGORIES.map(cat => ({
     ...cat,
-    items: assignments.filter(a => a.category === cat.id)
+    tasks: structuredTasks.filter(t => (t.category || 'GRAMMAR_VOCABULARY') === cat.id)
   }));
 
-  const selectedCreateMaterial = materials.find((material) => material.id === newMaterialId);
-  const selectedEditMaterial = materials.find((material) => material.id === editMaterialId);
-  const filteredPickerMaterials = materials.filter((material) => {
-    const query = materialSearch.trim().toLowerCase();
-    const matchesSearch = !query || `${material.title} ${material.description || ''}`.toLowerCase().includes(query);
-    return matchesSearch && (materialTypeFilter === 'ALL' || material.type === materialTypeFilter);
-  });
-  const materialIcon = (type: MaterialItem['type']) => type === 'FORM' ? <ClipboardCheck size={16} /> : type === 'VIDEO' ? <Video size={16} /> : type === 'AUDIO' ? <Headphones size={16} /> : <FileText size={16} />;
-  const materialLabel = (type: MaterialItem['type']) => type === 'FORM' ? 'EXAMEN INTERACTIVO' : type === 'VIDEO' ? 'VÍDEO' : type === 'AUDIO' ? 'AUDIO' : 'DOCUMENTO';
-  const openMaterialPicker = (mode: 'create' | 'edit') => {
-    setMaterialPickerMode(mode);
-    setMaterialSearch('');
-    setMaterialTypeFilter('ALL');
-  };
-  const chooseMaterial = (materialId: string) => {
-    if (materialPickerMode === 'create') setNewMaterialId(materialId);
-    if (materialPickerMode === 'edit') setEditMaterialId(materialId);
-    setMaterialPickerMode(null);
-  };
-
   return (
-    <div className="animate-fade-in">
-      {!isCreating ? (
-        <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
-          <button onClick={() => setIsCreating(true)} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Plus size={18} /> Crear tarea simple
+    <div>
+      {/* Barra Superior de Acciones de Clase */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => openCreateTask()}
+            className="btn-primary"
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+          >
+            <Plus size={18} /> Nueva Tarea
           </button>
           <button
             type="button"
@@ -321,285 +415,450 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
             <BookmarkPlus size={18} /> + Asignar desde Plantilla
           </button>
         </div>
-      ) : (
-        <form onSubmit={handleCreate} className="glass-panel animate-fade-in" style={{ marginBottom: '2rem', padding: '1.5rem' }}>
-          <h3 style={{ marginTop: 0, color: 'var(--primary)', marginBottom: '1rem' }}>Nueva Tarea</h3>
-          {formError && (
-            <div style={{ marginBottom: '1rem', padding: '0.75rem 1rem', border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b', borderRadius: '8px' }}>
-              {formError}
-            </div>
-          )}
-          
-          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-            <div style={{ flex: '2 1 220px', minWidth: 0 }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '500' }}>Título</label>
-              <input type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} required style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }} />
-            </div>
-            <div style={{ flex: '1 1 180px', minWidth: 0 }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '500' }}>Categoría (Skill)</label>
-              <select value={newCategory} onChange={(e) => setNewCategory(e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}>
-                {SKILL_CATEGORIES.map(cat => (
-                  <option key={cat.id} value={cat.id}>{cat.label}</option>
-                ))}
-              </select>
-            </div>
-            <div style={{ flex: '1 1 220px', minWidth: 0 }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '500' }}>Destinatario</label>
-              <select value={newRecipient} onChange={(e) => setNewRecipient(e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}>
-                <option value={courseId}>Toda la clase</option>
-                {students.map(student => <option key={student.id} value={student.id}>{student.profile?.firstName} {student.profile?.lastName} ({student.email})</option>)}
-              </select>
-            </div>
-            <div style={{ flex: '1 1 180px', minWidth: 0 }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '500' }}>Fecha de Entrega (Opcional)</label>
-              <input type="date" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} min={new Date().toISOString().split('T')[0]} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }} />
-            </div>
-          </div>
 
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '500' }}>Material Vinculado (Opcional)</label>
-            {selectedCreateMaterial ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem', border: '1px solid var(--primary-border)', borderRadius: '8px', background: 'var(--primary-light)', color: 'var(--primary-text)' }}>
-                {materialIcon(selectedCreateMaterial.type)}
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.9rem', fontWeight: 600 }}>{selectedCreateMaterial.title} ({materialLabel(selectedCreateMaterial.type)})</span>
-                <button type="button" onClick={() => openMaterialPicker('create')} className="btn-secondary" style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem' }}>Cambiar</button>
-                <button type="button" onClick={() => setNewMaterialId('')} style={{ border: 'none', background: 'transparent', color: '#b91c1c', cursor: 'pointer', padding: '0.35rem' }}><Trash2 size={16} /></button>
-              </div>
-            ) : (
-              <button type="button" onClick={() => openMaterialPicker('create')} style={{ width: '100%', padding: '0.85rem 1rem', border: '2px dashed #cbd5e1', borderRadius: '8px', background: 'transparent', color: '#475569', cursor: 'pointer', textAlign: 'left', fontSize: '0.9rem' }}>
-                📎 Seleccionar Material de Clase (Examen, Audio, Vídeo o Documento)
-              </button>
-            )}
-          </div>
-          
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '500' }}>Descripción / Instrucciones (Opcional)</label>
-            <textarea value={newDesc} onChange={(e) => setNewDesc(e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', resize: 'vertical', minHeight: '80px', background: 'var(--surface-alt)', color: 'var(--text-main)' }} />
-          </div>
-
-          <div style={{ display: 'flex', gap: '1rem' }}>
-            <button type="submit" className="btn-primary" disabled={isSubmitting} style={{ opacity: isSubmitting ? 0.7 : 1, cursor: isSubmitting ? 'not-allowed' : 'pointer' }}>
-              {isSubmitting ? 'Asignando...' : 'Asignar Tarea'}
-            </button>
-            <button type="button" onClick={() => setIsCreating(false)} disabled={isSubmitting} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: isSubmitting ? 'not-allowed' : 'pointer', opacity: isSubmitting ? 0.7 : 1 }}>Cancelar</button>
-          </div>
-        </form>
-      )}
-
-      {/* Sección de Tareas Estructuradas / Multi-paso del Curso */}
-      <div style={{ marginBottom: '2.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '2px solid var(--primary)', paddingBottom: '0.5rem', marginBottom: '1.25rem' }}>
-          <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem', color: 'var(--text-main)', fontSize: '1.4rem' }}>
-            <ListChecks style={{ color: 'var(--primary)' }} /> Tareas Guiadas y Módulos Estructurados
-          </h2>
-          <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            {structuredTasks.length} {structuredTasks.length === 1 ? 'actividad' : 'actividades'}
-          </span>
-        </div>
-
-        {structuredTasks.length === 0 ? (
-          <div style={{ padding: '2rem', border: '1px dashed var(--primary-border)', borderRadius: '12px', background: 'var(--primary-subtle)', textAlign: 'center', color: 'var(--text-muted)' }}>
-            <p style={{ margin: '0 0 0.75rem', fontSize: '0.92rem' }}>No hay tareas estructuradas asignadas a esta clase todavía.</p>
-            <button
-              type="button"
-              onClick={openTemplateModal}
-              className="btn-secondary"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}
-            >
-              <BookmarkPlus size={16} /> Asignar desde Catálogo de Plantillas
-            </button>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            {structuredTasks.map((task) => {
-              const taskItem: TaskItem = {
-                id: task.id,
-                title: task.title,
-                description: task.description,
-                dueDate: task.dueDate,
-                category: task.category,
-                isSequential: task.isSequential,
-                isTemplate: task.isTemplate,
-                assignmentType: task.assignmentType,
-                assignedStudentName: task.assignedStudentName,
-                assignedStudentNames: task.assignedStudentNames,
-                courseId: task.courseId,
-                stats: task.stats,
-                steps: task.steps.map((s: any) => ({
-                  id: s.id,
-                  order: s.order,
-                  title: s.title,
-                  materialId: s.materialId,
-                  material: s.material
-                }))
-              };
-
-              return (
-                <TaskCard
-                  key={task.id}
-                  task={taskItem}
-                  mode="TEACHER"
-                  onDeleteTask={handleDeleteStructuredTask}
-                  onOpenStep={(step) => {
-                    if (step.material?.type === 'FORM' && step.material.formData) {
-                      setReviewingExam({
-                        title: step.material.title,
-                        questions: step.material.formData.questions || [],
-                        answers: {},
-                        score: null,
-                        total: step.material.formData.questions?.length || 0
-                      });
-                    } else if (step.material?.url) {
-                      window.open(step.material.url, '_blank', 'noopener,noreferrer');
-                    }
-                  }}
-                />
-              );
-            })}
-          </div>
-        )}
+        <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+          {structuredTasks.length} {structuredTasks.length === 1 ? 'tarea en total' : 'tareas en total'}
+        </span>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-        {grouped.map(group => {
+      {loading ? (
+        <div className="glass-panel" style={{ textAlign: 'center', padding: '4rem 2rem', color: 'var(--text-muted)' }}>
+          Cargando tareas de la clase...
+        </div>
+      ) : structuredTasks.length === 0 ? (
+        <div style={{ padding: '3rem 2rem', border: '1px dashed var(--primary-border)', borderRadius: '12px', background: 'var(--primary-subtle)', textAlign: 'center', color: 'var(--text-muted)', marginBottom: '2rem' }}>
+          <ListChecks size={42} style={{ color: 'var(--primary)', opacity: 0.5, marginBottom: '0.75rem' }} />
+          <h3 style={{ margin: '0 0 0.5rem', color: 'var(--text-main)', fontSize: '1.2rem' }}>Aún no hay tareas en esta clase</h3>
+          <p style={{ margin: '0 0 1.25rem', fontSize: '0.9rem' }}>Crea tu primera tarea o asígnala al instante desde el catálogo de plantillas didácticas.</p>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <button onClick={() => openCreateTask()} className="btn-primary">
+              <Plus size={16} /> Crear Tarea
+            </button>
+            <button onClick={openTemplateModal} className="btn-secondary">
+              <BookmarkPlus size={16} /> Ver Plantillas
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Disciplinas / Categorías con Acordeones Desplegables */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        {groupedTasks.map(group => {
           const isExpanded = !!expandedTopics[group.id];
           return (
-          <div key={group.id}>
-            <h2
-              onClick={() => toggleTopic(group.id)}
-              role="button"
-              tabIndex={0}
-              aria-expanded={isExpanded}
-              onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleTopic(group.id); } }}
-              className="cursor-pointer select-none flex items-center justify-between hover:opacity-80 transition-opacity"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', cursor: 'pointer', userSelect: 'none', color: 'var(--primary)', borderBottom: '2px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '1rem', fontSize: '1.5rem' }}
-            >
-              <span>{group.label}</span>
-              {isExpanded ? <ChevronUp size={22} /> : <ChevronDown size={22} />}
-            </h2>
+            <div key={group.id} className="glass-panel" style={{ padding: '1.25rem 1.5rem', borderRadius: '12px' }}>
+              <div
+                onClick={() => toggleTopic(group.id)}
+                role="button"
+                tabIndex={0}
+                aria-expanded={isExpanded}
+                onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleTopic(group.id); } }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '0.75rem',
+                  cursor: 'pointer',
+                  userSelect: 'none'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {group.label}
+                  </h3>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '0.2rem 0.6rem', borderRadius: '12px', background: group.tasks.length > 0 ? 'var(--primary-light)' : 'var(--surface-alt)', color: group.tasks.length > 0 ? 'var(--primary-text)' : 'var(--text-muted)' }}>
+                    {group.tasks.length} {group.tasks.length === 1 ? 'tarea' : 'tareas'}
+                  </span>
+                </div>
 
-            <div
-              className="transition-all duration-200 ease-in-out"
-              style={{ overflow: 'hidden', maxHeight: isExpanded ? '6000px' : '0', opacity: isExpanded ? 1 : 0, transition: 'max-height 200ms ease-in-out, opacity 200ms ease-in-out' }}
-            >
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '1.25rem' }}>
-              {group.items.length === 0 ? (
-                <p style={{ color: 'var(--text-muted)', fontStyle: 'italic', margin: 0, paddingLeft: '1rem' }}>Sin contenido</p>
-              ) : (
-                group.items.map(item => {
-                  const material = item.material as MaterialItem | null | undefined;
-                  const isExam = material?.type === 'FORM';
-                  const submissions = item.submissions || [];
-                  const gradedCount = submissions.filter((submission: any) => submission.grade !== null && submission.grade !== undefined).length;
-                  return (
-                    <article key={item.id} className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: '270px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', color: '#2b6cb0', fontSize: '0.76rem', fontWeight: 700, textTransform: 'uppercase' }}>
-                          <span style={{ padding: '0.45rem', borderRadius: '8px', background: '#eef6fc', display: 'flex' }}>{materialIcon(material?.type || 'DOCUMENT')}</span>
-                          {materialLabel(material?.type || 'DOCUMENT')}
-                        </div>
-                        <span style={{ padding: '0.2rem 0.55rem', borderRadius: '12px', background: 'var(--primary-light)', color: 'var(--primary-text)', border: '1px solid var(--primary-border)', fontSize: '0.72rem', fontWeight: 700 }}>{material?.level || 'GENERAL'}</span>
-                      </div>
-                      <h3 style={{ fontSize: '1.1rem', lineHeight: 1.35, margin: '0 0 0.55rem' }}>{item.title}</h3>
-                      <p style={{ color: 'var(--text-muted)', fontSize: '0.86rem', lineHeight: 1.45, margin: '0 0 1.25rem', flex: 1 }}>{item.description || material?.description || 'Sin descripción disponible.'}</p>
-                      <div style={{ display: 'grid', gap: '0.45rem', borderTop: '1px solid var(--border)', paddingTop: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                        {item.dueDate && <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><Calendar size={14} /> Entrega: {new Date(item.dueDate).toLocaleDateString('es-ES')}</span>}
-                        <span>{submissions.length} entregas · {gradedCount} evaluadas</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap', marginTop: '1.25rem' }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: submissions.length > 0 ? '#24583e' : '#8d5b12', background: submissions.length > 0 ? 'var(--primary-light)' : '#fef7e8', padding: '0.3rem 0.65rem', borderRadius: '14px', border: submissions.length > 0 ? '1px solid var(--primary-border)' : '1px solid #fae0b0', fontSize: '0.82rem', fontWeight: 700 }}>
-                          {submissions.length > 0 ? <><CheckCircle2 size={16} /> Entregas recibidas</> : <><Clock3 size={16} /> Pendiente</>}
-                        </span>
-                        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-                          {isExam && submissions[0] && (() => {
-                            const attempt = parseSavedExam(submissions[0].content);
-                            return attempt ? <button type="button" onClick={() => setReviewingExam({ title: item.title, questions: material?.formData?.questions || [], answers: attempt.answers || {}, score: submissions[0].grade ?? attempt.score ?? null, total: attempt.total })} className="btn-secondary" style={{ padding: '0.5rem 0.7rem', fontSize: '0.8rem' }}>Revisar</button> : null;
-                          })()}
-                          <button title="Editar contenido" aria-label="Editar contenido" onClick={() => openEdit(item)} style={actionButtonStyle}><Pencil size={17} /></button>
-                          <button title="Eliminar contenido" aria-label="Eliminar contenido" onClick={() => deleteAssignment(item)} style={{ ...actionButtonStyle, color: '#9e2a2b' }}><Trash2 size={17} /></button>
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); openCreateTask(group.id); }}
+                    className="btn-secondary"
+                    style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                    title={`Añadir tarea a ${group.label}`}
+                  >
+                    <Plus size={14} /> Añadir
+                  </button>
+                  <button
+                    type="button"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}
+                    aria-label={isExpanded ? 'Contraer disciplina' : 'Expandir disciplina'}
+                  >
+                    {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                  </button>
+                </div>
+              </div>
+
+              {isExpanded && (
+                <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  {group.tasks.length === 0 ? (
+                    <p style={{ color: 'var(--text-muted)', fontStyle: 'italic', margin: '0.5rem 0', paddingLeft: '0.5rem', fontSize: '0.9rem' }}>
+                      Sin tareas asignadas en esta disciplina.
+                    </p>
+                  ) : (
+                    group.tasks.map((task) => {
+                      const taskItem: TaskItem = {
+                        id: task.id,
+                        title: task.title,
+                        description: task.description,
+                        dueDate: task.dueDate,
+                        category: task.category,
+                        isSequential: task.isSequential,
+                        isTemplate: task.isTemplate,
+                        assignmentType: task.assignmentType,
+                        assignedStudentName: task.assignedStudentName,
+                        assignedStudentNames: task.assignedStudentNames,
+                        courseId: task.courseId,
+                        stats: task.stats,
+                        steps: (task.steps || []).map((s: any) => ({
+                          id: s.id,
+                          order: s.order,
+                          title: s.title,
+                          materialId: s.materialId,
+                          material: s.material,
+                          isCompleted: s.isCompleted,
+                          submission: s.submission
+                        }))
+                      };
+
+                      return (
+                        <TaskCard
+                          key={task.id}
+                          task={taskItem}
+                          mode="TEACHER"
+                          onEditTask={openEditTask}
+                          onDuplicateTask={handleDuplicateTask}
+                          onSaveAsTemplate={handleSaveAsTemplate}
+                          onDeleteTask={handleDeleteTask}
+                          onOpenStep={(step) => {
+                            if (step.material?.type === 'FORM' && step.material.formData) {
+                              setReviewingExam({
+                                title: step.material.title,
+                                questions: step.material.formData.questions || [],
+                                answers: {},
+                                score: null,
+                                total: step.material.formData.questions?.length || 0
+                              });
+                            } else if (step.material?.url) {
+                              window.open(step.material.url, '_blank', 'noopener,noreferrer');
+                            }
+                          }}
+                        />
+                      );
+                    })
+                  )}
+                </div>
               )}
             </div>
-            </div>
-          </div>
           );
         })}
       </div>
-      {materialPickerMode && createPortal(
-        <div className="modal-backdrop" style={{ zIndex: 110 }} onClick={() => setMaterialPickerMode(null)}>
-          <div className="glass-panel modal-card modal-card--wide" onClick={(event) => event.stopPropagation()} style={{ maxWidth: '760px', maxHeight: '88vh', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <button type="button" onClick={() => setMaterialPickerMode(null)} aria-label="Cerrar biblioteca" className="modal-close"><X size={19} /></button>
-            <div style={{ paddingRight: '2rem' }}>
-              <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Elige el material que acompañará la tarea.</p>
+
+      {/* Modal: Crear / Editar Tarea */}
+      {isTaskModalOpen && (
+        <div className="modal-backdrop" style={modalBackdropStyle} onClick={() => setIsTaskModalOpen(false)}>
+          <form
+            onSubmit={saveTask}
+            className="glass-panel modal-card"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 'min(100%, 580px)',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              padding: '1.5rem',
+              overflow: 'hidden'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '0.75rem' }}>
+              <div>
+                <h2 style={{ margin: '0 0 0.25rem', color: 'var(--text-main)', fontSize: '1.25rem' }}>
+                  {editingTask ? 'Editar Tarea' : 'Nueva Tarea para esta Clase'}
+                </h2>
+                <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                  Configura la disciplina, fecha y los pasos (1 o varios) de la tarea.
+                </p>
+              </div>
+              <button type="button" onClick={() => setIsTaskModalOpen(false)} aria-label="Cerrar" className="modal-close" style={{ position: 'static' }}>
+                <X size={19} />
+              </button>
             </div>
+
+            {taskFormError && (
+              <div style={{ marginBottom: '0.75rem', padding: '0.65rem 0.85rem', border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b', borderRadius: '8px', fontSize: '0.85rem' }}>
+                {taskFormError}
+              </div>
+            )}
+
+            {/* Cuerpo con Scroll */}
+            <div style={{ flex: 1, overflowY: 'auto', paddingRight: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Título de la Tarea</label>
+                <input
+                  required
+                  value={taskTitle}
+                  onChange={(e) => setTaskTitle(e.target.value)}
+                  placeholder="Ej. B2 Essay: Artificial Intelligence"
+                  style={inputStyle}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Descripción / Instrucciones (Opcional)</label>
+                <textarea
+                  value={taskDescription}
+                  onChange={(e) => setTaskDescription(e.target.value)}
+                  placeholder="Pautas o instrucciones para el alumno..."
+                  rows={2}
+                  style={{ ...inputStyle, resize: 'vertical' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Disciplina / Skill</label>
+                  <select
+                    value={taskCategory}
+                    onChange={(e) => setTaskCategory(e.target.value)}
+                    style={inputStyle}
+                  >
+                    {SKILL_CATEGORIES.map(cat => (
+                      <option key={cat.id} value={cat.id}>{cat.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Trimestre</label>
+                  <select
+                    value={taskTerm}
+                    onChange={(e) => setTaskTerm(Number(e.target.value))}
+                    style={inputStyle}
+                  >
+                    <option value={1}>1º Trimestre (Sep - Dic)</option>
+                    <option value={2}>2º Trimestre (Ene - Mar)</option>
+                    <option value={3}>3º Trimestre (Abr - Jun)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Fecha Límite</label>
+                  <input
+                    type="datetime-local"
+                    value={taskDueDate}
+                    onChange={(e) => setTaskDueDate(e.target.value)}
+                    style={inputStyle}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.75rem', background: 'var(--primary-subtle)', borderRadius: '8px', border: '1px solid var(--primary-border)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>
+                  <input
+                    type="checkbox"
+                    checked={taskIsSequential}
+                    onChange={(e) => setTaskIsSequential(e.target.checked)}
+                    style={{ width: '16px', height: '16px', accentColor: 'var(--primary)' }}
+                  />
+                  <span>Flujo secuencial paso a paso (bloquear paso siguiente hasta completar el anterior)</span>
+                </label>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>
+                  <input
+                    type="checkbox"
+                    checked={taskIsTemplate}
+                    onChange={(e) => setTaskIsTemplate(e.target.checked)}
+                    style={{ width: '16px', height: '16px', accentColor: 'var(--primary)' }}
+                  />
+                  <span>⭐ Guardar también como Plantilla Reutilizable en el Catálogo</span>
+                </label>
+              </div>
+
+              {/* Lista de Pasos */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ color: 'var(--text-main)', fontSize: '0.88rem', fontWeight: 600 }}>Pasos de la Tarea ({taskSteps.length})</label>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Una tarea puede ser de 1 paso o multi-paso</span>
+                </div>
+
+                {taskSteps.map((step, index) => {
+                  const linkedMaterial = getMaterial(step.materialId);
+                  return (
+                    <div key={step.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', padding: '0.75rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '32px minmax(0, 1fr) minmax(160px, 0.8fr) 32px', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'var(--primary-light)', color: 'var(--primary-text)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.8rem' }}>
+                          {index + 1}
+                        </span>
+
+                        <input
+                          required
+                          value={step.title}
+                          onChange={(e) => updateStep(index, { title: e.target.value })}
+                          placeholder="Instrucción del paso..."
+                          style={{ ...inputStyle, marginTop: 0 }}
+                        />
+
+                        {linkedMaterial ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.6rem', border: '1px solid var(--primary-border)', borderRadius: '6px', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.78rem' }}>
+                            {getMaterialIcon(linkedMaterial.type)}
+                            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>{linkedMaterial.title}</span>
+                            <button type="button" onClick={() => updateStep(index, { materialId: null })} style={{ border: 'none', background: 'transparent', color: '#b91c1c', cursor: 'pointer', padding: 0 }} title="Quitar material"><X size={14} /></button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => { setMaterialPickerStepIndex(index); setMaterialSearch(''); }}
+                            className="btn-secondary"
+                            style={{ padding: '0.45rem 0.6rem', fontSize: '0.78rem', whiteSpace: 'nowrap' }}
+                          >
+                            📎 Asociar Material
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => removeStep(index)}
+                          disabled={taskSteps.length <= 1}
+                          style={{ border: 'none', background: 'transparent', color: taskSteps.length <= 1 ? '#cbd5e1' : '#b91c1c', cursor: taskSteps.length <= 1 ? 'not-allowed' : 'pointer', display: 'flex', justifyContent: 'center' }}
+                          title="Eliminar paso"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+
+                      {(() => {
+                        const isPassive = linkedMaterial && (linkedMaterial.type === 'VIDEO' || linkedMaterial.type === 'AUDIO' || linkedMaterial.type === 'IMAGE');
+                        const isForm = linkedMaterial?.type === 'FORM';
+
+                        if (isPassive) {
+                          return (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem', color: 'var(--text-muted)', marginLeft: '36px' }}>
+                              <span>📖 Recurso didáctico (Formativo / No evaluable)</span>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: isForm ? 'default' : 'pointer', fontSize: '0.78rem', color: 'var(--text-muted)', marginLeft: '36px' }}>
+                            <input
+                              type="checkbox"
+                              checked={isForm || Boolean(step.requiresSubmission)}
+                              disabled={isForm}
+                              onChange={(e) => updateStep(index, { requiresSubmission: e.target.checked })}
+                              style={{ width: '14px', height: '14px', accentColor: 'var(--primary)' }}
+                            />
+                            <span>{isForm ? '📝 Examen autocorregible con nota' : '📝 Paso evaluable (requiere entrega y nota numérica)'}</span>
+                          </label>
+                        );
+                      })()}
+                    </div>
+                  );
+                })}
+
+                <button
+                  type="button"
+                  onClick={addStep}
+                  className="btn-secondary"
+                  style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.8rem', fontSize: '0.82rem' }}
+                >
+                  <Plus size={15} /> Añadir otro paso
+                </button>
+              </div>
+            </div>
+
+            {/* Footer Fijo */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.65rem', paddingTop: '1rem', marginTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
+              <button type="button" onClick={() => setIsTaskModalOpen(false)} className="btn-secondary" disabled={isSavingTask}>
+                Cancelar
+              </button>
+              <button type="submit" className="btn-primary" disabled={isSavingTask}>
+                {isSavingTask ? 'Guardando...' : 'Guardar Tarea'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Modal: Selector de Material para un Paso */}
+      {materialPickerStepIndex !== null && createPortal(
+        <div className="modal-backdrop" style={modalBackdropStyle} onClick={() => setMaterialPickerStepIndex(null)}>
+          <div className="glass-panel modal-card modal-card--wide" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '760px', maxHeight: '88vh', display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--text-main)' }}>Seleccionar Material de la Academia</h3>
+                <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Elige el material o cuestionario para este paso de la tarea.</p>
+              </div>
+              <button type="button" onClick={() => setMaterialPickerStepIndex(null)} className="modal-close"><X size={19} /></button>
+            </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
               <div style={{ position: 'relative' }}>
                 <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                <input value={materialSearch} onChange={(event) => setMaterialSearch(event.target.value)} placeholder="Buscar por título o descripción..." style={{ ...inputStyle, paddingLeft: '2.25rem' }} />
+                <input
+                  value={materialSearch}
+                  onChange={(e) => setMaterialSearch(e.target.value)}
+                  placeholder="Buscar por título o descripción..."
+                  style={{ ...inputStyle, paddingLeft: '2.25rem', marginTop: 0 }}
+                />
               </div>
+
               <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                {([['ALL', 'Todos'], ['DOCUMENT', 'Documentos'], ['VIDEO', 'Vídeos'], ['AUDIO', 'Audios'], ['FORM', 'Exámenes']] as const).map(([value, label]) => (
-                  <button key={value} type="button" onClick={() => setMaterialTypeFilter(value)} className={materialTypeFilter === value ? 'btn-primary' : 'btn-secondary'} style={{ padding: '0.4rem 0.7rem', fontSize: '0.78rem' }}>{label}</button>
+                {([['ALL', 'Todos'], ['DOCUMENT', 'Documentos'], ['VIDEO', 'Vídeos'], ['AUDIO', 'Audios'], ['FORM', 'Exámenes']] as const).map(([val, label]) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setMaterialTypeFilter(val)}
+                    className={materialTypeFilter === val ? 'btn-primary' : 'btn-secondary'}
+                    style={{ padding: '0.35rem 0.7rem', fontSize: '0.78rem' }}
+                  >
+                    {label}
+                  </button>
                 ))}
               </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', maxHeight: '60vh', overflowY: 'auto', padding: '0.15rem' }}>
-              {filteredPickerMaterials.map((material) => (
-                <article key={material.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', padding: '1rem', border: '1px solid var(--border)', borderRadius: '10px', background: 'var(--surface)', minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: 'var(--primary-text)', fontSize: '0.72rem', fontWeight: 700 }}>
-                    {materialIcon(material.type)} <span>{materialLabel(material.type)}</span>
-                    <span style={{ marginLeft: 'auto', padding: '0.15rem 0.4rem', borderRadius: '999px', background: 'var(--primary-light)', border: '1px solid var(--primary-border)' }}>{material.level || 'GENERAL'}</span>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.85rem', maxHeight: '55vh', overflowY: 'auto', padding: '0.2rem' }}>
+              {filteredPickerMaterials.map(m => (
+                <article key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.85rem', border: '1px solid var(--border)', borderRadius: '10px', background: 'var(--surface)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--primary-text)', fontSize: '0.72rem', fontWeight: 700 }}>
+                    {getMaterialIcon(m.type)} <span>{getMaterialTypeLabel(m.type)}</span>
+                    <span style={{ marginLeft: 'auto', padding: '0.15rem 0.4rem', borderRadius: '999px', background: 'var(--primary-light)', border: '1px solid var(--primary-border)' }}>{m.level || 'GENERAL'}</span>
                   </div>
-                  <strong style={{ color: '#0f172a' }}>{material.title}</strong>
-                  <p style={{ margin: 0, minHeight: '2.4rem', color: '#64748b', fontSize: '0.75rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{material.description || 'Sin descripción disponible.'}</p>
-                  <button type="button" onClick={() => chooseMaterial(material.id)} className="btn-primary" style={{ width: '100%', padding: '0.55rem', fontSize: '0.82rem', marginTop: 'auto' }}>✓ Seleccionar</button>
+                  <strong style={{ color: 'var(--text-main)', fontSize: '0.92rem' }}>{m.title}</strong>
+                  <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.75rem', minHeight: '2.2rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                    {m.description || 'Sin descripción disponible.'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const isPassive = m.type === 'VIDEO' || m.type === 'AUDIO' || m.type === 'IMAGE';
+                      updateStep(materialPickerStepIndex, {
+                        materialId: m.id,
+                        requiresSubmission: m.type === 'FORM' ? true : (isPassive ? false : undefined)
+                      });
+                      setMaterialPickerStepIndex(null);
+                    }}
+                    className="btn-primary"
+                    style={{ width: '100%', padding: '0.45rem', fontSize: '0.8rem', marginTop: 'auto' }}
+                  >
+                    ✓ Seleccionar
+                  </button>
                 </article>
               ))}
-              {filteredPickerMaterials.length === 0 && <p style={{ gridColumn: '1 / -1', padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>No se encontraron materiales.</p>}
+              {filteredPickerMaterials.length === 0 && (
+                <p style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                  No se encontraron materiales con los filtros aplicados.
+                </p>
+              )}
             </div>
           </div>
-        </div>, document.body
+        </div>,
+        document.body
       )}
-      {reviewingExam && (
-        <ExamReviewModal
-          title={reviewingExam.title}
-          questions={reviewingExam.questions}
-          answers={reviewingExam.answers}
-          score={reviewingExam.score}
-          total={reviewingExam.total}
-          onClose={() => setReviewingExam(null)}
-        />
-      )}
-      {editingAssignment && createPortal(<div className="modal-backdrop" style={modalBackdropStyle} onClick={() => setEditingAssignment(null)}>
-        <form className="glass-panel modal-card" onSubmit={saveEdit} onClick={(event) => event.stopPropagation()} style={{ width: 'min(100%, 500px)', padding: '1.5rem' }}>
-          <button type="button" onClick={() => setEditingAssignment(null)} aria-label="Cerrar" className="modal-close"><X size={19} /></button>
-          <h2 style={{ margin: '0 0 1rem' }}>Editar contenido</h2>
-          <label style={labelStyle}>Título<input value={editTitle} onChange={(event) => setEditTitle(event.target.value)} required style={inputStyle} /></label>
-          <label style={labelStyle}>Categoría<select value={editCategory} onChange={(event) => setEditCategory(event.target.value)} style={inputStyle}>{SKILL_CATEGORIES.map(category => <option key={category.id} value={category.id}>{category.label}</option>)}</select></label>
-          <label style={labelStyle}>Destinatario<select value={editRecipient} onChange={(event) => setEditRecipient(event.target.value)} style={inputStyle}><option value={courseId}>Toda la clase</option>{students.map(student => <option key={student.id} value={student.id}>{student.profile?.firstName} {student.profile?.lastName} ({student.email})</option>)}</select></label>
-          <div style={{ marginBottom: '0.9rem' }}>
-            <label style={labelStyle}>Material Vinculado (Opcional)</label>
-            {selectedEditMaterial ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.65rem 0.75rem', border: '1px solid var(--primary-border)', borderRadius: '8px', background: 'var(--primary-light)', color: 'var(--primary-text)' }}>
-                {materialIcon(selectedEditMaterial.type)}
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.82rem', fontWeight: 700 }}>{selectedEditMaterial.title}</span>
-                <button type="button" onClick={() => openMaterialPicker('edit')} style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}>✏️</button>
-                <button type="button" onClick={() => setEditMaterialId('')} style={{ border: 'none', background: 'transparent', color: '#b91c1c', cursor: 'pointer' }}>🗑️</button>
-              </div>
-            ) : (
-              <button type="button" onClick={() => openMaterialPicker('edit')} style={{ width: '100%', padding: '0.72rem', border: '2px dashed #cbd5e1', borderRadius: '8px', background: 'transparent', color: '#475569', cursor: 'pointer', textAlign: 'left' }}>
-                📎 Seleccionar Material de Clase
-              </button>
-            )}
-          </div>
-          <button className="btn-primary" type="submit">Guardar cambios</button>
-        </form>
-      </div>, document.body)}
 
+      {/* Modal: Catálogo de Plantillas */}
       {isTemplateModalOpen && createPortal(
         <div className="modal-backdrop" style={modalBackdropStyle} onClick={() => setIsTemplateModalOpen(false)}>
           <div className="glass-panel modal-card modal-card--wide" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '780px', maxHeight: '88vh', display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1.75rem' }}>
@@ -621,7 +880,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
               ) : templateCatalog.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
                   <p>No hay plantillas guardadas en el catálogo central todavía.</p>
-                  <small>Puedes guardar tareas como plantilla desde la biblioteca de Material de Clase.</small>
+                  <small>Puedes marcar "Guardar como plantilla" al crear o editar una tarea.</small>
                 </div>
               ) : (
                 templateCatalog.map((tpl) => (
@@ -653,15 +912,26 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
               )}
             </div>
           </div>
-        </div>, document.body
+        </div>,
+        document.body
+      )}
+
+      {/* Modal de Previsualización de Examen */}
+      {reviewingExam && (
+        <ExamReviewModal
+          title={reviewingExam.title}
+          questions={reviewingExam.questions}
+          answers={reviewingExam.answers}
+          score={reviewingExam.score}
+          total={reviewingExam.total}
+          onClose={() => setReviewingExam(null)}
+        />
       )}
     </div>
   );
 };
 
-const actionButtonStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0.45rem', border: 'none', borderRadius: '6px', background: 'transparent', color: 'var(--primary-text)', cursor: 'pointer' };
-const inputStyle: React.CSSProperties = { width: '100%', marginTop: '0.35rem', padding: '0.7rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)', color: 'var(--text-main)' };
-const labelStyle: React.CSSProperties = { display: 'block', marginBottom: '0.9rem', fontSize: '0.88rem', fontWeight: 600 };
-const modalBackdropStyle: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 100, display: 'grid', placeItems: 'center', padding: '1rem', background: 'rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(4px)' };
+const inputStyle: React.CSSProperties = { width: '100%', marginTop: '0.35rem', padding: '0.65rem 0.75rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)', color: 'var(--text-main)', outline: 'none' };
+const modalBackdropStyle: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 100, display: 'grid', placeItems: 'center', padding: '1rem', background: 'rgba(0, 0, 0, 0.45)', backdropFilter: 'blur(4px)' };
 
 export default ClassworkTab;

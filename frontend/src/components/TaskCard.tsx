@@ -22,6 +22,8 @@ export interface TaskStepItem {
   order: number;
   title: string;
   materialId?: string | null;
+  requiresSubmission?: boolean;
+  isEvaluable?: boolean;
   isCompleted?: boolean;
   submission?: {
     id?: string;
@@ -474,6 +476,12 @@ const TaskCard: React.FC<TaskCardProps> = ({
                     </>
                   )}
                 </div>
+
+                {step.submission?.feedback && (
+                  <div style={{ width: '100%', marginTop: '0.45rem', padding: '0.4rem 0.65rem', background: '#eff6ff', borderRadius: '6px', fontSize: '0.78rem', color: '#1e40af', border: '1px solid #bfdbfe' }}>
+                    💬 <strong>Comentario del profesor:</strong> "{step.submission.feedback}"
+                  </div>
+                )}
               </div>
             );
           })}

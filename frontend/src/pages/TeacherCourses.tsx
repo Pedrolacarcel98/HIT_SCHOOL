@@ -1,48 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createPortal } from 'react-dom';
-import { BookOpen, CheckSquare, ClipboardCheck, FileText, GraduationCap, Headphones, Laptop, ListChecks, MoreVertical, Pencil, Plus, Search, Trash2, Video, X } from 'lucide-react';
-import FormPlayer from '../components/FormPlayer';
+import { BookOpen, GraduationCap, Laptop, MoreVertical, Pencil, Plus, Trash2, X } from 'lucide-react';
 
 interface Course {
   id: string;
   title: string;
-}
-
-interface StructuredTask {
-  id: string;
-  title: string;
-  courseId: string | null;
-  assignmentType: 'CLASS' | 'INDIVIDUAL';
-  assignedStudentId: string | null;
-  assignedStudentName: string | null;
-  assignedStudentIds?: string[];
-  assignedStudentNames?: string[];
-  isSequential: boolean;
-  steps: StructuredTaskStep[];
-}
-
-interface StructuredTaskStep {
-  id: string;
-  order: number;
-  title: string;
-  materialId: string | null;
-}
-
-interface Material {
-  id: string;
-  title: string;
-  type: 'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'FORM';
-  level?: string;
-  url?: string | null;
-  description?: string | null;
-  formData?: { questions?: any[] } | null;
-}
-
-interface EnrolledStudent {
-  id: string;
-  email: string;
-  profile?: { firstName: string; lastName: string } | null;
 }
 
 const TeacherCourses: React.FC = () => {
@@ -54,29 +16,11 @@ const TeacherCourses: React.FC = () => {
   const [deletingCourse, setDeletingCourse] = useState<Course | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [courseError, setCourseError] = useState('');
-  const [structuredTasks, setStructuredTasks] = useState<StructuredTask[]>([]);
-  const [materials, setMaterials] = useState<Material[]>([]);
-  const [allStudents, setAllStudents] = useState<EnrolledStudent[]>([]);
-  const [studentSearch, setStudentSearch] = useState('');
-  const [isStudentPickerOpen, setIsStudentPickerOpen] = useState(false);
-  const [editingStructuredTask, setEditingStructuredTask] = useState<StructuredTask | null>(null);
-  const [isStructuredTaskModalOpen, setIsStructuredTaskModalOpen] = useState(false);
-  const [structuredTaskTitle, setStructuredTaskTitle] = useState('');
-  const [structuredTaskSteps, setStructuredTaskSteps] = useState<StructuredTaskStep[]>([]);
-  const [structuredTaskCourseId, setStructuredTaskCourseId] = useState('');
-  const [structuredTaskAssignmentType, setStructuredTaskAssignmentType] = useState<'CLASS' | 'INDIVIDUAL'>('CLASS');
-  const [structuredTaskIsSequential, setStructuredTaskIsSequential] = useState(false);
-  const [assignedStudentIds, setAssignedStudentIds] = useState<string[]>([]);
-  const [previewingForm, setPreviewingForm] = useState<Material | null>(null);
-  const [materialPickerStepIndex, setMaterialPickerStepIndex] = useState<number | null>(null);
-  const [materialSearch, setMaterialSearch] = useState('');
-  const [materialCategoryFilter, setMaterialCategoryFilter] = useState<'ALL' | Material['type']>('ALL');
+  const [modalityFilter, setModalityFilter] = useState<'ALL' | 'PRESENCIAL' | 'ONLINE'>('ALL');
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchCourses();
-    fetchMaterials();
-    fetchStructuredTasks();
   }, []);
 
   const fetchCourses = async () => {
@@ -95,44 +39,9 @@ const TeacherCourses: React.FC = () => {
     }
   };
 
-  const fetchMaterials = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-      const res = await fetch(`${apiUrl}/api/materials`, { headers: { Authorization: `Bearer ${token}` } });
-      if (res.ok) setMaterials(await res.json());
-    } catch (err) {
-      console.error('Error fetching materials', err);
-    }
-  };
-
-  const fetchStructuredTasks = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-      const res = await fetch(`${apiUrl}/api/structured-tasks/teacher`, { headers: { Authorization: `Bearer ${token}` } });
-      if (res.ok) setStructuredTasks(await res.json());
-    } catch (err) {
-      console.error('Error fetching structured tasks', err);
-    }
-  };
-
-
-
-  const fetchAllStudents = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-      const res = await fetch(`${apiUrl}/api/students`, { headers: { Authorization: `Bearer ${token}` } });
-      if (res.ok) setAllStudents(await res.json());
-    } catch (err) {
-      console.error('Error fetching students', err);
-    }
-  };
-
   const handleCreateCourse = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCourseTitle) return;
+    if (!newCourseTitle.trim()) return;
 
     try {
       const token = localStorage.getItem('token');
@@ -143,7 +52,7 @@ const TeacherCourses: React.FC = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ title: newCourseTitle })
+        body: JSON.stringify({ title: newCourseTitle.trim() })
       });
       
       if (res.ok) {
@@ -162,23 +71,33 @@ const TeacherCourses: React.FC = () => {
     const token = localStorage.getItem('token');
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
     const res = await fetch(`${apiUrl}/api/courses/${editingCourse.id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ title: courseTitle.trim() })
     });
-    if (res.ok) { setEditingCourse(null); fetchCourses(); }
-    else setCourseError('No se pudo actualizar la clase.');
+    if (res.ok) {
+      setEditingCourse(null);
+      fetchCourses();
+    } else {
+      setCourseError('No se pudo actualizar la clase.');
+    }
   };
 
   const handleDeleteCourse = async () => {
     if (!deletingCourse) return;
     const token = localStorage.getItem('token');
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-    const res = await fetch(`${apiUrl}/api/courses/${deletingCourse.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
-    if (res.ok) { setDeletingCourse(null); fetchCourses(); }
-    else setCourseError('No se pudo eliminar la clase.');
+    const res = await fetch(`${apiUrl}/api/courses/${deletingCourse.id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) {
+      setDeletingCourse(null);
+      fetchCourses();
+    } else {
+      setCourseError('No se pudo eliminar la clase.');
+    }
   };
-
-  const [modalityFilter, setModalityFilter] = useState<'ALL' | 'PRESENCIAL' | 'ONLINE'>('ALL');
 
   const filteredCourses = courses.filter(c => {
     const isOnline = c.title.toLowerCase().includes('online') || c.title.toLowerCase().includes('particular') || c.title.toLowerCase().includes('individual');
@@ -187,103 +106,6 @@ const TeacherCourses: React.FC = () => {
     if (modalityFilter === 'ONLINE') return modality === 'ONLINE';
     return true;
   });
-
-  const openStructuredTaskModal = (task?: StructuredTask) => {
-    setEditingStructuredTask(task || null);
-    setStructuredTaskTitle(task?.title || '');
-    setStructuredTaskSteps(task?.steps.map((step, index) => ({ ...step, order: index + 1 })) || [{ id: `step-${Date.now()}`, order: 1, title: '', materialId: null }]);
-    const assignmentType = task?.assignmentType || 'CLASS';
-    const courseId = task?.courseId || (assignmentType === 'CLASS' ? courses[0]?.id || '' : '');
-    setStructuredTaskCourseId(courseId);
-    setStructuredTaskAssignmentType(assignmentType);
-    setStructuredTaskIsSequential(task?.isSequential || false);
-    setAssignedStudentIds(task?.assignedStudentIds?.length ? task.assignedStudentIds : (task?.assignedStudentId ? [task.assignedStudentId] : []));
-    setStudentSearch('');
-    setIsStudentPickerOpen(false);
-    fetchAllStudents();
-    setIsStructuredTaskModalOpen(true);
-  };
-
-  const updateStructuredTaskStep = (index: number, updates: Partial<StructuredTaskStep>) => {
-    setStructuredTaskSteps((steps) => steps.map((step, stepIndex) => stepIndex === index ? { ...step, ...updates } : step));
-  };
-
-  const addStructuredTaskStep = () => {
-    setStructuredTaskSteps((steps) => [...steps, { id: `step-${Date.now()}`, order: steps.length + 1, title: '', materialId: null }]);
-  };
-
-  const removeStructuredTaskStep = (index: number) => {
-    setStructuredTaskSteps((steps) => steps.filter((_, stepIndex) => stepIndex !== index).map((step, stepIndex) => ({ ...step, order: stepIndex + 1 })));
-  };
-
-  const saveStructuredTask = async (event: React.FormEvent) => {
-    event.preventDefault();
-    const title = structuredTaskTitle.trim();
-    const steps = structuredTaskSteps
-      .map((step, index) => ({ ...step, title: step.title.trim(), order: index + 1 }))
-      .filter((step) => step.title);
-    if (!title || steps.length === 0) return;
-    if (structuredTaskAssignmentType === 'CLASS' && !structuredTaskCourseId) return;
-    if (structuredTaskAssignmentType === 'INDIVIDUAL' && assignedStudentIds.length === 0) return;
-
-    try {
-      const token = localStorage.getItem('token');
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-      const res = await fetch(`${apiUrl}/api/structured-tasks${editingStructuredTask ? `/${editingStructuredTask.id}` : ''}`, {
-        method: editingStructuredTask ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ title, courseId: structuredTaskAssignmentType === 'CLASS' ? structuredTaskCourseId : null, assignmentType: structuredTaskAssignmentType, isSequential: structuredTaskIsSequential, assignedStudentIds: structuredTaskAssignmentType === 'INDIVIDUAL' ? assignedStudentIds : [], steps })
-      });
-      if (!res.ok) throw new Error('No se pudo guardar la tarea estructurada.');
-      await fetchStructuredTasks();
-      setIsStructuredTaskModalOpen(false);
-    } catch (err) {
-      setCourseError(err instanceof Error ? err.message : 'No se pudo guardar la tarea estructurada.');
-    }
-  };
-
-  const getMaterial = (materialId: string | null) => materials.find((material) => material.id === materialId);
-
-  const formatAssignedStudents = (task: StructuredTask) => {
-    const names = task.assignedStudentNames?.length ? task.assignedStudentNames : (task.assignedStudentName ? [task.assignedStudentName] : []);
-    if (names.length === 0) return 'Alumno';
-    return names.length > 2 ? `${names.slice(0, 2).join(', ')}...` : names.join(', ');
-  };
-
-  const getMaterialIcon = (type: Material['type']) => {
-    if (type === 'FORM') return <ClipboardCheck size={16} />;
-    if (type === 'VIDEO') return <Video size={16} />;
-    if (type === 'AUDIO') return <Headphones size={16} />;
-    return <FileText size={16} />;
-  };
-
-  const getMaterialTypeLabel = (type: Material['type']) => {
-    if (type === 'FORM') return 'EXAMEN INTERACTIVO';
-    if (type === 'VIDEO') return 'VÍDEO';
-    if (type === 'AUDIO') return 'AUDIO';
-    return 'DOCUMENTO';
-  };
-
-  const filteredPickerMaterials = materials.filter((material) => {
-    const query = materialSearch.trim().toLowerCase();
-    const matchesSearch = !query || `${material.title} ${material.description || ''}`.toLowerCase().includes(query);
-    const matchesCategory = materialCategoryFilter === 'ALL' || material.type === materialCategoryFilter;
-    return matchesSearch && matchesCategory;
-  });
-
-  const openMaterialPicker = (stepIndex: number) => {
-    setMaterialPickerStepIndex(stepIndex);
-    setMaterialSearch('');
-    setMaterialCategoryFilter('ALL');
-  };
-
-  const handleOpenMaterial = (material: Material) => {
-    if (material.type === 'FORM') {
-      setPreviewingForm(material);
-      return;
-    }
-    if (material.url) window.open(material.url, '_blank', 'noopener,noreferrer');
-  };
 
   return (
     <div className="page-container">
@@ -420,256 +242,6 @@ const TeacherCourses: React.FC = () => {
         )}
       </div>
 
-      <section style={{ marginTop: '3rem', paddingTop: '2rem', borderTop: '1px solid var(--border)' }}>
-        <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-          <div>
-            <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.55rem', color: 'var(--text-main)', fontSize: '1.35rem' }}>
-              <ListChecks size={22} style={{ color: 'var(--primary)' }} /> Tareas Estructuradas
-            </h2>
-            <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)', fontSize: '0.88rem' }}>Organiza actividades guiadas con pasos numerados.</p>
-          </div>
-          <button type="button" onClick={() => openStructuredTaskModal()} className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', padding: '0.6rem 1rem' }}>
-            <Plus size={17} /> Añadir Tarea Estructurada
-          </button>
-        </header>
-
-        {structuredTasks.length === 0 ? (
-          <div style={{ padding: '2rem', border: '1px dashed var(--primary-border)', borderRadius: '8px', background: 'var(--primary-subtle)', color: 'var(--text-muted)', textAlign: 'center' }}>
-            Aún no hay tareas estructuradas.
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
-            {structuredTasks.map((task) => (
-              <article key={task.id} style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--primary-border)', borderRadius: '8px', boxShadow: 'var(--shadow-sm)', padding: '1.25rem' }}>
-                <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', minWidth: 0 }}>
-                    <CheckSquare size={21} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-                    <div style={{ minWidth: 0 }}>
-                      <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.05rem' }}>{task.title}</h3>
-                      <div style={{ display: 'flex', gap: '0.45rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
-                        <span style={{ display: 'inline-flex', padding: '0.18rem 0.5rem', borderRadius: '12px', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.72rem', fontWeight: 700 }}>Pasos Numerados</span>
-                        {task.isSequential && <span style={{ display: 'inline-flex', padding: '0.18rem 0.5rem', borderRadius: '12px', background: '#fef3c7', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}>Paso a paso</span>}
-                        <span title={task.assignedStudentNames?.join(', ')} style={{ display: 'inline-flex', padding: '0.18rem 0.5rem', borderRadius: '12px', background: task.assignmentType === 'INDIVIDUAL' ? '#eef2ff' : '#ecfdf5', color: task.assignmentType === 'INDIVIDUAL' ? '#3730a3' : '#047857', fontSize: '0.72rem', fontWeight: 700 }}>
-                          {task.assignmentType === 'INDIVIDUAL' ? `Asignado a: ${formatAssignedStudents(task)}` : 'Toda la clase'}
-                        </span>
-                        <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{task.steps.length} {task.steps.length === 1 ? 'paso' : 'pasos'}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <button type="button" onClick={() => openStructuredTaskModal(task)} className="btn-secondary" style={{ padding: '0.4rem 0.7rem', fontSize: '0.8rem' }}>
-                    <Pencil size={14} /> Modificar
-                  </button>
-                </header>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-                  {task.steps.map((step) => {
-                    const material = getMaterial(step.materialId);
-                    return (
-                      <div key={step.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', padding: '0.75rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', boxShadow: 'var(--shadow-sm)', flexWrap: 'wrap', transition: 'border-color 0.2s ease' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: '1 1 240px' }}>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, width: '28px', height: '28px', borderRadius: '50%', background: '#d1fae5', color: '#065f46', fontWeight: 700, fontSize: '0.82rem' }}>{step.order}</span>
-                          <span style={{ color: 'var(--text-main)', fontSize: '0.92rem' }}>{step.title}</span>
-                        </div>
-                        {material && (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenMaterial(material)}
-                            title={material.type === 'FORM' ? `Previsualizar ${material.title}` : `Abrir ${material.title}`}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', flexShrink: 0, padding: '0.25rem 0.55rem', border: '1px solid var(--primary-border)', borderRadius: '10px', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', transition: 'transform 0.15s ease' }}
-                            onMouseEnter={(event) => { event.currentTarget.style.transform = 'scale(1.05)'; }}
-                            onMouseLeave={(event) => { event.currentTarget.style.transform = 'scale(1)'; }}
-                          >
-                            [ {material.type} ] {material.title}
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {previewingForm && <div className="modal-backdrop" style={modalBackdropStyle} onClick={() => setPreviewingForm(null)}>
-        <div className="glass-panel modal-card modal-card--wide" onClick={(event) => event.stopPropagation()} style={{ width: 'min(100%, 900px)', maxHeight: '90vh', overflowY: 'auto', padding: '1.5rem' }}>
-          <button type="button" onClick={() => setPreviewingForm(null)} aria-label="Cerrar previsualización" className="modal-close"><X size={19} /></button>
-          <FormPlayer
-            title={previewingForm.title}
-            description={previewingForm.description || undefined}
-            questions={previewingForm.formData?.questions || []}
-            readOnly
-            allowRetry={false}
-            initialAnswers={Object.fromEntries((previewingForm.formData?.questions || []).map((question: { id: string; correctAnswer: string | number }) => [question.id, question.correctAnswer]))}
-          />
-        </div>
-      </div>}
-
-      {isStructuredTaskModalOpen && <div className="modal-backdrop" style={modalBackdropStyle} onClick={() => setIsStructuredTaskModalOpen(false)}>
-        <form onSubmit={saveStructuredTask} className="glass-panel modal-card" onClick={(event) => event.stopPropagation()} style={{ width: 'min(100%, 520px)', padding: '1.5rem' }}>
-          <button type="button" onClick={() => setIsStructuredTaskModalOpen(false)} aria-label="Cerrar" className="modal-close"><X size={19} /></button>
-          <h2 style={{ margin: '0 0 0.35rem', color: 'var(--text-main)', fontSize: '1.2rem' }}>{editingStructuredTask ? 'Editar Tarea Estructurada' : 'Añadir Tarea Estructurada'}</h2>
-          <p style={{ margin: '0 0 1.25rem', color: 'var(--text-muted)', fontSize: '0.88rem' }}>Configura la instrucción y el material opcional de cada paso.</p>
-          <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Título</label>
-          <input required value={structuredTaskTitle} onChange={(event) => setStructuredTaskTitle(event.target.value)} placeholder="Ej. Ensayo B2 Writing" style={inputStyle} />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '0.75rem', marginTop: '1rem' }}>
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Asignar a</label>
-              <select value={structuredTaskAssignmentType} onChange={(event) => { setStructuredTaskAssignmentType(event.target.value as 'CLASS' | 'INDIVIDUAL'); setAssignedStudentIds([]); setStudentSearch(''); }} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}>
-                <option value="CLASS">Toda una Clase</option>
-                <option value="INDIVIDUAL">Alumno(s) Individuales</option>
-              </select>
-            </div>
-            {structuredTaskAssignmentType === 'CLASS' && (
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Clase destinataria</label>
-                <select required value={structuredTaskCourseId} onChange={(event) => { setStructuredTaskCourseId(event.target.value); setAssignedStudentIds([]); }} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}>
-                  <option value="">Selecciona una clase</option>
-                  {courses.map((course) => <option key={course.id} value={course.id}>{course.title}</option>)}
-                </select>
-              </div>
-            )}
-            <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '0.3rem' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>
-                <input type="checkbox" checked={structuredTaskIsSequential} onChange={(e) => setStructuredTaskIsSequential(e.target.checked)} style={{ width: '16px', height: '16px', accentColor: 'var(--primary)' }} />
-                Paso a paso (secuencial)
-              </label>
-            </div>
-          </div>
-          {structuredTaskAssignmentType === 'INDIVIDUAL' && (() => {
-            const query = studentSearch.trim().toLowerCase();
-            const studentLabel = (student: EnrolledStudent) => student.profile ? `${student.profile.firstName} ${student.profile.lastName}`.trim() : student.email;
-            const selectedStudents = allStudents.filter((student) => assignedStudentIds.includes(student.id));
-            const suggestions = allStudents.filter((student) => {
-              if (assignedStudentIds.includes(student.id)) return false;
-              if (!query) return true;
-              return `${studentLabel(student)} ${student.email}`.toLowerCase().includes(query);
-            });
-
-            return (
-              <div style={{ marginTop: '0.75rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Alumno(s)</label>
-
-                {selectedStudents.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginBottom: '0.45rem' }}>
-                    {selectedStudents.map((student) => (
-                      <span key={student.id} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.25rem 0.625rem', borderRadius: '8px', background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: '0.75rem', fontWeight: 500 }}>
-                        {studentLabel(student)}
-                        <button
-                          type="button"
-                          onClick={() => setAssignedStudentIds((ids) => ids.filter((id) => id !== student.id))}
-                          aria-label={`Quitar ${studentLabel(student)}`}
-                          style={{ border: 'none', background: 'transparent', color: '#047857', cursor: 'pointer', padding: 0, lineHeight: 1, display: 'inline-flex' }}
-                        >
-                          <X size={13} />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                <div style={{ position: 'relative' }}>
-                  <input
-                    type="text"
-                    value={studentSearch}
-                    onFocus={() => setIsStudentPickerOpen(true)}
-                    onBlur={() => window.setTimeout(() => setIsStudentPickerOpen(false), 120)}
-                    onChange={(event) => { setStudentSearch(event.target.value); setIsStudentPickerOpen(true); }}
-                    placeholder="🔍 Buscar alumno por nombre o correo..."
-                    style={{ ...inputStyle, marginBottom: 0 }}
-                  />
-
-                  {isStudentPickerOpen && (
-                    <div style={{ position: 'absolute', zIndex: 30, top: 'calc(100% + 0.25rem)', left: 0, width: '100%', maxHeight: '12rem', overflowY: 'auto', background: '#fff', border: '1px solid var(--border)', borderRadius: '12px', boxShadow: 'var(--shadow-md, 0 10px 25px rgba(15, 23, 42, 0.12))' }}>
-                      {suggestions.length === 0 ? (
-                        <div style={{ padding: '0.6rem 0.75rem', color: 'var(--text-muted)', fontSize: '0.82rem' }}>No hay alumnos que coincidan.</div>
-                      ) : suggestions.map((student) => (
-                        <button
-                          key={student.id}
-                          type="button"
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => { setAssignedStudentIds((ids) => [...ids, student.id]); setStudentSearch(''); }}
-                          style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.55rem 0.75rem', border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.85rem' }}
-                        >
-                          {studentLabel(student)}
-                          <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.75rem' }}>{student.email}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <small style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-muted)' }}>{assignedStudentIds.length} alumno(s) seleccionado(s)</small>
-              </div>
-            );
-          })()}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', marginTop: '1rem' }}>
-            <label style={{ color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Pasos</label>
-            {structuredTaskSteps.map((step, index) => (
-              <div key={step.id} style={{ display: 'grid', gridTemplateColumns: '32px minmax(0, 1fr) minmax(150px, 0.8fr) 32px', alignItems: 'center', gap: '0.5rem', padding: '0.6rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '50%', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.8rem', fontWeight: 700 }}>{index + 1}</span>
-                <input required value={step.title} onChange={(event) => updateStructuredTaskStep(index, { title: event.target.value })} placeholder="Título o instrucción del paso" style={{ ...inputStyle, padding: '0.55rem' }} />
-                {getMaterial(step.materialId) ? (
-                  <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.55rem', border: '1px solid var(--primary-border)', borderRadius: '8px', background: 'var(--primary-light)', color: 'var(--primary-text)' }}>
-                    <span style={{ display: 'inline-flex', flexShrink: 0 }}>{getMaterialIcon(getMaterial(step.materialId)!.type)}</span>
-                    <span style={{ minWidth: 0, overflow: 'hidden' }}>
-                      <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.78rem', fontWeight: 700 }}>{getMaterial(step.materialId)!.title}</span>
-                      <span style={{ display: 'block', fontSize: '0.68rem', fontWeight: 600 }}>{getMaterialTypeLabel(getMaterial(step.materialId)!.type)}</span>
-                    </span>
-                    <button type="button" onClick={() => openMaterialPicker(index)} title="Cambiar material" aria-label="Cambiar material" style={{ marginLeft: 'auto', border: 'none', background: 'transparent', color: 'var(--primary-text)', cursor: 'pointer', padding: '0.2rem' }}>✏️</button>
-                    <button type="button" onClick={() => updateStructuredTaskStep(index, { materialId: null })} title="Eliminar material" aria-label="Eliminar material" style={{ border: 'none', background: 'transparent', color: '#b91c1c', cursor: 'pointer', padding: '0.2rem' }}>🗑️</button>
-                  </div>
-                ) : (
-                  <button type="button" onClick={() => openMaterialPicker(index)} style={{ minWidth: 0, padding: '0.7rem 0.55rem', border: '2px dashed #cbd5e1', borderRadius: '8px', background: 'transparent', color: '#475569', cursor: 'pointer', fontSize: '0.76rem', fontWeight: 600 }}>
-                    📎 Seleccionar Material de Clase
-                  </button>
-                )}
-                <button type="button" onClick={() => removeStructuredTaskStep(index)} disabled={structuredTaskSteps.length === 1} title="Eliminar paso" aria-label={`Eliminar paso ${index + 1}`} style={{ ...iconButtonStyle, color: '#b91c1c', opacity: structuredTaskSteps.length === 1 ? 0.4 : 1 }}><Trash2 size={17} /></button>
-              </div>
-            ))}
-            <button type="button" onClick={addStructuredTaskStep} className="btn-secondary" style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.7rem', fontSize: '0.82rem' }}><Plus size={15} /> Añadir otro paso</button>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.65rem', marginTop: '1.25rem' }}>
-            <button type="button" onClick={() => setIsStructuredTaskModalOpen(false)} className="btn-secondary">Cancelar</button>
-            <button type="submit" className="btn-primary">Guardar Tarea</button>
-          </div>
-        </form>
-      </div>}
-      {materialPickerStepIndex !== null && createPortal(
-        <div className="modal-backdrop" style={{ zIndex: 110 }} onClick={() => setMaterialPickerStepIndex(null)}>
-          <div className="glass-panel modal-card modal-card--wide" onClick={(event) => event.stopPropagation()} style={{ maxWidth: '760px', maxHeight: '88vh', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <button type="button" onClick={() => setMaterialPickerStepIndex(null)} aria-label="Cerrar biblioteca" className="modal-close"><X size={19} /></button>
-            <div style={{ paddingRight: '2rem' }}>
-              <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Elige el material que acompañará este paso.</p>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
-              <div style={{ position: 'relative' }}>
-                <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                <input value={materialSearch} onChange={(event) => setMaterialSearch(event.target.value)} placeholder="Buscar por título o descripción..." aria-label="Buscar materiales" style={{ ...inputStyle, paddingLeft: '2.25rem' }} />
-              </div>
-              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                {([['ALL', 'Todos'], ['DOCUMENT', 'Documentos'], ['VIDEO', 'Vídeos'], ['AUDIO', 'Audios'], ['FORM', 'Exámenes']] as const).map(([value, label]) => (
-                  <button key={value} type="button" onClick={() => setMaterialCategoryFilter(value)} className={materialCategoryFilter === value ? 'btn-primary' : 'btn-secondary'} style={{ padding: '0.4rem 0.7rem', fontSize: '0.78rem' }}>{label}</button>
-                ))}
-              </div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', maxHeight: '60vh', overflowY: 'auto', padding: '0.15rem' }}>
-              {filteredPickerMaterials.map((material) => (
-                <article key={material.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', padding: '1rem', border: '1px solid var(--border)', borderRadius: '10px', background: 'var(--surface)', minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: 'var(--primary-text)', fontSize: '0.72rem', fontWeight: 700 }}>
-                    {getMaterialIcon(material.type)} <span>{getMaterialTypeLabel(material.type)}</span>
-                    <span style={{ marginLeft: 'auto', padding: '0.15rem 0.4rem', borderRadius: '999px', background: 'var(--primary-light)', border: '1px solid var(--primary-border)' }}>{material.level || 'GENERAL'}</span>
-                  </div>
-                  <strong style={{ color: '#0f172a', fontWeight: 700 }}>{material.title}</strong>
-                  <p style={{ margin: 0, minHeight: '2.4rem', color: '#64748b', fontSize: '0.75rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{material.description || 'Sin descripción disponible.'}</p>
-                  <button type="button" onClick={() => { updateStructuredTaskStep(materialPickerStepIndex, { materialId: material.id }); setMaterialPickerStepIndex(null); }} className="btn-primary" style={{ width: '100%', padding: '0.55rem', fontSize: '0.82rem', marginTop: 'auto' }}>✓ Seleccionar</button>
-                </article>
-              ))}
-              {filteredPickerMaterials.length === 0 && <p style={{ gridColumn: '1 / -1', padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>No se encontraron materiales.</p>}
-            </div>
-          </div>
-        </div>, document.body
-      )}
       {(editingCourse || deletingCourse) && <div style={modalBackdropStyle} onClick={() => { setEditingCourse(null); setDeletingCourse(null); }}>
         <div className="glass-panel animate-fade-in" onClick={(event) => event.stopPropagation()} style={{ width: 'min(100%, 440px)', padding: '1.5rem' }}>
           <button onClick={() => { setEditingCourse(null); setDeletingCourse(null); }} aria-label="Cerrar" style={{ ...iconButtonStyle, float: 'right' }}><X size={19} /></button>

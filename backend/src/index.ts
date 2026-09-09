@@ -16,6 +16,7 @@ import chatRoutes from './routes/chat';
 import structuredTaskRoutes from './routes/structuredTasks';
 import enrollmentsRoutes from './routes/enrollments';
 import dashboardRoutes from './routes/dashboard';
+import termGradeRoutes from './routes/termGrades';
 
 app.use(cors());
 app.use(express.json());
@@ -30,6 +31,7 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/structured-tasks', structuredTaskRoutes);
 app.use('/api/enrollments', enrollmentsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/term-grades', termGradeRoutes);
 
 app.get('/', (req, res) => {
   res.send('API de HitSchool funcionando correctamente');

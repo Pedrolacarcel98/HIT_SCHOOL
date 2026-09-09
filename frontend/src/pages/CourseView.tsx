@@ -4,7 +4,7 @@ import { ArrowLeft, MessageSquare, BookOpen, Users, Award } from 'lucide-react';
 import StreamTab from '../components/StreamTab';
 import ClassworkTab from '../components/ClassworkTab';
 import PeopleTab from '../components/PeopleTab';
-import GradesTab from '../components/GradesTab';
+import TeacherGrades from './TeacherGrades';
 
 const CourseView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -66,7 +66,7 @@ const CourseView: React.FC = () => {
         {activeTab === 'stream' && <StreamTab courseId={id!} />}
         {activeTab === 'classwork' && <ClassworkTab courseId={id!} />}
         {activeTab === 'people' && <PeopleTab courseId={id!} />}
-        {activeTab === 'grades' && <GradesTab courseId={id!} />}
+        {activeTab === 'grades' && <TeacherGrades courseId={id!} />}
       </div>
     </div>
   );

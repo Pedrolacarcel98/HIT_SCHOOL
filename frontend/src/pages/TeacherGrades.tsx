@@ -11,16 +11,18 @@ import {
   Clock3,
   Edit3,
   ExternalLink,
-  FileText,
   GraduationCap,
   Laptop,
   Search,
   Sparkles,
   Users,
-  X
+  X,
+  Download
 } from 'lucide-react';
 import ExamReviewModal from '../components/ExamReviewModal';
 import type { ReviewQuestion } from '../components/ExamReviewModal';
+import TaskDeliveryReviewModal, { type TaskForReview } from '../components/TaskDeliveryReviewModal';
+import { generateReportCardPDF, type ReportCardData, type ReportCardTaskItem } from '../utils/reportCard';
 
 interface StudentData {
   id: string;
@@ -34,17 +36,6 @@ interface StudentData {
   courseDurationMonths?: number | null;
 }
 
-interface FinalEvaluationData {
-  id?: string;
-  studentId?: string;
-  grammar?: number | null;
-  reading?: number | null;
-  writing?: number | null;
-  listening?: number | null;
-  speaking?: number | null;
-  overallGrade?: number | null;
-  observations?: string | null;
-}
 
 interface CourseData {
   id: string;
@@ -113,42 +104,6 @@ interface ParsedExamData {
   total: number | null;
 }
 
-interface SubmissionAttachment {
-  name: string;
-  mimeType: string;
-  dataUrl: string;
-  size?: number;
-}
-
-const parseSubmissionContent = (content?: string | null): { text: string; link: string | null; attachment: SubmissionAttachment | null } => {
-  if (!content) return { text: '', link: null, attachment: null };
-
-  try {
-    const parsed = JSON.parse(content);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      const attachment = parsed.attachment && typeof parsed.attachment === 'object' ? {
-        name: typeof parsed.attachment.name === 'string' ? parsed.attachment.name : 'archivo-adjunto',
-        mimeType: typeof parsed.attachment.mimeType === 'string' ? parsed.attachment.mimeType : 'application/octet-stream',
-        dataUrl: typeof parsed.attachment.dataUrl === 'string' ? parsed.attachment.dataUrl : '',
-        size: typeof parsed.attachment.size === 'number' ? parsed.attachment.size : undefined
-      } : null;
-
-      return {
-        text: typeof parsed.text === 'string' ? parsed.text : (typeof parsed.content === 'string' ? parsed.content : ''),
-        link: typeof parsed.link === 'string' ? parsed.link : (typeof parsed.url === 'string' ? parsed.url : null),
-        attachment
-      };
-    }
-  } catch {
-    // plain content or legacy URL
-  }
-
-  return {
-    text: content,
-    link: /^https?:\/\//i.test(content) ? content : null,
-    attachment: null
-  };
-};
 
 const parseSavedExam = (content?: string | null): ParsedExamData | null => {
   if (!content) return null;
@@ -167,7 +122,11 @@ const parseSavedExam = (content?: string | null): ParsedExamData | null => {
   }
 };
 
-const TeacherGrades: React.FC = () => {
+interface TeacherGradesProps {
+  courseId?: string;
+}
+
+const TeacherGrades: React.FC<TeacherGradesProps> = ({ courseId }) => {
   const [searchParams] = useSearchParams();
   const [students, setStudents] = useState<StudentData[]>([]);
   const [courses, setCourses] = useState<CourseData[]>([]);
@@ -180,6 +139,7 @@ const TeacherGrades: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState(searchParams.get('student') || '');
   const [selectedStudentForDossier, setSelectedStudentForDossier] = useState<StudentWithMeta | null>(null);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+  const [taskFilter, setTaskFilter] = useState<'COMPLETED' | 'IN_PROGRESS' | 'ALL'>('COMPLETED');
 
   // Modales
   const [evaluatingSubmission, setEvaluatingSubmission] = useState<{
@@ -197,94 +157,200 @@ const TeacherGrades: React.FC = () => {
   const [saveError, setSaveError] = useState('');
   const [reviewingExam, setReviewingExam] = useState<{ subId: string; title: string; questions?: ReviewQuestion[]; answers: Record<string, any>; score: number | null; total?: number | null; feedback: string | null } | null>(null);
 
-  // Evaluación Final por Competencias
-  const [currentEvaluation, setCurrentEvaluation] = useState<FinalEvaluationData | null>(null);
-  const [isEvaluationModalOpen, setIsEvaluationModalOpen] = useState(false);
-  const [evaluationForm, setEvaluationForm] = useState({
+
+  const getCurrentTerm = () => {
+    const m = new Date().getMonth() + 1;
+    if (m >= 9 && m <= 12) return 1;
+    if (m >= 1 && m <= 3) return 2;
+    return 3;
+  };
+  const [selectedTerm, setSelectedTerm] = useState<number>(getCurrentTerm());
+  const [termGradesData, setTermGradesData] = useState<Record<number, any> | null>(null);
+  const [, setIsLoadingTermGrades] = useState(false);
+  const [isSavingTermGrade, setIsSavingTermGrade] = useState(false);
+  const [termForm, setTermForm] = useState({
+    middleExamGrade: '',
+    finalExamGrade: '',
     grammar: '',
     reading: '',
     writing: '',
     listening: '',
     speaking: '',
-    overallGrade: '',
     observations: ''
   });
-  const [isSavingEvaluation, setIsSavingEvaluation] = useState(false);
+  const [reviewingTask, setReviewingTask] = useState<TaskForReview | null>(null);
+
+  const fetchStudentTermGrades = async (studentId: string) => {
+    try {
+      setIsLoadingTermGrades(true);
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${apiUrl}/api/term-grades/student/${studentId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTermGradesData(data.terms || {});
+      }
+    } catch (err) {
+      console.error('Error al obtener notas trimestrales del estudiante:', err);
+    } finally {
+      setIsLoadingTermGrades(false);
+    }
+  };
 
   useEffect(() => {
     if (selectedStudentForDossier) {
-      const fetchEvaluation = async () => {
-        try {
-          const token = localStorage.getItem('token');
-          const res = await fetch(`${apiUrl}/api/students/${selectedStudentForDossier.id}/evaluation`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            setCurrentEvaluation(data);
-          } else {
-            setCurrentEvaluation(null);
-          }
-        } catch (err) {
-          console.error('Error al obtener evaluación final:', err);
-        }
-      };
-      fetchEvaluation();
+      fetchStudentTermGrades(selectedStudentForDossier.id);
     } else {
-      setCurrentEvaluation(null);
+      setTermGradesData(null);
     }
   }, [selectedStudentForDossier?.id]);
 
-  const openEvaluationModal = () => {
-    if (currentEvaluation) {
-      setEvaluationForm({
-        grammar: currentEvaluation.grammar !== null && currentEvaluation.grammar !== undefined ? String(currentEvaluation.grammar) : '',
-        reading: currentEvaluation.reading !== null && currentEvaluation.reading !== undefined ? String(currentEvaluation.reading) : '',
-        writing: currentEvaluation.writing !== null && currentEvaluation.writing !== undefined ? String(currentEvaluation.writing) : '',
-        listening: currentEvaluation.listening !== null && currentEvaluation.listening !== undefined ? String(currentEvaluation.listening) : '',
-        speaking: currentEvaluation.speaking !== null && currentEvaluation.speaking !== undefined ? String(currentEvaluation.speaking) : '',
-        overallGrade: currentEvaluation.overallGrade !== null && currentEvaluation.overallGrade !== undefined ? String(currentEvaluation.overallGrade) : '',
-        observations: currentEvaluation.observations || ''
-      });
-    } else {
-      setEvaluationForm({
+  useEffect(() => {
+    if (!termGradesData || !termGradesData[selectedTerm]) {
+      setTermForm({
+        middleExamGrade: '',
+        finalExamGrade: '',
         grammar: '',
         reading: '',
         writing: '',
         listening: '',
         speaking: '',
-        overallGrade: '',
         observations: ''
       });
+      return;
     }
-    setIsEvaluationModalOpen(true);
-  };
+    const t = termGradesData[selectedTerm];
+    setTermForm({
+      middleExamGrade: t.middleExamGrade !== null && t.middleExamGrade !== undefined ? String(t.middleExamGrade) : '',
+      finalExamGrade: t.finalExamGrade !== null && t.finalExamGrade !== undefined ? String(t.finalExamGrade) : '',
+      grammar: t.grammar !== null && t.grammar !== undefined ? String(t.grammar) : '',
+      reading: t.reading !== null && t.reading !== undefined ? String(t.reading) : '',
+      writing: t.writing !== null && t.writing !== undefined ? String(t.writing) : '',
+      listening: t.listening !== null && t.listening !== undefined ? String(t.listening) : '',
+      speaking: t.speaking !== null && t.speaking !== undefined ? String(t.speaking) : '',
+      observations: t.observations || ''
+    });
+  }, [selectedTerm, termGradesData]);
 
-  const handleSaveEvaluation = async (e: React.FormEvent) => {
+  const handleSaveTermGrade = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedStudentForDossier) return;
+
+    const targetCourseId = courseId || selectedStudentForDossier.enrolledCourses[0]?.id || courses[0]?.id;
+    if (!targetCourseId) {
+      window.alert('El alumno debe estar matriculado en al menos un curso para registrar la evaluación trimestral.');
+      return;
+    }
+
     try {
-      setIsSavingEvaluation(true);
+      setIsSavingTermGrade(true);
       const token = localStorage.getItem('token');
-      const res = await fetch(`${apiUrl}/api/students/${selectedStudentForDossier.id}/evaluation`, {
+      const res = await fetch(`${apiUrl}/api/term-grades/course/${targetCourseId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify(evaluationForm)
+        body: JSON.stringify({
+          studentId: selectedStudentForDossier.id,
+          term: selectedTerm,
+          academicYear: '2025-2026',
+          middleExamGrade: termForm.middleExamGrade ? parseFloat(termForm.middleExamGrade) : null,
+          finalExamGrade: termForm.finalExamGrade ? parseFloat(termForm.finalExamGrade) : null,
+          grammar: termForm.grammar ? parseFloat(termForm.grammar) : null,
+          reading: termForm.reading ? parseFloat(termForm.reading) : null,
+          writing: termForm.writing ? parseFloat(termForm.writing) : null,
+          listening: termForm.listening ? parseFloat(termForm.listening) : null,
+          speaking: termForm.speaking ? parseFloat(termForm.speaking) : null,
+          observations: termForm.observations.trim() || null
+        })
       });
-      if (res.ok) {
-        const updated = await res.json();
-        setCurrentEvaluation(updated);
-        setIsEvaluationModalOpen(false);
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Error al guardar la evaluación trimestral.');
       }
-    } catch (err) {
-      console.error('Error al guardar evaluación final:', err);
+
+      await fetchStudentTermGrades(selectedStudentForDossier.id);
+      window.alert(`¡Evaluación del ${selectedTerm}º Trimestre guardada con éxito!`);
+    } catch (err: any) {
+      window.alert(err?.message || 'Error al guardar la evaluación trimestral.');
     } finally {
-      setIsSavingEvaluation(false);
+      setIsSavingTermGrade(false);
     }
   };
+
+  const handleDownloadReportCard = () => {
+    if (!selectedStudentForDossier) return;
+    const currentTermInfo = termGradesData?.[selectedTerm];
+    const courseTitle = selectedStudentForDossier.enrolledCourses.map((c) => c.title).join(', ') || 'Curso HitSchool';
+
+    const tasksList: ReportCardTaskItem[] = (currentTermInfo?.tasks || []).map((t: any) => {
+      const summaryParts = t.steps.map((s: any) => {
+        if (!s.isEvaluable) return `✓ ${s.title}`;
+        return s.grade !== null && s.grade !== undefined ? `${s.grade}/10 ${s.title}` : `⏳ ${s.title}`;
+      });
+      return {
+        title: t.title,
+        category: t.category,
+        grade: t.taskGrade,
+        stepsSummary: summaryParts.join(' • ')
+      };
+    });
+
+    const reportData: ReportCardData = {
+      studentName: selectedStudentForDossier.fullName,
+      studentEmail: selectedStudentForDossier.email,
+      courseTitle,
+      teacherName: 'Profesor de HitSchool',
+      term: selectedTerm,
+      academicYear: currentTermInfo?.academicYear || '2025-2026',
+      modality: selectedStudentForDossier.modality,
+      middleExamGrade: termForm.middleExamGrade ? parseFloat(termForm.middleExamGrade) : currentTermInfo?.middleExamGrade,
+      finalExamGrade: termForm.finalExamGrade ? parseFloat(termForm.finalExamGrade) : currentTermInfo?.finalExamGrade,
+      tasksAverage: currentTermInfo?.tasksAverage,
+      overallGrade: currentTermInfo?.overallGrade,
+      grammar: termForm.grammar ? parseFloat(termForm.grammar) : currentTermInfo?.grammar,
+      reading: termForm.reading ? parseFloat(termForm.reading) : currentTermInfo?.reading,
+      writing: termForm.writing ? parseFloat(termForm.writing) : currentTermInfo?.writing,
+      listening: termForm.listening ? parseFloat(termForm.listening) : currentTermInfo?.listening,
+      speaking: termForm.speaking ? parseFloat(termForm.speaking) : currentTermInfo?.speaking,
+      observations: termForm.observations || currentTermInfo?.observations,
+      tasks: tasksList
+    };
+
+    generateReportCardPDF(reportData);
+  };
+
+  const handleSaveTaskDeliveryGrade = async (
+    grade: number | null,
+    feedback: string,
+    stepEvaluations?: { stepId: string; grade: number | null; feedback: string | null }[]
+  ) => {
+    if (!reviewingTask || !selectedStudentForDossier) return;
+    const token = localStorage.getItem('token');
+    const res = await fetch(`${apiUrl}/api/structured-tasks/${reviewingTask.taskId}/grade-delivery`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        studentId: selectedStudentForDossier.id,
+        grade,
+        feedback,
+        stepEvaluations
+      })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Error al guardar la calificación de la tarea.');
+    }
+    await fetchStudentTermGrades(selectedStudentForDossier.id);
+  };
+
+
 
   const fetchData = async () => {
     try {
@@ -390,11 +456,14 @@ const TeacherGrades: React.FC = () => {
   const filteredStudents = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     return studentsWithMeta.filter(st => {
+      if (courseId && !st.enrolledCourses.some(c => c.id === courseId)) {
+        return false;
+      }
       const matchesSearch = !q || st.fullName.toLowerCase().includes(q) || st.email.toLowerCase().includes(q) || st.enrolledCourses.some(c => c.title.toLowerCase().includes(q));
       const matchesModality = modalityFilter === 'ALL' || st.modality === modalityFilter;
       return matchesSearch && matchesModality;
     });
-  }, [studentsWithMeta, searchTerm, modalityFilter]);
+  }, [studentsWithMeta, searchTerm, modalityFilter, courseId]);
 
   // Clases con métricas
   const coursesWithMeta = useMemo(() => {
@@ -552,36 +621,39 @@ const TeacherGrades: React.FC = () => {
   return (
     <div className="page-container animate-fade-in" style={{ maxWidth: '1200px', margin: '0 auto' }}>
       {/* Header Principal */}
-      <header style={{ marginBottom: '1.75rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
-          <div>
-            <h1 style={{ margin: 0, fontSize: '1.85rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <Award style={{ color: 'var(--primary)' }} /> Centro de Calificaciones
-            </h1>
-            <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)' }}>
-              Supervisa el rendimiento académico general por alumnos o agrupado por clases presenciales y online
-            </p>
-          </div>
+      {!courseId && (
+        <header style={{ marginBottom: '1.75rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+            <div>
+              <h1 style={{ margin: 0, fontSize: '1.85rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <Award style={{ color: 'var(--primary)' }} /> Centro de Calificaciones
+              </h1>
+              <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)' }}>
+                Supervisa el rendimiento académico general por alumnos o agrupado por clases presenciales y online
+              </p>
+            </div>
 
-          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
-            <div style={{ padding: '0.45rem 0.85rem', background: 'var(--surface)', borderRadius: '10px', border: '1px solid var(--border)', fontSize: '0.85rem' }}>
-              Entregas: <strong style={{ color: 'var(--text-main)' }}>{totalSubmissionsCount}</strong>
-            </div>
-            <div style={{ padding: '0.45rem 0.85rem', background: totalPendingCount > 0 ? '#fef7e8' : 'var(--surface)', border: totalPendingCount > 0 ? '1px solid #fae0b0' : '1px solid var(--border)', borderRadius: '10px', fontSize: '0.85rem', color: totalPendingCount > 0 ? '#8d5b12' : 'var(--text-muted)' }}>
-              Por corregir: <strong>{totalPendingCount}</strong>
-            </div>
-            <div style={{ padding: '0.45rem 0.85rem', background: 'var(--primary-light)', border: '1px solid var(--primary-border)', borderRadius: '10px', fontSize: '0.85rem', color: 'var(--primary-text)' }}>
-              Corregidas: <strong>{totalGradedCount}</strong>
+            <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+              <div style={{ padding: '0.45rem 0.85rem', background: 'var(--surface)', borderRadius: '10px', border: '1px solid var(--border)', fontSize: '0.85rem' }}>
+                Entregas: <strong style={{ color: 'var(--text-main)' }}>{totalSubmissionsCount}</strong>
+              </div>
+              <div style={{ padding: '0.45rem 0.85rem', background: totalPendingCount > 0 ? '#fef7e8' : 'var(--surface)', border: totalPendingCount > 0 ? '1px solid #fae0b0' : '1px solid var(--border)', borderRadius: '10px', fontSize: '0.85rem', color: totalPendingCount > 0 ? '#8d5b12' : 'var(--text-muted)' }}>
+                Por corregir: <strong>{totalPendingCount}</strong>
+              </div>
+              <div style={{ padding: '0.45rem 0.85rem', background: 'var(--primary-light)', border: '1px solid var(--primary-border)', borderRadius: '10px', fontSize: '0.85rem', color: 'var(--primary-text)' }}>
+                Corregidas: <strong>{totalGradedCount}</strong>
+              </div>
             </div>
           </div>
-        </div>
-      </header>
+        </header>
+      )}
 
       {/* Selector de Macro-Sección y Modos de Vista */}
       <div className="glass-panel" style={{ padding: '1.25rem 1.75rem', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-          {/* Tabs Principales: Vista por Alumnos vs Vista por Clases */}
-          <div style={{ display: 'flex', background: 'var(--surface-alt)', padding: '4px', borderRadius: '10px', border: '1px solid var(--border)' }}>
+          {!courseId ? (
+            /* Tabs Principales: Vista por Alumnos vs Vista por Clases */
+            <div style={{ display: 'flex', background: 'var(--surface-alt)', padding: '4px', borderRadius: '10px', border: '1px solid var(--border)' }}>
             <button
               type="button"
               onClick={() => { setViewMode('STUDENTS'); setSelectedClassId(null); }}
@@ -626,6 +698,14 @@ const TeacherGrades: React.FC = () => {
               <BookOpen size={17} /> Vista Agrupada por Clases ({courses.length})
             </button>
           </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Users size={20} style={{ color: 'var(--primary)' }} />
+              <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--text-main)' }}>
+                Alumnos de la Clase ({filteredStudents.length})
+              </h3>
+            </div>
+          )}
 
           {/* Macro Filtro: Presencial vs Online */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -845,313 +925,414 @@ const TeacherGrades: React.FC = () => {
 
                   </div>
 
-                  {/* Sección de Evaluación Final por Competencias */}
-                  <div
-                    style={{
-                      padding: '1.25rem',
-                      borderRadius: '12px',
-                      background: 'var(--surface-alt)',
-                      border: '1px solid var(--border)',
-                      marginBottom: '1.5rem'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                        <div style={{ background: 'var(--primary-light)', padding: '0.5rem', borderRadius: '8px', color: 'var(--primary)' }}>
-                          <Award size={20} />
-                        </div>
-                        <div>
-                          <h3 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--text-main)' }}>Evaluación Final / Competencias</h3>
-                        </div>
-                      </div>
-
+                  {/* Selector de Trimestre */}
+                  <div style={{ display: 'flex', gap: '0.6rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+                    {[1, 2, 3].map((t) => (
                       <button
+                        key={t}
                         type="button"
-                        onClick={openEvaluationModal}
-                        className="btn-primary"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.85rem', fontSize: '0.82rem' }}
+                        onClick={() => setSelectedTerm(t)}
+                        style={{
+                          padding: '0.55rem 1.15rem',
+                          borderRadius: '10px',
+                          border: selectedTerm === t ? '1px solid var(--primary)' : '1px solid var(--border)',
+                          cursor: 'pointer',
+                          fontWeight: selectedTerm === t ? 700 : 500,
+                          fontSize: '0.88rem',
+                          background: selectedTerm === t ? 'var(--primary)' : 'var(--surface)',
+                          color: selectedTerm === t ? '#fff' : 'var(--text-main)',
+                          boxShadow: selectedTerm === t ? '0 2px 8px rgba(78, 155, 117, 0.25)' : 'none',
+                          transition: 'all 0.15s ease'
+                        }}
                       >
-                        <Edit3 size={15} />
-                        {currentEvaluation ? 'Editar Evaluación Final' : 'Asignar Notas Finales'}
+                        {t}º Trimestre {t === 1 ? '(Sep - Dic)' : t === 2 ? '(Ene - Mar)' : '(Abr - Jun)'}
                       </button>
-                    </div>
-
-                    {currentEvaluation ? (
-                      <div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: '0.65rem', marginBottom: '0.85rem' }}>
-                          <div style={{ padding: '0.65rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>GRAMMAR</span>
-                            <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>
-                              {currentEvaluation.grammar !== null && currentEvaluation.grammar !== undefined ? `${currentEvaluation.grammar} / 10` : '-'}
-                            </strong>
-                          </div>
-
-                          <div style={{ padding: '0.65rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>READING</span>
-                            <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>
-                              {currentEvaluation.reading !== null && currentEvaluation.reading !== undefined ? `${currentEvaluation.reading} / 10` : '-'}
-                            </strong>
-                          </div>
-
-                          <div style={{ padding: '0.65rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>WRITING</span>
-                            <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>
-                              {currentEvaluation.writing !== null && currentEvaluation.writing !== undefined ? `${currentEvaluation.writing} / 10` : '-'}
-                            </strong>
-                          </div>
-
-                          <div style={{ padding: '0.65rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>LISTENING</span>
-                            <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>
-                              {currentEvaluation.listening !== null && currentEvaluation.listening !== undefined ? `${currentEvaluation.listening} / 10` : '-'}
-                            </strong>
-                          </div>
-
-                          <div style={{ padding: '0.65rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>SPEAKING</span>
-                            <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>
-                              {currentEvaluation.speaking !== null && currentEvaluation.speaking !== undefined ? `${currentEvaluation.speaking} / 10` : '-'}
-                            </strong>
-                          </div>
-
-                          <div style={{ padding: '0.65rem', background: 'var(--primary-light)', borderRadius: '8px', border: '1px solid var(--primary-border)', textAlign: 'center' }}>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--primary-text)', display: 'block', fontWeight: 700 }}>NOTA GLOBAL</span>
-                            <strong style={{ fontSize: '1.1rem', color: 'var(--primary-text)' }}>
-                              {currentEvaluation.overallGrade !== null && currentEvaluation.overallGrade !== undefined ? `${currentEvaluation.overallGrade} / 10` : '-'}
-                            </strong>
-                          </div>
-                        </div>
-
-                        {currentEvaluation.observations && (
-                          <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--text-main)', fontStyle: 'italic', background: 'var(--surface)', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                            💬 Observaciones: "{currentEvaluation.observations}"
-                          </p>
-                        )}
-                      </div>
-                    ) : (
-                      <div style={{ padding: '0.75rem 0.9rem', background: '#fef7e8', borderRadius: '8px', border: '1px solid #fae0b0', color: '#8d5b12', fontSize: '0.85rem' }}>
-                        ⚠️ Pendiente de evaluación final.
-                      </div>
-                    )}
+                    ))}
                   </div>
 
-                  {/* Listado de Entregas del Alumno */}
-                  <h4 style={{ margin: '0 0 0.85rem', fontSize: '1rem', color: 'var(--text-main)' }}>
-                    Historial de Tareas y Exámenes ({selectedStudentForDossier.submissions.length})
-                  </h4>
+                  {/* Sección de Evaluación Trimestral */}
+                  {(() => {
+                    const currentTermInfo = termGradesData?.[selectedTerm];
+                    const isOnline = selectedStudentForDossier.modality === 'ONLINE';
 
-                  {selectedStudentForDossier.submissions.length === 0 ? (
-                    <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-muted)', background: 'var(--surface-alt)', borderRadius: '10px' }}>
-                      Este alumno aún no ha realizado entregas de tareas ni exámenes.
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                      {selectedStudentForDossier.submissions.map(sub => {
-                        const examData = parseSavedExam(sub.content);
-                        const isExam = sub.materialType === 'FORM' || Boolean(examData);
-                        const hasGrade = sub.grade !== null && sub.grade !== undefined;
-                        const submissionDetails = parseSubmissionContent(sub.content);
-                        const documentUrl = submissionDetails.link || submissionDetails.attachment?.dataUrl || sub.materialUrl;
+                    return (
+                      <form
+                        onSubmit={handleSaveTermGrade}
+                        style={{
+                          padding: '1.35rem',
+                          borderRadius: '12px',
+                          background: 'var(--surface-alt)',
+                          border: '1px solid var(--border)',
+                          marginBottom: '1.5rem'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                            <div style={{ background: 'var(--primary-light)', padding: '0.5rem', borderRadius: '8px', color: 'var(--primary)' }}>
+                              <Award size={20} />
+                            </div>
+                            <div>
+                              <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-main)' }}>
+                                Evaluación del {selectedTerm}º Trimestre
+                              </h3>
+                              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                                {isOnline
+                                  ? '💻 Modalidad Online • Calificaciones 100% automáticas mediante la media'
+                                  : '🏫 Modalidad Presencial • Media entre exámenes (Middle y Final) y tareas'}
+                              </span>
+                            </div>
+                          </div>
 
-                        return (
-                          <div
-                            key={sub.id}
-                            style={{
-                              padding: '1.1rem 1.25rem',
-                              borderRadius: '10px',
-                              border: '1px solid var(--border)',
-                              background: 'var(--surface)',
-                              borderLeft: `4px solid ${hasGrade ? (sub.grade! >= 5 ? '#22c55e' : '#ef4444') : '#f59e0b'}`
-                            }}
-                          >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                              <div>
-                                <strong style={{ fontSize: '1rem', color: 'var(--text-main)', display: 'block' }}>
-                                  {sub.assignmentTitle}
-                                </strong>
-                                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                                  Entregado el {new Date(sub.submittedAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              onClick={handleDownloadReportCard}
+                              className="btn-secondary"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.85rem', fontSize: '0.82rem' }}
+                            >
+                              <Download size={15} /> Boletín Trimestral PDF
+                            </button>
+                            <button
+                              type="submit"
+                              disabled={isSavingTermGrade}
+                              className="btn-primary"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.85rem', fontSize: '0.82rem' }}
+                            >
+                              <Edit3 size={15} /> {isSavingTermGrade ? 'Guardando...' : 'Guardar Evaluación'}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Tarjetas de Calificaciones Principales (Middle, Final, Tareas, Overall) */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', marginBottom: '1.15rem' }}>
+                          {!isOnline && (
+                            <>
+                              <div style={{ padding: '0.75rem', background: '#fff', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                                <label style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '0.35rem' }}>
+                                  MIDDLE EXAM
+                                </label>
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  min="0"
+                                  max="10"
+                                  placeholder="0.0"
+                                  value={termForm.middleExamGrade}
+                                  onChange={(e) => setTermForm((prev) => ({ ...prev, middleExamGrade: e.target.value }))}
+                                  style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border)', fontWeight: 700, fontSize: '1rem', color: 'var(--primary)' }}
+                                />
+                                <span style={{ display: 'block', fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                                  1er Examen parcial
                                 </span>
                               </div>
 
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                {hasGrade ? (
-                                  <span style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '0.35rem',
-                                    padding: '0.35rem 0.75rem',
-                                    borderRadius: '16px',
-                                    fontWeight: 700,
-                                    fontSize: '0.92rem',
-                                    background: sub.grade! >= 5 ? '#eaf4ef' : '#fdf0f0',
-                                    color: sub.grade! >= 5 ? '#24583e' : '#9e2a2b',
-                                    border: `1px solid ${sub.grade! >= 5 ? '#bfe0d0' : '#f7caca'}`
-                                  }}>
-                                    <CheckCircle2 size={15} /> {sub.grade!.toFixed(1)} / 10
-                                  </span>
-                                ) : (
-                                  <span style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '0.35rem',
-                                    padding: '0.35rem 0.75rem',
-                                    borderRadius: '16px',
-                                    fontWeight: 600,
-                                    fontSize: '0.82rem',
-                                    background: '#fef7e8',
-                                    color: '#8d5b12',
-                                    border: '1px solid #fae0b0'
-                                  }}>
-                                    <Clock3 size={14} /> Pendiente de evaluar
-                                  </span>
-                                )}
+                              <div style={{ padding: '0.75rem', background: '#fff', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                                <label style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '0.35rem' }}>
+                                  FINAL EXAM
+                                </label>
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  min="0"
+                                  max="10"
+                                  placeholder="0.0"
+                                  value={termForm.finalExamGrade}
+                                  onChange={(e) => setTermForm((prev) => ({ ...prev, finalExamGrade: e.target.value }))}
+                                  style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border)', fontWeight: 700, fontSize: '1rem', color: 'var(--primary)' }}
+                                />
+                                <span style={{ display: 'block', fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                                  Examen final trimestre
+                                </span>
                               </div>
-                            </div>
+                            </>
+                          )}
 
-                            {/* Contenido / Texto entregado o Examen */}
-                            {sub.content && (() => {
-                              if (examData) {
-                                return (
-                                  <div style={{
-                                    margin: '0.6rem 0',
-                                    padding: '0.75rem 1rem',
-                                    background: 'var(--surface-alt)',
-                                    borderRadius: '8px',
+                          <div style={{ padding: '0.75rem', background: '#fff', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
+                            <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '0.35rem' }}>
+                              MEDIA TAREAS
+                            </span>
+                            <strong style={{ fontSize: '1.25rem', color: 'var(--text-main)', display: 'block' }}>
+                              {currentTermInfo?.tasksAverage !== null && currentTermInfo?.tasksAverage !== undefined
+                                ? `${currentTermInfo.tasksAverage.toFixed(1)} / 10`
+                                : '- / 10'}
+                            </strong>
+                            <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                              {isOnline ? '100% de la nota final' : '50% de la nota final'}
+                            </span>
+                          </div>
+
+                          <div style={{ padding: '0.75rem', background: 'var(--primary-light)', borderRadius: '8px', border: '1px solid var(--primary-border)', textAlign: 'center' }}>
+                            <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--primary-text)', fontWeight: 700, marginBottom: '0.35rem' }}>
+                              NOTA TRIMESTRAL
+                            </span>
+                            <strong style={{ fontSize: '1.35rem', color: 'var(--primary-text)', display: 'block' }}>
+                              {currentTermInfo?.overallGrade !== null && currentTermInfo?.overallGrade !== undefined
+                                ? `${currentTermInfo.overallGrade.toFixed(1)} / 10`
+                                : '- / 10'}
+                            </strong>
+                            <span style={{ fontSize: '0.68rem', color: 'var(--primary-text)', fontWeight: 600 }}>
+                              {isOnline ? 'Media continua' : 'Media exámenes + tareas'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Desglose por Competencias CEFR */}
+                        <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.4rem' }}>
+                          Competencias Clave CEFR (Opcionales para el boletín)
+                        </label>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(85px, 1fr))', gap: '0.5rem', marginBottom: '1rem' }}>
+                          {[
+                            { key: 'grammar', label: 'Grammar' },
+                            { key: 'reading', label: 'Reading' },
+                            { key: 'writing', label: 'Writing' },
+                            { key: 'listening', label: 'Listening' },
+                            { key: 'speaking', label: 'Speaking' }
+                          ].map(({ key, label }) => (
+                            <div key={key} style={{ padding: '0.5rem', background: 'var(--surface)', borderRadius: '6px', border: '1px solid var(--border)', textAlign: 'center' }}>
+                              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>{label}</span>
+                              <input
+                                type="number"
+                                step="0.1"
+                                min="0"
+                                max="10"
+                                placeholder="-"
+                                value={(termForm as any)[key]}
+                                onChange={(e) => setTermForm((prev) => ({ ...prev, [key]: e.target.value }))}
+                                style={{ width: '100%', textAlign: 'center', padding: '0.3rem', borderRadius: '4px', border: '1px solid var(--border)', fontSize: '0.88rem', fontWeight: 700, color: 'var(--primary)', marginTop: '0.25rem' }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Observaciones Pedagógicas */}
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.35rem' }}>
+                            Observaciones Pedagógicas del Profesor (aparecerán en el boletín)
+                          </label>
+                          <textarea
+                            rows={2}
+                            placeholder="Comentarios sobre el progreso, actitud y áreas de mejora del alumno durante este trimestre..."
+                            value={termForm.observations}
+                            onChange={(e) => setTermForm((prev) => ({ ...prev, observations: e.target.value }))}
+                            style={{
+                              width: '100%',
+                              padding: '0.55rem 0.75rem',
+                              borderRadius: '8px',
+                              border: '1px solid var(--border)',
+                              background: 'var(--surface)',
+                              fontSize: '0.85rem',
+                              color: 'var(--text-main)',
+                              resize: 'vertical'
+                            }}
+                          />
+                        </div>
+                      </form>
+                    );
+                  })()}
+
+                  {/* Bloques de Ejercicios y Tareas del Trimestre */}
+                  {(() => {
+                    const currentTermInfo = termGradesData?.[selectedTerm];
+                    const tasksList: any[] = currentTermInfo?.tasks || [];
+                    const completedTasks = tasksList.filter((t: any) => t.isCompleted);
+                    const inProgressTasks = tasksList.filter((t: any) => !t.isCompleted);
+                    const displayedTasks = taskFilter === 'COMPLETED'
+                      ? completedTasks
+                      : taskFilter === 'IN_PROGRESS'
+                        ? inProgressTasks
+                        : tasksList;
+
+                    return (
+                      <div style={{ marginBottom: '1.5rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                          <h4 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <BookOpen size={18} style={{ color: 'var(--primary)' }} />
+                            Bloques de Ejercicios y Tareas del {selectedTerm}º Trimestre ({displayedTasks.length} de {tasksList.length})
+                          </h4>
+                          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                            Cada bloque se evalúa como una unidad integrada
+                          </span>
+                        </div>
+
+                        {/* Conmutador discreto: Completadas (default) vs En progreso vs Todas */}
+                        <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            onClick={() => setTaskFilter('COMPLETED')}
+                            className={taskFilter === 'COMPLETED' ? 'btn-primary' : 'btn-secondary'}
+                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', borderRadius: '14px' }}
+                          >
+                            Completadas ({completedTasks.length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setTaskFilter('IN_PROGRESS')}
+                            className={taskFilter === 'IN_PROGRESS' ? 'btn-primary' : 'btn-secondary'}
+                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', borderRadius: '14px' }}
+                          >
+                            En progreso ({inProgressTasks.length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setTaskFilter('ALL')}
+                            className={taskFilter === 'ALL' ? 'btn-primary' : 'btn-secondary'}
+                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', borderRadius: '14px' }}
+                          >
+                            Todas ({tasksList.length})
+                          </button>
+                        </div>
+
+                        {displayedTasks.length === 0 ? (
+                          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', background: 'var(--surface-alt)', borderRadius: '10px' }}>
+                            {taskFilter === 'COMPLETED'
+                              ? 'No hay tareas 100% completadas para este alumno en este trimestre.'
+                              : taskFilter === 'IN_PROGRESS'
+                                ? 'No hay tareas en progreso para este alumno en este trimestre.'
+                                : 'No hay tareas estructuradas registradas para este alumno en el trimestre seleccionado.'}
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                            {displayedTasks.map((task) => {
+                              const hasTaskGrade = task.taskGrade !== null && task.taskGrade !== undefined;
+                              const isCompleted = task.isCompleted;
+
+                              return (
+                                <div
+                                  key={task.taskId}
+                                  style={{
+                                    padding: '1.1rem 1.25rem',
+                                    borderRadius: '10px',
                                     border: '1px solid var(--border)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    flexWrap: 'wrap',
-                                    gap: '0.75rem'
-                                  }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                                      <div style={{ background: 'var(--primary-light)', color: 'var(--primary)', padding: '0.4rem', borderRadius: '6px' }}>
-                                        <FileText size={18} />
-                                      </div>
-                                      <div>
-                                        <strong style={{ display: 'block', fontSize: '0.9rem', color: 'var(--text-main)' }}>
-                                          Examen tipo test completado
-                                        </strong>
-                                        {examData.score !== null && examData.total !== null && (
-                                          <span style={{ fontSize: '0.78rem', color: 'var(--primary)', fontWeight: 600 }}>
-                                            {examData.score} / {examData.total} aciertos
+                                    background: 'var(--surface)',
+                                    borderLeft: `4px solid ${isCompleted ? '#22c55e' : '#f59e0b'}`
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.6rem' }}>
+                                    <div>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
+                                        <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 7px', borderRadius: '5px', background: 'var(--primary-light)', color: 'var(--primary)' }}>
+                                          {task.category || 'GENERAL'}
+                                        </span>
+                                        {task.dueDate && (
+                                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                            Plazo: {new Date(task.dueDate).toLocaleDateString('es-ES')}
                                           </span>
                                         )}
                                       </div>
+                                      <strong style={{ fontSize: '1rem', color: 'var(--text-main)', display: 'block' }}>
+                                        {task.title}
+                                      </strong>
                                     </div>
 
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                      {hasTaskGrade ? (
+                                        <span style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '0.35rem',
+                                          padding: '0.35rem 0.75rem',
+                                          borderRadius: '16px',
+                                          fontWeight: 700,
+                                          fontSize: '0.92rem',
+                                          background: task.taskGrade >= 5 ? '#eaf4ef' : '#fdf0f0',
+                                          color: task.taskGrade >= 5 ? '#24583e' : '#9e2a2b',
+                                          border: `1px solid ${task.taskGrade >= 5 ? '#bfe0d0' : '#f7caca'}`
+                                        }}>
+                                          <CheckCircle2 size={15} /> Nota Tarea: {task.taskGrade.toFixed(1)} / 10
+                                        </span>
+                                      ) : (
+                                        <span style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '0.35rem',
+                                          padding: '0.35rem 0.75rem',
+                                          borderRadius: '16px',
+                                          fontWeight: 600,
+                                          fontSize: '0.82rem',
+                                          background: '#fef7e8',
+                                          color: '#8d5b12',
+                                          border: '1px solid #fae0b0'
+                                        }}>
+                                          <Clock3 size={14} /> Sin calificar
+                                        </span>
+                                      )}
+
                                       <button
                                         type="button"
-                                        onClick={() => setReviewingExam({
-                                          subId: sub.id,
-                                          title: sub.assignmentTitle,
-                                          questions: sub.materialFormData?.questions || [],
-                                          answers: examData.answers,
-                                          score: sub.grade,
-                                          total: examData.total,
-                                          feedback: sub.feedback
-                                        })}
-                                        className="btn-secondary"
-                                        style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
-                                      >
-                                        <FileText size={14} /> Revisar
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => openGradingModal(sub)}
+                                        onClick={() => setReviewingTask(task)}
                                         className="btn-primary"
                                         style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
                                       >
-                                        <Edit3 size={14} /> Editar Nota y Feedback
+                                        <Edit3 size={14} /> Revisar Entrega Completa
                                       </button>
                                     </div>
                                   </div>
-                                );
-                              }
 
-                              if (submissionDetails.attachment && submissionDetails.attachment.dataUrl) {
-                                return (
-                                  <div style={{ margin: '0.5rem 0', padding: '0.6rem 0.8rem', background: 'var(--surface-alt)', borderRadius: '6px', fontSize: '0.85rem' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                      <FileText size={15} style={{ color: 'var(--primary)' }} />
-                                      <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>Archivo adjunto:</span>
-                                      <a
-                                        href={submissionDetails.attachment.dataUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        download={submissionDetails.attachment.name}
-                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}
-                                      >
-                                        <ExternalLink size={14} /> {submissionDetails.attachment.name}
-                                      </a>
+                                  {/* Desglose visual de pasos (Chips) */}
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', margin: '0.5rem 0' }}>
+                                    {(task.steps || []).map((step: any, sIdx: number) => {
+                                      const isEvaluable = step.isEvaluable;
+                                      const hasGrade = step.grade !== null && step.grade !== undefined;
+
+                                      return (
+                                        <span
+                                          key={step.stepId || sIdx}
+                                          style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.35rem',
+                                            padding: '0.25rem 0.55rem',
+                                            borderRadius: '8px',
+                                            fontSize: '0.78rem',
+                                            fontWeight: 600,
+                                            background: !isEvaluable
+                                              ? (step.isCompleted ? '#ecfdf5' : '#f1f5f9')
+                                              : (hasGrade ? (step.grade >= 5 ? '#eaf4ef' : '#fdf0f0') : '#fef7e8'),
+                                            color: !isEvaluable
+                                              ? (step.isCompleted ? '#065f46' : '#64748b')
+                                              : (hasGrade ? (step.grade >= 5 ? '#24583e' : '#9e2a2b') : '#8d5b12'),
+                                            border: '1px solid rgba(0,0,0,0.06)'
+                                          }}
+                                        >
+                                          {!isEvaluable ? (
+                                            <>
+                                              {step.isCompleted ? '✓' : '○'} {step.title}
+                                            </>
+                                          ) : (
+                                            <>
+                                              {hasGrade ? `${step.grade.toFixed(1)}/10` : '⏳'} {step.title}
+                                            </>
+                                          )}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+
+                                  {/* Feedback de la tarea */}
+                                  {task.taskFeedback && (
+                                    <div style={{ marginTop: '0.45rem', padding: '0.4rem 0.65rem', background: '#f8fafc', borderRadius: '6px', fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic', border: '1px solid #e2e8f0' }}>
+                                      💬 <strong>Feedback global:</strong> "{task.taskFeedback}"
                                     </div>
-                                  </div>
-                                );
-                              }
+                                  )}
 
-                              if (submissionDetails.link) {
-                                return (
-                                  <div style={{ margin: '0.5rem 0', padding: '0.6rem 0.8rem', background: 'var(--surface-alt)', borderRadius: '6px', fontSize: '0.85rem' }}>
-                                    <a href={submissionDetails.link} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
-                                      <ExternalLink size={14} /> Abrir documento entregado en la nube
-                                    </a>
-                                  </div>
-                                );
-                              }
-
-                              return (
-                                <div style={{ margin: '0.5rem 0', padding: '0.6rem 0.8rem', background: 'var(--surface-alt)', borderRadius: '6px', fontSize: '0.85rem' }}>
-                                  <p style={{ margin: 0, color: 'var(--text-main)', whiteSpace: 'pre-wrap' }}>
-                                    {submissionDetails.text || sub.content}
-                                  </p>
+                                  {/* Feedback individual de cada paso */}
+                                  {(task.steps || []).some((s: any) => s.feedback) && (
+                                    <div style={{ marginTop: '0.45rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                                      {(task.steps || []).filter((s: any) => s.feedback).map((step: any) => (
+                                        <div key={step.stepId} style={{ padding: '0.35rem 0.65rem', background: '#eff6ff', borderRadius: '6px', fontSize: '0.78rem', color: '#1e40af', border: '1px solid #bfdbfe' }}>
+                                          <span style={{ fontWeight: 700 }}>• {step.title}:</span> "{step.feedback}"
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
                               );
-                            })()}
-
-                            {/* Feedback del profesor */}
-                            {sub.feedback && (
-                              <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', background: 'var(--primary-subtle)', borderRadius: '6px', border: '1px solid var(--primary-border)', fontSize: '0.84rem' }}>
-                                <strong style={{ color: 'var(--primary-text)', display: 'block', marginBottom: '0.2rem', fontSize: '0.78rem' }}>
-                                  💬 Observaciones del profesor:
-                                </strong>
-                                <span style={{ color: 'var(--text-main)' }}>{sub.feedback}</span>
-                              </div>
-                            )}
-
-                            {/* Botones de acción (para tareas manuales o documentos adjuntos) */}
-                            {(!isExam || documentUrl) && (
-                              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border)' }}>
-                                {documentUrl && (
-                                  <a
-                                    href={documentUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="btn-secondary"
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.35rem 0.7rem', fontSize: '0.8rem', textDecoration: 'none' }}
-                                  >
-                                    <ExternalLink size={14} /> Abrir Doc
-                                  </a>
-                                )}
-
-                                {!isExam && (
-                                  <button
-                                    type="button"
-                                    onClick={() => openGradingModal(sub)}
-                                    className="btn-primary"
-                                    style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem' }}
-                                  >
-                                    <Edit3 size={14} /> {hasGrade ? 'Editar Nota y Feedback' : 'Evaluar Tarea'}
-                                  </button>
-                                )}
-                              </div>
-                            )}
+                            })}
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
                 </div>
                 , document.body)
@@ -1593,176 +1774,28 @@ const TeacherGrades: React.FC = () => {
       , document.body
       )}
 
-      {/* =========================================================================
-          MODAL DE EVALUACIÓN FINAL POR COMPETENCIAS
-         ========================================================================= */}
-      {isEvaluationModalOpen && selectedStudentForDossier && createPortal(
-        <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
-          <div className="glass-panel modal-card" style={{ width: '100%', maxWidth: '520px', padding: '2rem', background: 'var(--surface)', position: 'relative' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
-              <div>
-                <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 700, textTransform: 'uppercase' }}>
-                  EVALUACIÓN DOCENTE
-                </span>
-                <h3 style={{ margin: '0.2rem 0 0', fontSize: '1.2rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <Award style={{ color: 'var(--primary)' }} /> Evaluación Final / Competencias
-                </h3>
-                <p style={{ margin: '0.2rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                  {selectedStudentForDossier.fullName}
-                </p>
-              </div>
-              <button type="button" onClick={() => setIsEvaluationModalOpen(false)} className="modal-close" aria-label="Cerrar modal">
-                <X size={20} />
-              </button>
-            </div>
 
-            <form onSubmit={handleSaveEvaluation} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.3rem' }}>
-                    Grammar
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="10"
-                    value={evaluationForm.grammar}
-                    onChange={e => setEvaluationForm({ ...evaluationForm, grammar: e.target.value })}
-                    placeholder="0 - 10"
-                    style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', outline: 'none' }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.3rem' }}>
-                    Reading
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="10"
-                    value={evaluationForm.reading}
-                    onChange={e => setEvaluationForm({ ...evaluationForm, reading: e.target.value })}
-                    placeholder="0 - 10"
-                    style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', outline: 'none' }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.3rem' }}>
-                    Writing
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="10"
-                    value={evaluationForm.writing}
-                    onChange={e => setEvaluationForm({ ...evaluationForm, writing: e.target.value })}
-                    placeholder="0 - 10"
-                    style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', outline: 'none' }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.3rem' }}>
-                    Listening
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="10"
-                    value={evaluationForm.listening}
-                    onChange={e => setEvaluationForm({ ...evaluationForm, listening: e.target.value })}
-                    placeholder="0 - 10"
-                    style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', outline: 'none' }}
-                  />
-                </div>
-
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.3rem' }}>
-                    Speaking
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="10"
-                    value={evaluationForm.speaking}
-                    onChange={e => setEvaluationForm({ ...evaluationForm, speaking: e.target.value })}
-                    placeholder="0 - 10"
-                    style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', outline: 'none' }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
-                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--primary)' }}>
-                    Nota Global
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const vals = [
-                        evaluationForm.grammar,
-                        evaluationForm.reading,
-                        evaluationForm.writing,
-                        evaluationForm.listening,
-                        evaluationForm.speaking
-                      ]
-                        .map(Number)
-                        .filter(n => !isNaN(n) && n > 0);
-                      if (vals.length > 0) {
-                        const avg = (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
-                        setEvaluationForm({ ...evaluationForm, overallGrade: avg });
-                      }
-                    }}
-                    style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }}
-                  >
-                    ⚡ Calcular Media Automática
-                  </button>
-                </div>
-                <input
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="10"
-                  value={evaluationForm.overallGrade}
-                  onChange={e => setEvaluationForm({ ...evaluationForm, overallGrade: e.target.value })}
-                  placeholder="Ej. 8.5"
-                  style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--primary-border)', background: 'var(--primary-light)', fontWeight: 700, color: 'var(--primary-text)', outline: 'none' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.3rem' }}>
-                  Observaciones y Feedback del Profesor
-                </label>
-                <textarea
-                  rows={3}
-                  value={evaluationForm.observations}
-                  onChange={e => setEvaluationForm({ ...evaluationForm, observations: e.target.value })}
-                  placeholder="Comentarios sobre la evolución, recomendaciones de estudio..."
-                  style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', outline: 'none', resize: 'vertical' }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
-                <button type="button" onClick={() => setIsEvaluationModalOpen(false)} style={{ padding: '0.55rem 1rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', fontWeight: 600 }}>
-                  Cancelar
-                </button>
-                <button type="submit" disabled={isSavingEvaluation} className="btn-primary" style={{ padding: '0.55rem 1.25rem' }}>
-                  {isSavingEvaluation ? 'Guardando...' : 'Guardar Evaluación Final'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      , document.body
+      {reviewingTask && selectedStudentForDossier && (
+        <TaskDeliveryReviewModal
+          task={reviewingTask}
+          studentName={selectedStudentForDossier.fullName}
+          onClose={() => setReviewingTask(null)}
+          onSaveGrade={handleSaveTaskDeliveryGrade}
+          onReviewExam={(examStep) => {
+            const examData = parseSavedExam(examStep.content);
+            if (examData) {
+              setReviewingExam({
+                subId: examStep.title,
+                title: examStep.title,
+                questions: examStep.questions || [],
+                answers: examData.answers,
+                score: examStep.grade,
+                total: examData.total,
+                feedback: null
+              });
+            }
+          }}
+        />
       )}
     </div>
   );

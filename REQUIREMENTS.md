@@ -1,7 +1,99 @@
-# Requisitos Funcionales — HIT SCHOOL
+# 📋 Requisitos Funcionales — HIT SCHOOL
 
-Documento maestro de especificación de requisitos funcionales y seguimiento de desarrollo.
+Documento maestro de especificación de requisitos funcionales, trazabilidad y seguimiento de desarrollo.
 *Convención de estados:* `[x]` Completado | `[/]` Parcial / En progreso | `[ ]` Pendiente
+
+---
+
+## 🌟 0. Requisitos de la Reunión con el Cliente (Prioridad Actual)
+
+A continuación se detallan los 11 requerimientos acordados en la última reunión con el cliente, su alcance funcional y su estado de ejecución:
+
+| # | Requisito del Cliente | Alcance Funcional Resumido | Estado |
+| :-: | :--- | :--- | :-: |
+| **1** | **Extractos de pago por años con total** | Filtro por ejercicio anual y cuadro de totales (Total Facturado, Total Abonado, Saldo Pendiente) en el PDF. | `[x] Completado` |
+| **2** | **Calificaciones trimestrales (Middle & Final Term)** | 2 notas trimestrales. Presencial: media entre Middle/Final y tareas. Online: media 100% automática de tareas y exámenes. | `[ ] Pendiente` |
+| **3** | **Programación diferida de tareas** | Programar fecha/hora de publicación de tareas estilo Google Classroom (ocultas para el alumno hasta la fecha). | `[ ] Pendiente` |
+| **4** | **Adjuntar archivos del profesor en tareas** | Permitir al docente adjuntar documentos/archivos locales como material de apoyo descargable al crear la tarea. | `[ ] Pendiente` |
+| **5** | **Previsualización de audio en creador de exámenes** | Reproductor visual inmediato al asociar una pista de audio opcional a una pregunta interactiva. | `[ ] Pendiente` |
+| **6** | **Acceso directo Web desde móvil y ordenador (PWA)** | Configuración de Web App Manifest, meta tags e iconos para instalación directa en pantalla de inicio. | `[ ] Pendiente` |
+| **7** | **Fotos y vídeos locales en Tablón de Anuncios** | Subida y reproducción directa de imágenes y vídeos almacenados localmente en las publicaciones de clase. | `[ ] Pendiente` |
+| **8** | **Chat con visibilidad global para docentes** | Todos los profesores/administradores ven todos los chats de la academia; el alumno solo ve a quien se dirige. | `[ ] Pendiente` |
+| **9** | **Paleta de fondos visuales y mayor contraste** | Rediseño visual con fondos diferenciados por sección y badges cromáticos para aumentar el engagement. | `[ ] Pendiente` |
+| **10** | **Vuelco masivo de alumnos (Exportar / Importar Excel)** | Descarga de expedientes a Excel/CSV e importador masivo con vista previa y creación transaccional. | `[ ] Pendiente` |
+
+---
+
+### Detalle de los 11 Puntos del Cliente
+
+### 0.1 Extracto de Pagos por Años con Desglose de Totales `[x]`
+- [x] Selector de ejercicio/año dinámico en la interfaz del profesor (`/teacher/payments`) y del alumno/padre (`/student/payments`).
+- [x] Soporte en el generador de PDF (`generateStatementPDF`) para filtrar las mensualidades por año o emitir histórico completo.
+- [x] Inclusión del ejercicio fiscal en la cabecera del documento y en el nombre del archivo (`Extracto_{Alumno}_{Año}.pdf`).
+- [x] Fila de totales en el pie de tabla (`foot`) con distinción cromática (verde para abonadas, rojo para impagos).
+- [x] Cuadro resumen de tres tarjetas métricas al pie del documento:
+  - **TOTAL FACTURADO (€):** Importe global emitido y número de mensualidades emitidas.
+  - **TOTAL ABONADO (€):** Importe cobrado y número de recibos pagados.
+  - **SALDO PENDIENTE (€):** Estado de cuenta con alerta en rojo si hay deuda o confirmación en verde si está al corriente de pago (`0,00 €`).
+- [x] Paginación dinámica multihélice (*Página X de Y*).
+
+### 0.2 Motor de Calificaciones Trimestrales (Middle Term y Final Term) `[ ]`
+- [ ] Definición de estructura académica por trimestres (1º, 2º y 3º trimestre) con dos hitos evaluativos principales:
+  - **Middle Term:** Calificación intermedia del trimestre.
+  - **Final Term:** Calificación final del trimestre.
+- [ ] **Lógica para Alumnos Presenciales (Academia):**
+  - La nota final trimestral se calcula combinando las calificaciones formales de exámenes (*Middle* y *Final Term*) introducidas por el profesor y la nota media ponderada de las entregas y tareas prácticas.
+  - Ponderación configurable o media aritmética entre examen y trabajo continuo.
+- [ ] **Lógica para Alumnos Online / Individuales:**
+  - El cálculo de las calificaciones finales trimestrales debe ser **100% automático** a partir del promedio ponderado en tiempo real de todas las tareas, tests autocorregibles y redacciones entregadas en la plataforma durante ese periodo.
+- [ ] Interfaz de visualización para alumnos y padres con el desglose trimestral (*Middle*, *Final*, *Media Tareas* y *Calificación Definitiva*).
+
+### 0.3 Programación de Tareas Diferidas (Estilo Google Classroom) `[ ]`
+- [ ] Soporte para campo `publishAt` / `scheduledAt` (fecha y hora) en la creación y edición de tareas y asignaciones.
+- [ ] **Visibilidad condicionada:**
+  - El profesor puede ver las tareas programadas con un badge distintivo (*"Programada para el DD/MM/AAAA HH:mm"*).
+  - Los alumnos y tutores no ven la tarea ni reciben notificación hasta que se alcanza la fecha y hora programada.
+- [ ] Publicación instantánea automática en el momento en que expira la fecha de programación.
+
+### 0.4 Adjuntos de Archivos Locales en Tareas del Profesor `[ ]`
+- [ ] Selector de archivos locales desde el modal de creación de tareas del profesor (PDF, audio, imágenes, documentos Office).
+- [ ] Almacenamiento seguro en el backend (directorio `uploads/` o multipart) y vinculación al registro de la tarea.
+- [ ] Visualización y botón de descarga directa para el alumno en el encabezado de las instrucciones de la tarea.
+
+### 0.5 Reproductor Visual de Audios en el Creador de Exámenes `[ ]`
+- [ ] Al añadir una pista de audio (URL o archivo de Listening) a una pregunta del Form Builder:
+  - Mostrar de inmediato un reproductor interactivo embebido con controles (play/pause, barra de progreso y volumen).
+  - Permitir al profesor escuchar y validar el corte de audio antes de guardar el examen.
+
+### 0.6 Acceso Directo Web / PWA (Móvil y Escritorio) `[ ]`
+- [ ] Configuración de `manifest.webmanifest` / `manifest.json` con nombre de la app (*HitSchool*), colores corporativos (`#4e9b75`), iconos adaptativos (192x192 y 512x512) y orientación vertical preferente.
+- [ ] Meta tags para Safari/iOS (`apple-mobile-web-app-capable`, `apple-mobile-web-app-status-bar-style`, `apple-touch-icon`).
+- [ ] Banner / Botón accesible en la interfaz para instalar como acceso directo en escritorio (Chrome/Edge) o móvil (Android/iOS).
+
+### 0.7 Soporte Multimedia Local en el Tablón de Anuncios (`Stream`) `[ ]`
+- [ ] Posibilidad de adjuntar imágenes y vídeos desde el almacenamiento local del dispositivo al publicar un anuncio en el aula.
+- [ ] Almacenamiento en el servidor con endpoint de subida multimedia.
+- [ ] Visor integrado en el tablón para reproducir el vídeo directamente en el feed de la clase o ampliar las imágenes adjuntas.
+
+### 0.8 Visibilidad de Chat Multi-Profesor / Supervisión Centralizada `[ ]`
+- [ ] **Acceso Docente / Administrativo:** Cualquier profesor o administrador puede consultar y participar en las conversaciones abiertas con los alumnos o padres de la academia (supervisión colegiada del equipo docente).
+- [ ] **Aislamiento del Alumno / Padre:** El alumno y el tutor solo ven la conversación con su profesor asignado y a quien se están dirigiendo específicamente, sin visibilidad sobre hilos de otros compañeros.
+
+### 0.9 Diseño Visual Enriquecido con Fondos y Acentos de Color `[ ]`
+- [ ] Introducción de gradientes y tonalidades suaves de fondo que rompan la monotonía de pantallas planas.
+- [ ] Asignación de códigos de color por tipo de actividad y estado:
+  - Tareas pendientes: acentos ámbar / cálidos suaves.
+  - Tareas completadas: verdes menta corporativos.
+  - Exámenes y evaluaciones: azules/violetas pastel.
+- [ ] Mayor contraste y jerarquía tipográfica en paneles, tarjetas y cabeceras.
+
+### 0.10 Exportación e Importación Masiva de Alumnos (Excel / CSV) `[ ]`
+- [ ] **Exportación a Excel (`.xlsx` / `.csv`):**
+  - Descarga con 1 clic de la base de datos de alumnos con todos sus campos: Nombre, Apellidos, DNI, Email, Teléfono, Fecha Nacimiento, Dirección, Modalidad (Presencial/Online), Cuota Mensual, Tutor vinculado y Cursos matriculados.
+- [ ] **Importación Masiva desde Excel:**
+  - Asistente de carga de ficheros Excel/CSV con plantilla modelo descargable.
+  - Mapeo automático de columnas y vista previa interactiva con validación previa de duplicados (email o DNI).
+  - Creación masiva transaccional en base de datos con alta de usuarios, perfiles, generación de credenciales automáticas y disparo opcional de webhooks a n8n.
 
 ---
 
@@ -33,13 +125,12 @@ Documento maestro de especificación de requisitos funcionales y seguimiento de 
   - [x] Opción múltiple (*Multiple Choice*).
   - [x] Verdadero / Falso (*True/False*).
   - [x] Respuesta corta (*Short Answer* con normalización case-insensitive).
-  - [x] Completar espacios (*Fill in the blanks* interactivo) mediante texto con soluciones entre paréntesis y validación opcional sensible a mayúsculas.
-  - [x] Preguntas con imágenes adjuntas en el enunciado, disponibles en editor, vista previa, resolución y revisión.
+  - [x] Completar espacios (*Fill in the blanks* interactivo) mediante texto con soluciones entre paréntesis.
+  - [x] Preguntas con imágenes adjuntas en el enunciado.
 - [x] Soporte de destrezas lingüísticas (*Writing, Speaking, Listening, Reading, Grammar & Vocabulary, Mock Exams*).
-- [x] Calificación manual por el profesor y feedback detallado desde el panel de calificaciones con botones rápidos y modal interactivo.
+- [x] Calificación manual por el profesor y feedback detallado desde el panel de calificaciones.
 - [x] Revisión pedagógica del examen para el alumno con desglose de respuestas correctas, fallos y puntuación total.
-- [x] Observaciones pedagógicas editables por el profesor en exámenes autocorregidos, visibles para alumno y tutor.
-- [x] Exámenes de tareas estructuradas con intento único, autocorrección y registro automático en Calificaciones.
+- [x] Duplicación profunda de exámenes con 1 clic (`POST /api/materials/:id/duplicate`) conservando preguntas y estructura.
 
 ### 1.4 Gestión de Alumnos y Ficha de Usuario
 - [x] Alta y registro de estudiantes desde panel de administración con generación automática de credenciales (`hitXXXX`).
@@ -55,71 +146,64 @@ Documento maestro de especificación de requisitos funcionales y seguimiento de 
   - [x] Dirección completa.
   - [x] Vinculación a Padre/Tutor pagador (para menores o hermanos con cuenta familiar).
 - [x] Asignación de cuota mensual y duración de curso en meses.
-- [ ] Acceso y descarga de facturas/recibos en PDF desde la ficha del alumno (disponible en /payments).
+- [x] Acceso directo al control de pagos y facturas desde la ficha del alumno en `StudentsManagement.tsx`.
 
-### 1.5 Repositorio Central de Contenidos
+### 1.5 Repositorio Central y Catálogo de Plantillas
 - [x] Catálogo centralizado de recursos didácticos (`/teacher/materials`).
 - [x] Filtros combinados en tiempo real por tipo de medio, nivel y destreza (*Skill*).
-- [x] Asignación rápida de contenidos a estudiantes individuales con gestión de accesos y revocación.
-- [x] Edición y sustitución de contenidos y exámenes en tiempo real.
+- [x] Catálogo de Plantillas de Tareas (`StructuredTask` con `isTemplate: true`):
+  - Creación de módulos modelo de 1 o N pasos.
+  - Guardado de cualquier tarea existente como plantilla reutilizable (`POST /:id/save-as-template`).
+  - Despliegue inmediato de plantillas a clases activas con ajuste de fecha límite.
+- [x] Edición reconciliadora y no destructiva de tareas (preserva las entregas y notas previas de los alumnos).
 
 ### 1.6 Control de Pagos y Facturación
-- [x] Matriz visual de estado de cobro por estudiante (Mes actual y 2 meses anteriores) en `/teacher/payments`.
-- [x] Indicadores automáticos de estado: **Pagado**, **Pendiente** e **Impago** (las cuotas no abonadas del mes actual son pendientes y las de meses anteriores son impago).
+- [x] Matriz visual de estado de cobro por estudiante en `/teacher/payments`.
+- [x] Indicadores automáticos de estado: **Pagado**, **Pendiente** e **Impago** con actualización reactiva.
 - [x] Marcado y desmarcado de pagos con un solo clic (*Toggle Switch*).
 - [x] Generación y sincronización automática del calendario de pagos según la duración del curso del alumno.
-- [ ] Pagos agrupados por familia/tutor (un solo padre/tutor paga las cuotas de 2 o más hermanos con desglose unificado).
-- [/] Soporte de planes tarifarios flexibles (actualmente validado a 35€ y 65€/mes; pendiente soportar pagos trimestrales, descuentos y tarifas personalizadas).
-- [x] Persistencia de transacciones y estados de pago en PostgreSQL.
+- [x] Generación de facturas individuales en PDF con numeración oficial.
+- [x] **Generación de extractos de cuenta anuales o históricos consolidados con desglose de totales (Punto 1).**
+- [ ] Pagos agrupados por familia/tutor (factura única consolidada para hermanos).
+- [/] Soporte de planes tarifarios flexibles (35€ y 65€/mes validados; pendiente tarifas trimestrales y personalizadas).
 
 ### 1.7 Comunicación y Notificaciones
-- [x] Chat privado directo Profesor ↔ Alumno con historial persistente, edición y borrado de mensajes.
-- [x] Canal de comunicación privado Profesor ↔ Padres/Tutores (hilos independientes por alumno).
-- [x] Tablón de anuncios (*Stream*) por clase para publicaciones y avisos grupales.
+- [x] Chat privado directo Profesor ↔ Alumno con historial persistente.
+- [x] Canal de comunicación privado Profesor ↔ Padres/Tutores (hilos independientes por hijo).
+- [x] Tablón de anuncios (*Stream*) por clase para publicaciones grupales.
 - [/] Notificaciones automáticas:
   - [x] Webhook a n8n al crear nuevo alumno.
   - [x] Webhook a n8n para enviar credenciales al Padre/Tutor asignado.
   - [ ] Aviso por email a alumnos/padres al publicar anuncios en el tablón de la clase.
-  - [ ] Notificaciones push / alertas en la app.
-
-### 1.8 Control de Calificaciones y Progreso
-- [x] Panel de calificaciones por clase para el profesor (`GradesTab.tsx`).
-- [x] Panel global de calificaciones para el estudiante (`/student/grades`).
-- [x] Desglose y categorización por destrezas (*Skills*: Grammar, Reading, Writing, Listening, Speaking y Nota Global).
-- [x] Visualización y edición de observaciones cualitativas por alumno (modal interactivo para el profesor y botón de visualización de comentarios para el alumno).
-- [x] Sección de tareas estructuradas en Mis Clases: pasos numerados, vinculación individual de recursos y asignación a clase completa o alumno concreto.
+  - [ ] Notificaciones push en la app.
 
 ---
 
 ## 2. Módulo Alumno y Familia
 
 ### 2.1 Control de Pagos
-- [x] Consulta clara de mensualidades, cuotas abonadas y pendientes (`/student`).
+- [x] Consulta clara de mensualidades, cuotas abonadas y pendientes (`/student/payments`).
 - [x] Indicador visual de estado de cuota (*Pagado, Pendiente, Impago*).
-- [x] Descarga directa de facturas y recibos en formato PDF (deshabilitado hasta registrar pago).
+- [x] Descarga directa de facturas y recibos en formato PDF (habilitado tras confirmar pago).
+- [x] **Selector de año y descarga de extracto anual consolidado en PDF con cuadro de totales.**
 
 ### 2.2 Material y Tareas
-- [x] Visualización de clases matriculadas y acceso al aula virtual (`/student/dashboard` y `/student/course/:id`).
+- [x] Visualización de clases matriculadas y acceso al aula virtual.
 - [x] Tablón de anuncios de la clase con comunicados del profesor.
 - [x] Trabajo de clase organizado por destrezas (*Reading, Listening, Writing, Grammar, etc.*).
-- [x] Listado de material asignado directamente y contenido individualizado.
-- [x] Realización de exámenes interactivos con audio y autocorrección inmediata.
-- [x] Entrega de tareas:
-  - [x] Envío y marcado de tareas como completadas.
-  - [x] Adjunto de enlaces a documentos en la nube (PDFs, Google Docs, grabaciones de audio/video, Drive).
-  - [x] Editor de texto para entrega de redacciones (*Writing* / respuestas abiertas) con contador de caracteres.
-  - [x] Tareas estructuradas visibles debajo de las clases, con secuencia de pasos, apertura de recursos y barra de progreso individual.
+- [x] Componente unificado `TaskCard` en Mis Clases y en Aula Virtual con barra de porcentaje y badges de entrega.
+- [x] Realización de exámenes interactivos con audio y autocorrección sin cierre prematuro del pop-up de resultados.
+- [x] Entrega de tareas multiformato (marcar realizada, texto abierto o archivos adjuntos).
 
 ### 2.3 Calificaciones y Progreso
-- [x] Panel de calificaciones con notas numéricas sobre 10.
-- [x] Modal interactivo de revisión de exámenes corregidos (respuestas del alumno vs respuestas correctas).
-- [x] Acceso directo al documento o material evaluado.
-- [x] Exámenes incluidos en tareas estructuradas con intento único, corrección y acceso a la revisión guardada.
+- [x] Pestaña «Mis Calificaciones» integrada en el aula virtual del alumno (`StudentCourseView.tsx`).
+- [x] Panel global de calificaciones con notas numéricas sobre 10 y desglose CEFR.
+- [x] Modal interactivo de revisión pedagógica de exámenes con diseño Glassmorphism y desenfoque de fondo.
+- [x] Pestaña «Compañeros» para consultar la lista de clase.
 
-### 2.4 Comunicación
-- [x] Chat privado directo con el profesor asignado.
-- [x] Visualización en tiempo real de los posts del tablón de anuncios.
-- [ ] Notificaciones de nuevos avisos y correcciones recibidas.
+### 2.4 Ajustes y Perfil
+- [x] Modal de ajustes de cuenta disponible tanto para alumnos (`STUDENT`) como para tutores (`PARENT`).
+- [x] Cambio de contraseña y visualización de cuota mensual real asignada.
 
 ---
 
@@ -127,9 +211,7 @@ Documento maestro de especificación de requisitos funcionales y seguimiento de 
 - [x] Rol de usuario `PARENT` en base de datos (`Role.PARENT`).
 - [x] Modelo relacional Padre ↔ Hijos (`1 Padre : N Alumnos` / Hermanos).
 - [x] Alta rápida de alumnos vinculados a padre existente o creación simultánea de Padre + Hijo.
-- [x] Portal del Padre / Tutor (`/student` / Panel Adaptado):
-  - [x] **Selector de Hijos:** Conmutador en Sidebar para alternar entre sus hijos (Laura, Marta, etc.).
-  - [x] **Progreso y Calificaciones:** Expediente de cada hijo con tareas entregadas, pendientes, notas, evaluación final por competencias (Grammar, Reading, Writing, Listening, Speaking) y feedback del profesor.
-  - [x] **Aulas Virtuales:** Visualización en modo solo lectura de las clases y avisos del tablón de sus hijos.
-  - [x] **Centro de Pagos Familiar:** Gestión de cuotas de los hijos con descarga de facturas en PDF.
-- [x] Canal de comunicación / Chat exclusivo Profesor ↔ Padre (hilos de conversación independientes por hijo).
+- [x] Selector de Hijos en el Sidebar para alternar instantáneamente entre hermanos.
+- [x] Supervisión en modo solo lectura de notas, clases, tareas y recibos del hijo seleccionado.
+- [x] Descarga de facturas y extractos anuales de cada hijo.
+- [x] Canal de chat exclusivo con los profesores de sus hijos con conversaciones aisladas por cada hijo.
