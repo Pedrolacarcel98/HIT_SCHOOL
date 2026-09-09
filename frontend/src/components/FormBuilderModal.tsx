@@ -1,6 +1,17 @@
-import React, { useState } from 'react';
-import { X, Plus, Trash2, Eye, Save, Music, HelpCircle, Image } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { X, Plus, Trash2, Eye, Save, Music, HelpCircle, Image, Search } from 'lucide-react';
 import FormPlayer from './FormPlayer';
+import AudioPlayer from './AudioPlayer';
+
+interface MediaResource {
+  id: string;
+  title: string;
+  description?: string | null;
+  type: 'AUDIO' | 'IMAGE';
+  url?: string | null;
+  level?: string;
+}
 
 interface Question {
   id: string;
@@ -57,6 +68,41 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
   const [previewMode, setPreviewMode] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [mediaResources, setMediaResources] = useState<MediaResource[]>([]);
+  const [mediaPicker, setMediaPicker] = useState<{ questionIndex: number; type: MediaResource['type'] } | null>(null);
+  const [mediaSearch, setMediaSearch] = useState('');
+
+  useEffect(() => {
+    const loadMediaResources = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+        const response = await fetch(`${apiUrl}/api/materials`, { headers: { Authorization: `Bearer ${token}` } });
+        if (response.ok) setMediaResources(await response.json());
+      } catch (loadError) {
+        console.error('Error al cargar los recursos multimedia:', loadError);
+      }
+    };
+
+    loadMediaResources();
+  }, []);
+
+  const pickerResources = useMemo(() => {
+    if (!mediaPicker) return [];
+    const query = mediaSearch.trim().toLowerCase();
+    return mediaResources.filter((resource) => resource.type === mediaPicker.type && Boolean(resource.url) && (!query || `${resource.title} ${resource.description || ''}`.toLowerCase().includes(query)));
+  }, [mediaPicker, mediaResources, mediaSearch]);
+
+  const openMediaPicker = (questionIndex: number, type: MediaResource['type']) => {
+    setMediaPicker({ questionIndex, type });
+    setMediaSearch('');
+  };
+
+  const selectMediaResource = (resource: MediaResource) => {
+    if (!mediaPicker || !resource.url) return;
+    updateQuestion(mediaPicker.questionIndex, mediaPicker.type === 'AUDIO' ? { audioUrl: resource.url } : { imageUrl: resource.url });
+    setMediaPicker(null);
+  };
 
   const addQuestion = () => {
     const newQ: Question = {
@@ -167,6 +213,7 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
   };
 
   return (
+    <>
     <div className="modal-backdrop" style={{
       position: 'fixed',
       inset: 0,
@@ -342,37 +389,47 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
                         />
                       </div>
 
-                      {/* Audio URL Input */}
                       <div>
                         <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                          <Music size={15} style={{ color: 'var(--primary)' }} /> URL de Audio para esta pregunta (Opcional para Listening)
+                          <Music size={15} style={{ color: 'var(--primary)' }} /> Audio de Material de Clase (Opcional para Listening)
                         </label>
-                        <input
-                          type="url"
-                          value={q.audioUrl || ''}
-                          onChange={(e) => updateQuestion(qIndex, { audioUrl: e.target.value })}
-                          placeholder="https://ejemplo.com/audio-track-1.mp3"
-                          style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)', fontSize: '0.85rem' }}
-                        />
+                        <button type="button" onClick={() => openMediaPicker(qIndex, 'AUDIO')} className="btn-secondary" style={{ marginTop: '0.6rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem' }}>
+                          <Music size={15} /> {q.audioUrl?.trim() ? 'Cambiar audio seleccionado' : 'Seleccionar audio de Material de Clase'}
+                        </button>
+                        {q.audioUrl?.trim() && (
+                          <div style={{ marginTop: '0.75rem', padding: '0.85rem', border: '1px solid var(--primary-border)', borderRadius: '8px', background: 'var(--primary-subtle)' }}>
+                            <span style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.78rem', color: 'var(--primary-text)', fontWeight: 700 }}>
+                              VISTA PREVIA DEL AUDIO
+                            </span>
+                            <AudioPlayer src={q.audioUrl.trim()} title={`Audio de la pregunta ${qIndex + 1}`} />
+                            <button type="button" onClick={() => updateQuestion(qIndex, { audioUrl: '' })} style={{ marginTop: '0.65rem', border: 'none', background: 'transparent', color: '#9e2a2b', cursor: 'pointer', fontSize: '0.8rem', padding: 0 }}>
+                              Quitar audio
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       <div>
                         <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                          <Image size={15} style={{ color: 'var(--primary)' }} /> 🖼️ URL de Imagen / Adjunto para esta pregunta (Opcional)
+                          <Image size={15} style={{ color: 'var(--primary)' }} /> Imagen de Material de Clase (Opcional)
                         </label>
-                        <input
-                          type="url"
-                          value={q.imageUrl || ''}
-                          onChange={(e) => updateQuestion(qIndex, { imageUrl: e.target.value })}
-                          placeholder="https://ejemplo.com/imagen.jpg"
-                          style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)', fontSize: '0.85rem' }}
-                        />
+                        <button type="button" onClick={() => openMediaPicker(qIndex, 'IMAGE')} className="btn-secondary" style={{ marginTop: '0.6rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem' }}>
+                          <Image size={15} /> {q.imageUrl?.trim() ? 'Cambiar imagen seleccionada' : 'Seleccionar imagen de Material de Clase'}
+                        </button>
                         {q.imageUrl && (
-                          <img
-                            src={q.imageUrl}
-                            alt={`Vista previa de la pregunta ${qIndex + 1}`}
-                            style={{ display: 'block', width: '120px', height: '80px', marginTop: '0.65rem', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border)' }}
-                          />
+                          <div style={{ marginTop: '0.75rem', padding: '0.85rem', border: '1px solid var(--primary-border)', borderRadius: '8px', background: 'var(--primary-subtle)' }}>
+                            <span style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.78rem', color: 'var(--primary-text)', fontWeight: 700 }}>
+                              VISTA PREVIA DE LA IMAGEN
+                            </span>
+                            <img
+                              src={q.imageUrl}
+                              alt={`Vista previa de la pregunta ${qIndex + 1}`}
+                              style={{ display: 'block', width: '100%', maxWidth: '460px', maxHeight: '260px', objectFit: 'contain', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)' }}
+                            />
+                            <button type="button" onClick={() => updateQuestion(qIndex, { imageUrl: '' })} style={{ marginTop: '0.65rem', border: 'none', background: 'transparent', color: '#9e2a2b', cursor: 'pointer', fontSize: '0.8rem', padding: 0 }}>
+                              Quitar imagen
+                            </button>
+                          </div>
                         )}
                       </div>
 
@@ -609,6 +666,46 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
         </div>
       </div>
     </div>
+    {mediaPicker && createPortal(
+      <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'grid', placeItems: 'center', padding: '1rem', background: 'rgba(34, 49, 43, 0.48)' }} onClick={() => setMediaPicker(null)}>
+        <div className="glass-panel" style={{ width: 'min(100%, 980px)', maxHeight: '86vh', overflow: 'hidden', padding: 0, display: 'flex', flexDirection: 'column' }} onClick={(event) => event.stopPropagation()}>
+          <header style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)' }}>
+            <div>
+              <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                {mediaPicker.type === 'AUDIO' ? <Music size={19} style={{ color: 'var(--primary)' }} /> : <Image size={19} style={{ color: 'var(--primary)' }} />}
+                Seleccionar {mediaPicker.type === 'AUDIO' ? 'audio' : 'imagen'}
+              </h3>
+              <p style={{ margin: '0.3rem 0 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Materiales disponibles en tu biblioteca de clase.</p>
+            </div>
+            <button type="button" onClick={() => setMediaPicker(null)} aria-label="Cerrar biblioteca" title="Cerrar" style={{ width: '34px', height: '34px', flexShrink: 0, border: 'none', background: 'transparent', color: 'var(--text-muted)', display: 'inline-grid', placeItems: 'center', cursor: 'pointer' }}><X size={20} /></button>
+          </header>
+          <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
+            <div style={{ position: 'relative' }}>
+              <Search size={17} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input value={mediaSearch} onChange={(event) => setMediaSearch(event.target.value)} placeholder={`Buscar ${mediaPicker.type === 'AUDIO' ? 'audio' : 'imagen'} por título o descripción...`} style={{ width: '100%', padding: '0.7rem 0.75rem 0.7rem 2.25rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', outline: 'none' }} />
+            </div>
+          </div>
+          <div style={{ padding: '1.25rem 1.5rem', overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+            {pickerResources.map((resource) => (
+              <article key={resource.id} style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '1rem', background: 'var(--surface)', display: 'flex', flexDirection: 'column', gap: '0.75rem', minWidth: 0 }}>
+                {resource.type === 'AUDIO' ? (
+                  <AudioPlayer src={resource.url!} title={resource.title} />
+                ) : (
+                  <img src={resource.url!} alt={resource.title} style={{ width: '100%', height: '150px', borderRadius: '6px', objectFit: 'contain', border: '1px solid var(--border)', background: 'var(--surface-alt)' }} />
+                )}
+                <div>
+                  <strong style={{ display: 'block', color: 'var(--text-main)', fontSize: '0.9rem' }}>{resource.title}</strong>
+                  {resource.description && <span style={{ display: 'block', marginTop: '0.25rem', color: 'var(--text-muted)', fontSize: '0.78rem' }}>{resource.description}</span>}
+                </div>
+                <button type="button" onClick={() => selectMediaResource(resource)} className="btn-primary" style={{ width: '100%', padding: '0.55rem', marginTop: 'auto', fontSize: '0.82rem' }}>Seleccionar</button>
+              </article>
+            ))}
+            {pickerResources.length === 0 && <p style={{ gridColumn: '1 / -1', margin: 0, padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>No hay {mediaPicker.type === 'AUDIO' ? 'audios' : 'imágenes'} disponibles con esa búsqueda.</p>}
+          </div>
+        </div>
+      </div>, document.body
+    )}
+    </>
   );
 };
 

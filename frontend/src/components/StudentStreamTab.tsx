@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { MessageSquare, ShieldCheck } from 'lucide-react';
+import { Download, MessageSquare, ShieldCheck } from 'lucide-react';
 import { useParent } from '../context/ParentContext';
 
 type Post = {
   id: string;
   content: string;
+  mediaUrl?: string | null;
+  mediaType?: string | null;
+  mediaName?: string | null;
   createdAt: string;
 };
 
@@ -89,9 +92,32 @@ const StudentStreamTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                 </p>
               </div>
             </div>
-            <p style={{ margin: 0, color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
-              {post.content}
-            </p>
+            {post.content && <p style={{ margin: post.mediaUrl ? '0 0 1rem' : 0, color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>{post.content}</p>}
+            {post.mediaUrl && (() => {
+              const mediaUrl = post.mediaUrl.startsWith('http') ? post.mediaUrl : `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${post.mediaUrl}`;
+              const isVideo = post.mediaType?.startsWith('video/');
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.75rem' }}>
+                  {isVideo ? (
+                    <video controls preload="metadata" style={{ display: 'block', width: '100%', maxWidth: '720px', maxHeight: '480px', borderRadius: '8px', background: '#111' }}>
+                      <source src={mediaUrl} type={post.mediaType || undefined} />
+                      Tu navegador no puede reproducir este vídeo.
+                    </video>
+                  ) : (
+                    <img src={mediaUrl} alt={post.mediaName || 'Imagen compartida en el tablón'} style={{ display: 'block', width: '100%', maxWidth: '720px', maxHeight: '560px', objectFit: 'contain', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)' }} />
+                  )}
+                  <a
+                    href={mediaUrl}
+                    download={post.mediaName || undefined}
+                    title={`Descargar ${isVideo ? 'vídeo' : 'imagen'}`}
+                    aria-label={`Descargar ${isVideo ? 'vídeo' : 'imagen'}`}
+                    style={{ width: '34px', height: '34px', display: 'inline-grid', placeItems: 'center', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-main)', background: 'var(--surface)', textDecoration: 'none' }}
+                  >
+                    <Download size={16} />
+                  </a>
+                </div>
+              );
+            })()}
           </div>
         ))}
 

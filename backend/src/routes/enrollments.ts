@@ -8,11 +8,13 @@ const prisma = new PrismaClient();
 
 // POST /api/enrollments/enroll
 router.post('/enroll', authenticateToken, requireTeacher, async (req, res) => {
-  const { studentId, monthlyFee, startDate } = req.body;
+  const { studentId, monthlyFee, billingPeriod, startDate } = req.body;
+  const normalizedBillingPeriod = billingPeriod || 'MONTHLY';
 
-  if (!monthlyFee || !startDate) {
-    return res.status(400).json({ error: 'Tarifa mensual y fecha de alta son obligatorias.' });
+  if (!monthlyFee || Number(monthlyFee) <= 0 || !startDate) {
+    return res.status(400).json({ error: 'El importe y la fecha de alta son obligatorios.' });
   }
+  if (normalizedBillingPeriod !== 'MONTHLY' && normalizedBillingPeriod !== 'QUARTERLY') return res.status(400).json({ error: 'La periodicidad de pago no es válida.' });
 
   try {
     const student = await prisma.user.findUnique({ where: { id: studentId, role: 'STUDENT' } });
@@ -28,7 +30,8 @@ router.post('/enroll', authenticateToken, requireTeacher, async (req, res) => {
       data: {
         studentId,
         startDate: new Date(startDate),
-        monthlyFee: Number(monthlyFee)
+        monthlyFee: Number(monthlyFee),
+        billingPeriod: normalizedBillingPeriod
       }
     });
 

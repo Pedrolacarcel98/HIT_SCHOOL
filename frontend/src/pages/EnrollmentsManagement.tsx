@@ -24,6 +24,7 @@ interface Student {
   academyEnrollments?: {
     id: string;
     monthlyFee: number;
+    billingPeriod?: 'MONTHLY' | 'QUARTERLY';
     startDate: string;
     endDate: string | null;
     paymentStatuses?: { month: number; year: number; amount: number; isPaid: boolean }[];
@@ -41,6 +42,7 @@ const EnrollmentsManagement: React.FC = () => {
   const [showAltaModal, setShowAltaModal] = useState(false);
   const [selectedStudentForAlta, setSelectedStudentForAlta] = useState<Student | null>(null);
   const [newMonthlyFee, setNewMonthlyFee] = useState('35');
+  const [newBillingPeriod, setNewBillingPeriod] = useState<'MONTHLY' | 'QUARTERLY'>('MONTHLY');
   const [newStartDate, setNewStartDate] = useState(() => new Date().toISOString().split('T')[0]);
 
   const [notification, setNotification] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
@@ -88,6 +90,7 @@ const EnrollmentsManagement: React.FC = () => {
         body: JSON.stringify({
           studentId: selectedStudentForAlta.id,
           monthlyFee: Number(newMonthlyFee),
+          billingPeriod: newBillingPeriod,
           startDate: newStartDate
         })
       });
@@ -217,14 +220,15 @@ const EnrollmentsManagement: React.FC = () => {
         </div>
       </div>
 
-      <div style={{ marginBottom: '1.5rem', maxWidth: '300px' }}>
-        <div className="search-input" style={{ background: 'var(--surface-alt)' }}>
-          <Search size={18} />
+      <div style={{ marginBottom: '1.5rem', maxWidth: '440px', width: '100%' }}>
+        <div style={{ position: 'relative' }}>
+          <Search size={18} style={{ position: 'absolute', left: '0.9rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
           <input
-            type="text"
-            placeholder="Buscar por nombre..."
+            type="search"
+            placeholder="Buscar alumno por nombre..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            style={{ width: '100%', padding: '0.8rem 1rem 0.8rem 2.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)', fontSize: '0.92rem', outline: 'none', boxShadow: 'var(--shadow-sm)' }}
           />
         </div>
       </div>
@@ -278,7 +282,7 @@ const EnrollmentsManagement: React.FC = () => {
                       <td style={{ padding: '1rem 1.25rem', color: 'var(--text-main)' }}>
                         {activeEnrollment ? (
                           <span style={{ fontSize: '0.88rem' }}>
-                            Desde {new Date(activeEnrollment.startDate).toLocaleDateString()} - {activeEnrollment.monthlyFee}€/mes
+                            Desde {new Date(activeEnrollment.startDate).toLocaleDateString()} - {activeEnrollment.monthlyFee}€ / {activeEnrollment.billingPeriod === 'QUARTERLY' ? 'trimestre' : 'mes'}
                           </span>
                         ) : (
                           <span style={{ color: 'var(--text-light)', fontStyle: 'italic', fontSize: '0.82rem' }}>Sin matrícula activa</span>
@@ -385,17 +389,18 @@ const EnrollmentsManagement: React.FC = () => {
             </p>
 
             <form onSubmit={handleAlta} style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Tarifa mensual</label>
-                <select
-                  required
-                  value={newMonthlyFee}
-                  onChange={(e) => setNewMonthlyFee(e.target.value)}
-                  style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
-                >
-                  <option value="35">35 € / mes</option>
-                  <option value="65">65 € / mes</option>
-                </select>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 130px', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Periodicidad</label>
+                  <select value={newBillingPeriod} onChange={(e) => setNewBillingPeriod(e.target.value as 'MONTHLY' | 'QUARTERLY')} style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}>
+                    <option value="MONTHLY">Mensual</option>
+                    <option value="QUARTERLY">Trimestral</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Importe (€)</label>
+                  <input type="number" min="1" step="0.01" required value={newMonthlyFee} onChange={(e) => setNewMonthlyFee(e.target.value)} style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }} />
+                </div>
               </div>
 
               <div>

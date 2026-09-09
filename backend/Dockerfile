@@ -10,7 +10,7 @@ RUN npm install
 COPY . .
 
 # Generar Prisma Client
-RUN npx prisma generate
+RUN NODE_TLS_REJECT_UNAUTHORIZED=0 npx prisma generate
 
 EXPOSE 3000
 

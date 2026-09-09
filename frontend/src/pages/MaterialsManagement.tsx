@@ -11,13 +11,14 @@ import {
   HelpCircle,
   Play,
   Edit2,
+  Copy,
   Trash2,
   X,
   Send,
   ListChecks,
+  CheckSquare,
   ClipboardCheck,
-  Copy,
-  BookmarkPlus
+  Pencil
 } from 'lucide-react';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -26,7 +27,6 @@ import VideoPlayer from '../components/VideoPlayer';
 import DocumentViewer from '../components/DocumentViewer';
 import FormPlayer from '../components/FormPlayer';
 import FormBuilderModal from '../components/FormBuilderModal';
-import TaskCard, { type TaskItem } from '../components/TaskCard';
 
 interface Material {
   id: string;
@@ -48,25 +48,15 @@ interface Course {
 interface StructuredTask {
   id: string;
   title: string;
-  description?: string;
-  dueDate?: string;
-  term?: number;
-  isTemplate: boolean;
-  category?: string;
   courseId: string | null;
-  course?: { id: string; title: string };
   assignmentType: 'CLASS' | 'INDIVIDUAL';
   assignedStudentId: string | null;
   assignedStudentName: string | null;
   assignedStudentIds?: string[];
   assignedStudentNames?: string[];
   isSequential: boolean;
+  publishAt?: string | null;
   steps: StructuredTaskStep[];
-  stats?: {
-    totalTargetStudents: number;
-    completedStudentsCount: number;
-    completionRate: number;
-  };
 }
 
 interface StructuredTaskStep {
@@ -74,7 +64,6 @@ interface StructuredTaskStep {
   order: number;
   title: string;
   materialId: string | null;
-  requiresSubmission?: boolean;
 }
 
 interface Student {
@@ -101,25 +90,14 @@ const MaterialsManagement: React.FC = () => {
 
   const [courses, setCourses] = useState<Course[]>([]);
   const [structuredTasks, setStructuredTasks] = useState<StructuredTask[]>([]);
-  const [templateTasks, setTemplateTasks] = useState<StructuredTask[]>([]);
   const [editingStructuredTask, setEditingStructuredTask] = useState<StructuredTask | null>(null);
   const [isStructuredTaskModalOpen, setIsStructuredTaskModalOpen] = useState(false);
   const [structuredTaskTitle, setStructuredTaskTitle] = useState('');
-  const [structuredTaskDescription, setStructuredTaskDescription] = useState('');
-  const [structuredTaskDueDate, setStructuredTaskDueDate] = useState('');
-  const [structuredTaskCategory, setStructuredTaskCategory] = useState('GRAMMAR_VOCABULARY');
-  const [structuredTaskIsTemplate, setStructuredTaskIsTemplate] = useState(false);
   const [structuredTaskSteps, setStructuredTaskSteps] = useState<StructuredTaskStep[]>([]);
-  const getCurrentTerm = () => {
-    const month = new Date().getMonth() + 1;
-    if (month >= 9 && month <= 12) return 1;
-    if (month >= 1 && month <= 3) return 2;
-    return 3;
-  };
-  const [structuredTaskTerm, setStructuredTaskTerm] = useState<number>(getCurrentTerm());
   const [structuredTaskCourseId, setStructuredTaskCourseId] = useState('');
   const [structuredTaskAssignmentType, setStructuredTaskAssignmentType] = useState<'CLASS' | 'INDIVIDUAL'>('CLASS');
   const [structuredTaskIsSequential, setStructuredTaskIsSequential] = useState(false);
+  const [structuredTaskPublishAt, setStructuredTaskPublishAt] = useState('');
   const [assignedStudentIds, setAssignedStudentIds] = useState<string[]>([]);
   const [allStudents, setAllStudents] = useState<EnrolledStudent[]>([]);
   const [studentSearch, setStudentSearch] = useState('');
@@ -133,6 +111,7 @@ const MaterialsManagement: React.FC = () => {
   const [showAddResourceModal, setShowAddResourceModal] = useState(false);
   const [showFormBuilder, setShowFormBuilder] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
+  const [editingStandardMaterial, setEditingStandardMaterial] = useState<Material | null>(null);
   const [viewingMaterial, setViewingMaterial] = useState<Material | null>(null);
   const [deletingMaterial, setDeletingMaterial] = useState<Material | null>(null);
   const [assigningMaterial, setAssigningMaterial] = useState<Material | null>(null);
@@ -140,6 +119,7 @@ const MaterialsManagement: React.FC = () => {
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [currentAccessIds, setCurrentAccessIds] = useState<string[]>([]);
   const [assignmentDeadline, setAssignmentDeadline] = useState('');
+  const [assignmentPublishAt, setAssignmentPublishAt] = useState('');
   const [assignmentLoading, setAssignmentLoading] = useState(false);
 
   // Formulario nuevo recurso estándar
@@ -201,12 +181,8 @@ const MaterialsManagement: React.FC = () => {
     try {
       const token = localStorage.getItem('token');
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-      const [resTasks, resTemplates] = await Promise.all([
-        fetch(`${apiUrl}/api/structured-tasks/teacher`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${apiUrl}/api/structured-tasks/templates`, { headers: { Authorization: `Bearer ${token}` } })
-      ]);
-      if (resTasks.ok) setStructuredTasks(await resTasks.json());
-      if (resTemplates.ok) setTemplateTasks(await resTemplates.json());
+      const res = await fetch(`${apiUrl}/api/structured-tasks/teacher`, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) setStructuredTasks(await res.json());
     } catch (err) {
       console.error('Error fetching structured tasks', err);
     }
@@ -236,12 +212,28 @@ const MaterialsManagement: React.FC = () => {
 
   const handleCreateResource = async (e: React.FormEvent) => {
     e.preventDefault();
+    const normalizedUrl = (() => {
+      const driveFileId = resUrl.match(/drive\.google\.com\/file\/d\/([^/?]+)/)?.[1]
+        || resUrl.match(/[?&]id=([^&/?]+)/)?.[1]
+        || resUrl.match(/lh3\.googleusercontent\.com\/d\/([^=/?]+)/)?.[1];
+      return driveFileId && resType === 'IMAGE'
+        ? `https://lh3.googleusercontent.com/d/${driveFileId}=w1600`
+        : driveFileId
+          ? `https://drive.google.com/uc?export=view&id=${driveFileId}`
+          : resUrl.trim();
+    })();
+
+    if (resType === 'IMAGE' && /drive\.google\.com\/drive\/.*\/folders\//.test(resUrl)) {
+      window.alert('El enlace corresponde a una carpeta de Google Drive. Abre la imagen, copia su enlace individual y compártela para que cualquiera con el enlace pueda verla.');
+      return;
+    }
+
     try {
       const token = localStorage.getItem('token');
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
-      const res = await fetch(`${apiUrl}/api/materials`, {
-        method: 'POST',
+      const res = await fetch(`${apiUrl}/api/materials${editingStandardMaterial ? `/${editingStandardMaterial.id}` : ''}`, {
+        method: editingStandardMaterial ? 'PUT' : 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
@@ -252,12 +244,13 @@ const MaterialsManagement: React.FC = () => {
           type: resType,
           level: resLevel,
           category: resCategory,
-          url: resUrl
+          url: normalizedUrl
         })
       });
 
       if (res.ok) {
         setShowAddResourceModal(false);
+        setEditingStandardMaterial(null);
         setResTitle('');
         setResDesc('');
         setResUrl('');
@@ -268,7 +261,38 @@ const MaterialsManagement: React.FC = () => {
     }
   };
 
+  const openStandardMaterialEditor = (material: Material) => {
+    setEditingStandardMaterial(material);
+    setResTitle(material.title);
+    setResDesc(material.description || '');
+    setResType(material.type as 'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'AUDIO');
+    setResLevel(material.level);
+    setResCategory(material.category);
+    setResUrl(material.url || '');
+    setShowAddResourceModal(true);
+  };
+
+  const duplicateMaterial = async (material: Material) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${apiUrl}/api/materials/${material.id}/duplicate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!response.ok) throw new Error('No se pudo duplicar el recurso.');
+      await fetchMaterials();
+    } catch (duplicateError) {
+      window.alert(duplicateError instanceof Error ? duplicateError.message : 'No se pudo duplicar el recurso.');
+    }
+  };
+
   const getMaterial = (materialId: string | null) => materials.find((material) => material.id === materialId);
+
+  const formatAssignedStudents = (task: StructuredTask) => {
+    const names = task.assignedStudentNames?.length ? task.assignedStudentNames : (task.assignedStudentName ? [task.assignedStudentName] : []);
+    if (names.length === 0) return 'Alumno';
+    return names.length > 2 ? `${names.slice(0, 2).join(', ')}...` : names.join(', ');
+  };
 
   const getMaterialIcon = (type: Material['type']) => {
     if (type === 'FORM') return <ClipboardCheck size={16} />;
@@ -287,25 +311,13 @@ const MaterialsManagement: React.FC = () => {
   const openStructuredTaskModal = (task?: StructuredTask) => {
     setEditingStructuredTask(task || null);
     setStructuredTaskTitle(task?.title || '');
-    setStructuredTaskDescription(task?.description || '');
-    setStructuredTaskDueDate(task?.dueDate ? task.dueDate.slice(0, 16) : '');
-    setStructuredTaskTerm(task?.term || getCurrentTerm());
-    setStructuredTaskCategory(task?.category || 'GRAMMAR_VOCABULARY');
-    setStructuredTaskIsTemplate(task?.isTemplate || false);
-    setStructuredTaskSteps(task?.steps.map((step, index) => {
-      const mat = getMaterial(step.materialId);
-      const isPassive = mat && (mat.type === 'VIDEO' || mat.type === 'AUDIO' || mat.type === 'IMAGE');
-      return {
-        ...step,
-        order: index + 1,
-        requiresSubmission: !isPassive && Boolean(step.requiresSubmission)
-      };
-    }) || [{ id: `step-${Date.now()}`, order: 1, title: '', materialId: null, requiresSubmission: false }]);
+    setStructuredTaskSteps(task?.steps.map((step, index) => ({ ...step, order: index + 1 })) || [{ id: `step-${Date.now()}`, order: 1, title: '', materialId: null }]);
     const assignmentType = task?.assignmentType || 'CLASS';
     const courseId = task?.courseId || (assignmentType === 'CLASS' ? courses[0]?.id || '' : '');
     setStructuredTaskCourseId(courseId);
     setStructuredTaskAssignmentType(assignmentType);
     setStructuredTaskIsSequential(task?.isSequential || false);
+    setStructuredTaskPublishAt(task?.publishAt ? new Date(task.publishAt).toISOString().slice(0, 16) : '');
     setAssignedStudentIds(task?.assignedStudentIds?.length ? task.assignedStudentIds : (task?.assignedStudentId ? [task.assignedStudentId] : []));
     setStudentSearch('');
     setIsStudentPickerOpen(false);
@@ -317,7 +329,7 @@ const MaterialsManagement: React.FC = () => {
   };
 
   const addStructuredTaskStep = () => {
-    setStructuredTaskSteps((steps) => [...steps, { id: `step-${Date.now()}`, order: steps.length + 1, title: '', materialId: null, requiresSubmission: false }]);
+    setStructuredTaskSteps((steps) => [...steps, { id: `step-${Date.now()}`, order: steps.length + 1, title: '', materialId: null }]);
   };
 
   const removeStructuredTaskStep = (index: number) => {
@@ -328,16 +340,7 @@ const MaterialsManagement: React.FC = () => {
     event.preventDefault();
     const title = structuredTaskTitle.trim();
     const steps = structuredTaskSteps
-      .map((step, index) => {
-        const mat = getMaterial(step.materialId);
-        const isPassive = mat && (mat.type === 'VIDEO' || mat.type === 'AUDIO' || mat.type === 'IMAGE');
-        return {
-          ...step,
-          title: step.title.trim(),
-          order: index + 1,
-          requiresSubmission: !isPassive && (mat?.type === 'FORM' || Boolean(step.requiresSubmission))
-        };
-      })
+      .map((step, index) => ({ ...step, title: step.title.trim(), order: index + 1 }))
       .filter((step) => step.title);
     if (!title || steps.length === 0) return;
     if (structuredTaskAssignmentType === 'CLASS' && !structuredTaskCourseId) return;
@@ -349,97 +352,13 @@ const MaterialsManagement: React.FC = () => {
       const res = await fetch(`${apiUrl}/api/structured-tasks${editingStructuredTask ? `/${editingStructuredTask.id}` : ''}`, {
         method: editingStructuredTask ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          title,
-          description: structuredTaskDescription.trim() || null,
-          dueDate: structuredTaskDueDate ? new Date(structuredTaskDueDate).toISOString() : null,
-          term: structuredTaskTerm,
-          category: structuredTaskCategory,
-          isTemplate: structuredTaskIsTemplate,
-          courseId: structuredTaskAssignmentType === 'CLASS' ? structuredTaskCourseId : null,
-          assignmentType: structuredTaskAssignmentType,
-          isSequential: structuredTaskIsSequential,
-          assignedStudentIds: structuredTaskAssignmentType === 'INDIVIDUAL' ? assignedStudentIds : [],
-          steps
-        })
+        body: JSON.stringify({ title, courseId: structuredTaskAssignmentType === 'CLASS' ? structuredTaskCourseId : null, assignmentType: structuredTaskAssignmentType, isSequential: structuredTaskIsSequential, publishAt: structuredTaskPublishAt ? new Date(structuredTaskPublishAt).toISOString() : null, assignedStudentIds: structuredTaskAssignmentType === 'INDIVIDUAL' ? assignedStudentIds : [], steps })
       });
       if (!res.ok) throw new Error('No se pudo guardar la tarea estructurada.');
       await fetchStructuredTasks();
       setIsStructuredTaskModalOpen(false);
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'No se pudo guardar la tarea estructurada.');
-    }
-  };
-
-  const handleDuplicateMaterial = async (m: Material) => {
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${apiUrl}/api/materials/${m.id}/duplicate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ title: `[Copia] ${m.title}` })
-      });
-      if (res.ok) {
-        fetchMaterials();
-      } else {
-        window.alert('No se pudo duplicar el recurso');
-      }
-    } catch (err) {
-      console.error('Error duplicating material', err);
-    }
-  };
-
-  const handleDuplicateStructuredTask = async (task: TaskItem) => {
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${apiUrl}/api/structured-tasks/${task.id}/duplicate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ title: `[Copia] ${task.title}` })
-      });
-      if (res.ok) {
-        await fetchStructuredTasks();
-      } else {
-        window.alert('No se pudo duplicar la tarea estructurada');
-      }
-    } catch (err) {
-      console.error('Error duplicating task', err);
-    }
-  };
-
-  const handleSaveAsTemplate = async (task: TaskItem) => {
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${apiUrl}/api/structured-tasks/${task.id}/save-as-template`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        window.alert('¡Tarea guardada en el catálogo de plantillas!');
-        await fetchStructuredTasks();
-      } else {
-        window.alert('No se pudo guardar como plantilla');
-      }
-    } catch (err) {
-      console.error('Error saving template', err);
-    }
-  };
-
-  const handleDeleteStructuredTask = async (task: TaskItem) => {
-    if (!window.confirm(`¿Estás seguro de eliminar la tarea estructurada "${task.title}"?`)) return;
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${apiUrl}/api/structured-tasks/${task.id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        await fetchStructuredTasks();
-      } else {
-        window.alert('No se pudo eliminar la tarea');
-      }
-    } catch (err) {
-      console.error('Error deleting task', err);
     }
   };
 
@@ -490,6 +409,7 @@ const MaterialsManagement: React.FC = () => {
     setCurrentAccessIds([]);
     setStudentSearch('');
     setAssignmentDeadline('');
+    setAssignmentPublishAt('');
     const token = localStorage.getItem('token');
     const res = await fetch(`${apiUrl}/api/materials/${material.id}/assignments`, { headers: { Authorization: `Bearer ${token}` } });
     if (res.ok) {
@@ -511,7 +431,7 @@ const MaterialsManagement: React.FC = () => {
       const res = await fetch(`${apiUrl}/api/materials/${assigningMaterial.id}/assignments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ studentIds: selectedStudentIds, deadline: assignmentDeadline || null })
+        body: JSON.stringify({ studentIds: selectedStudentIds, deadline: assignmentDeadline || null, publishAt: assignmentPublishAt ? new Date(assignmentPublishAt).toISOString() : null })
       });
       const data = await res.json();
       if (!res.ok) {
@@ -563,6 +483,14 @@ const MaterialsManagement: React.FC = () => {
     }
   };
 
+  const getImageDisplayUrl = (url?: string) => {
+    if (!url) return '';
+    const driveFileId = url.match(/drive\.google\.com\/file\/d\/([^/?]+)/)?.[1]
+      || url.match(/[?&]id=([^&/?]+)/)?.[1]
+      || url.match(/lh3\.googleusercontent\.com\/d\/([^=/?]+)/)?.[1];
+    return driveFileId ? `https://lh3.googleusercontent.com/d/${driveFileId}=w1600` : url;
+  };
+
   return (
     <div className="page-container">
       {/* Header */}
@@ -578,7 +506,7 @@ const MaterialsManagement: React.FC = () => {
 
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           <button
-            onClick={() => setShowAddResourceModal(true)}
+            onClick={() => { setEditingStandardMaterial(null); setResTitle(''); setResDesc(''); setResType('DOCUMENT'); setResLevel('B2'); setResCategory('GRAMMAR_VOCABULARY'); setResUrl(''); setShowAddResourceModal(true); }}
             className="btn-primary"
             style={{
               background: '#059669',
@@ -637,7 +565,7 @@ const MaterialsManagement: React.FC = () => {
               transition: 'background-color 0.2s ease'
             }}
           >
-            + Crear Tarea
+            + Crear Tarea Estructurada
           </button>
         </div>
       </div>
@@ -651,8 +579,7 @@ const MaterialsManagement: React.FC = () => {
           { id: 'VIDEO', label: 'Vídeos', icon: <Video size={16} /> },
           { id: 'AUDIO', label: 'Audios (Listenings)', icon: <Headphones size={16} /> },
           { id: 'FORM', label: 'Exámenes y Formularios', icon: <HelpCircle size={16} /> },
-          { id: 'STRUCTURED', label: 'Tareas', icon: <ListChecks size={16} /> },
-          { id: 'TEMPLATES', label: 'Catálogo de Plantillas', icon: <BookmarkPlus size={16} /> }
+          { id: 'STRUCTURED', label: 'Tareas Estructuradas', icon: <ListChecks size={16} /> }
         ].map(tab => (
           <button
             key={tab.id}
@@ -669,8 +596,7 @@ const MaterialsManagement: React.FC = () => {
               fontWeight: typeFilter === tab.id ? '600' : '500',
               cursor: 'pointer',
               whiteSpace: 'nowrap',
-              fontSize: '0.85rem',
-              flexShrink: 0
+              fontSize: '0.85rem'
             }}
           >
             {tab.icon} {tab.label}
@@ -739,7 +665,7 @@ const MaterialsManagement: React.FC = () => {
       </div>
 
       {/* Grid de Materiales */}
-      {typeFilter !== 'STRUCTURED' && typeFilter !== 'TEMPLATES' && (
+      {typeFilter !== 'STRUCTURED' && (
         loading ? (
           <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>
             Cargando biblioteca de materiales...
@@ -811,8 +737,9 @@ const MaterialsManagement: React.FC = () => {
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', justifyContent: 'center', flexShrink: 0 }}>
                     <button
-                      onClick={() => handleDuplicateMaterial(m)}
+                      onClick={() => duplicateMaterial(m)}
                       title="Duplicar recurso"
+                      aria-label="Duplicar recurso"
                       style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '6px', padding: '0.4rem', color: 'var(--text-muted)', cursor: 'pointer' }}
                     >
                       <Copy size={16} />
@@ -824,15 +751,14 @@ const MaterialsManagement: React.FC = () => {
                     >
                       <Trash2 size={16} />
                     </button>
-                    {m.type === 'FORM' && (
-                      <button
-                        onClick={() => { setEditingMaterial(m); setShowFormBuilder(true); }}
-                        title="Editar Formulario"
-                        style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '6px', padding: '0.4rem', color: 'var(--text-muted)', cursor: 'pointer' }}
-                      >
-                        <Edit2 size={16} />
-                      </button>
-                    )}
+                    <button
+                      onClick={() => m.type === 'FORM' ? (setEditingMaterial(m), setShowFormBuilder(true)) : openStandardMaterialEditor(m)}
+                      title={m.type === 'FORM' ? 'Editar formulario' : 'Editar recurso'}
+                      aria-label={m.type === 'FORM' ? 'Editar formulario' : 'Editar recurso'}
+                      style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '6px', padding: '0.4rem', color: 'var(--text-muted)', cursor: 'pointer' }}
+                    >
+                      <Edit2 size={16} />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -846,170 +772,67 @@ const MaterialsManagement: React.FC = () => {
           <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
             <div>
               <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.55rem', color: 'var(--text-main)', fontSize: '1.35rem' }}>
-                <ListChecks size={22} style={{ color: 'var(--primary)' }} /> Tareas
+                <ListChecks size={22} style={{ color: 'var(--primary)' }} /> Tareas Estructuradas
               </h2>
-              <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)', fontSize: '0.88rem' }}>
-                Organiza actividades didácticas con pasos numerados, fechas de entrega y materiales asociados.
-              </p>
+              <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)', fontSize: '0.88rem' }}>Organiza actividades guiadas con pasos numerados.</p>
             </div>
-            <button
-              onClick={() => openStructuredTaskModal()}
-              className="btn-primary"
-              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.55rem 1rem', fontSize: '0.85rem' }}
-            >
-              <Plus size={16} /> Nueva Tarea
-            </button>
           </header>
 
           {structuredTasks.length === 0 ? (
-            <div style={{ padding: '2.5rem 2rem', border: '1px dashed var(--primary-border)', borderRadius: '12px', background: 'var(--primary-subtle)', color: 'var(--text-muted)', textAlign: 'center' }}>
-              <ListChecks size={38} style={{ color: 'var(--primary)', opacity: 0.5, marginBottom: '0.5rem' }} />
-              <h3 style={{ margin: '0 0 0.5rem', color: 'var(--text-main)' }}>Aún no hay tareas creadas</h3>
-              <p style={{ margin: 0, fontSize: '0.9rem' }}>Crea tu primera tarea o asígnala desde el catálogo de plantillas.</p>
+            <div style={{ padding: '2rem', border: '1px dashed var(--primary-border)', borderRadius: '8px', background: 'var(--primary-subtle)', color: 'var(--text-muted)', textAlign: 'center' }}>
+              Aún no hay tareas estructuradas.
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', width: '100%' }}>
-              {structuredTasks.map((task) => {
-                const taskItem: TaskItem = {
-                  id: task.id,
-                  title: task.title,
-                  description: task.description,
-                  dueDate: task.dueDate,
-                  category: task.category,
-                  isSequential: task.isSequential,
-                  isTemplate: task.isTemplate,
-                  assignmentType: task.assignmentType,
-                  assignedStudentName: task.assignedStudentName,
-                  assignedStudentNames: task.assignedStudentNames,
-                  courseId: task.courseId,
-                  courseTitle: task.course?.title,
-                  stats: task.stats,
-                  steps: task.steps.map((step) => {
-                    const material = getMaterial(step.materialId);
-                    return {
-                      id: step.id,
-                      order: step.order,
-                      title: step.title,
-                      materialId: step.materialId,
-                      material: material ? {
-                        id: material.id,
-                        title: material.title,
-                        type: material.type,
-                        url: material.url,
-                        description: material.description,
-                        level: material.level,
-                        category: material.category,
-                        formData: material.formData
-                      } : null
-                    };
-                  })
-                };
-
-                return (
-                  <TaskCard
-                    key={task.id}
-                    task={taskItem}
-                    mode="TEACHER"
-                    onEditTask={() => openStructuredTaskModal(task)}
-                    onDuplicateTask={handleDuplicateStructuredTask}
-                    onSaveAsTemplate={handleSaveAsTemplate}
-                    onDeleteTask={handleDeleteStructuredTask}
-                    onOpenStep={(step) => {
-                      const material = getMaterial(step.materialId || null);
-                      if (material) handleOpenMaterial(material);
-                    }}
-                  />
-                );
-              })}
-            </div>
-          )}
-        </section>
-      )}
-
-      {typeFilter === 'TEMPLATES' && (
-        <section style={{ marginTop: '0.5rem' }}>
-          <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-            <div>
-              <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.55rem', color: 'var(--text-main)', fontSize: '1.35rem' }}>
-                <BookmarkPlus size={22} style={{ color: 'var(--primary)' }} /> Catálogo de Plantillas Didácticas
-              </h2>
-              <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)', fontSize: '0.88rem' }}>
-                Plantillas reutilizables preparadas para duplicar o asignar a cualquier clase en 1 clic.
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                openStructuredTaskModal();
-                setStructuredTaskIsTemplate(true);
-              }}
-              className="btn-primary"
-              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.55rem 1rem', fontSize: '0.85rem' }}
-            >
-              <Plus size={16} /> Crear Plantilla
-            </button>
-          </header>
-
-          {templateTasks.length === 0 ? (
-            <div style={{ padding: '3rem 2rem', border: '1px dashed var(--primary-border)', borderRadius: '12px', background: 'var(--primary-subtle)', color: 'var(--text-muted)', textAlign: 'center' }}>
-              <BookmarkPlus size={44} style={{ color: 'var(--primary)', opacity: 0.5, marginBottom: '0.75rem' }} />
-              <h3 style={{ margin: '0 0 0.5rem', color: 'var(--text-main)' }}>No hay plantillas en el catálogo todavía</h3>
-              <p style={{ margin: 0, fontSize: '0.9rem' }}>
-                Puedes guardar cualquier tarea estructurada existente pulsando el botón de guardar como plantilla, o crear una directamente.
-              </p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', width: '100%' }}>
-              {templateTasks.map((task) => {
-                const taskItem: TaskItem = {
-                  id: task.id,
-                  title: task.title,
-                  description: task.description,
-                  dueDate: task.dueDate,
-                  category: task.category,
-                  isSequential: task.isSequential,
-                  isTemplate: true,
-                  assignmentType: task.assignmentType,
-                  assignedStudentName: task.assignedStudentName,
-                  assignedStudentNames: task.assignedStudentNames,
-                  courseId: task.courseId,
-                  courseTitle: task.course?.title,
-                  steps: task.steps.map((step) => {
-                    const material = getMaterial(step.materialId);
-                    return {
-                      id: step.id,
-                      order: step.order,
-                      title: step.title,
-                      materialId: step.materialId,
-                      material: material ? {
-                        id: material.id,
-                        title: material.title,
-                        type: material.type,
-                        url: material.url,
-                        description: material.description,
-                        level: material.level,
-                        category: material.category,
-                        formData: material.formData
-                      } : null
-                    };
-                  })
-                };
-
-                return (
-                  <TaskCard
-                    key={task.id}
-                    task={taskItem}
-                    mode="TEACHER"
-                    onEditTask={() => openStructuredTaskModal(task)}
-                    onDuplicateTask={handleDuplicateStructuredTask}
-                    onSaveAsTemplate={handleSaveAsTemplate}
-                    onDeleteTask={handleDeleteStructuredTask}
-                    onOpenStep={(step) => {
-                      const material = getMaterial(step.materialId || null);
-                      if (material) handleOpenMaterial(material);
-                    }}
-                  />
-                );
-              })}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
+              {structuredTasks.map((task) => (
+                <article key={task.id} style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--primary-border)', borderRadius: '8px', boxShadow: 'var(--shadow-sm)', padding: '1.25rem' }}>
+                  <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', minWidth: 0 }}>
+                      <CheckSquare size={21} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                      <div style={{ minWidth: 0 }}>
+                        <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.05rem' }}>{task.title}</h3>
+                        <div style={{ display: 'flex', gap: '0.45rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
+                          <span style={{ display: 'inline-flex', padding: '0.18rem 0.5rem', borderRadius: '12px', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.72rem', fontWeight: 700 }}>Pasos Numerados</span>
+                          {task.isSequential && <span style={{ display: 'inline-flex', padding: '0.18rem 0.5rem', borderRadius: '12px', background: '#fef3c7', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}>Paso a paso</span>}
+                          {task.publishAt && new Date(task.publishAt) > new Date() && <span style={{ display: 'inline-flex', padding: '0.18rem 0.5rem', borderRadius: '12px', background: '#eef2ff', color: '#3730a3', fontSize: '0.72rem', fontWeight: 700 }}>Programada: {new Date(task.publishAt).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}</span>}
+                          <span title={task.assignedStudentNames?.join(', ')} style={{ display: 'inline-flex', padding: '0.18rem 0.5rem', borderRadius: '12px', background: task.assignmentType === 'INDIVIDUAL' ? '#eef2ff' : '#ecfdf5', color: task.assignmentType === 'INDIVIDUAL' ? '#3730a3' : '#047857', fontSize: '0.72rem', fontWeight: 700 }}>
+                            {task.assignmentType === 'INDIVIDUAL' ? `Asignado a: ${formatAssignedStudents(task)}` : 'Toda la clase'}
+                          </span>
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{task.steps.length} {task.steps.length === 1 ? 'paso' : 'pasos'}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <button type="button" onClick={() => openStructuredTaskModal(task)} className="btn-secondary" style={{ padding: '0.4rem 0.7rem', fontSize: '0.8rem' }}>
+                      <Pencil size={14} /> Modificar
+                    </button>
+                  </header>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                    {task.steps.map((step) => {
+                      const material = getMaterial(step.materialId);
+                      return (
+                        <div key={step.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', padding: '0.75rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', boxShadow: 'var(--shadow-sm)', flexWrap: 'wrap', transition: 'border-color 0.2s ease' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: '1 1 240px' }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, width: '28px', height: '28px', borderRadius: '50%', background: '#d1fae5', color: '#065f46', fontWeight: 700, fontSize: '0.82rem' }}>{step.order}</span>
+                            <span style={{ color: 'var(--text-main)', fontSize: '0.92rem' }}>{step.title}</span>
+                          </div>
+                          {material && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenMaterial(material)}
+                              title={material.type === 'FORM' ? `Previsualizar ${material.title}` : `Abrir ${material.title}`}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', flexShrink: 0, padding: '0.25rem 0.55rem', border: '1px solid var(--primary-border)', borderRadius: '10px', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', transition: 'transform 0.15s ease' }}
+                              onMouseEnter={(event) => { event.currentTarget.style.transform = 'scale(1.05)'; }}
+                              onMouseLeave={(event) => { event.currentTarget.style.transform = 'scale(1)'; }}
+                            >
+                              [ {material.type} ] {material.title}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </article>
+              ))}
             </div>
           )}
         </section>
@@ -1033,58 +856,12 @@ const MaterialsManagement: React.FC = () => {
 
       {isStructuredTaskModalOpen && (
         <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'grid', placeItems: 'center', padding: '1rem', background: 'rgba(34, 49, 43, 0.35)' }} onClick={() => setIsStructuredTaskModalOpen(false)}>
-          <form onSubmit={saveStructuredTask} className="glass-panel modal-card" onClick={(event) => event.stopPropagation()} style={{ width: 'min(100%, 560px)', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: '1.5rem', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '0.75rem' }}>
-              <div>
-                <h2 style={{ margin: '0 0 0.25rem', color: 'var(--text-main)', fontSize: '1.2rem' }}>{editingStructuredTask ? 'Editar Tarea' : 'Nueva Tarea'}</h2>
-                <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Configura la disciplina, fecha y los pasos de la tarea.</p>
-              </div>
-              <button type="button" onClick={() => setIsStructuredTaskModalOpen(false)} aria-label="Cerrar" className="modal-close" style={{ position: 'static' }}><X size={19} /></button>
-            </div>
-            <div style={{ flex: 1, overflowY: 'auto', paddingRight: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Título</label>
-                <input required value={structuredTaskTitle} onChange={(event) => setStructuredTaskTitle(event.target.value)} placeholder="Ej. Ensayo B2 Writing" style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', outline: 'none' }} />
-              </div>
-
-            <div style={{ marginTop: '0.75rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Descripción / Instrucciones generales (Opcional)</label>
-              <textarea value={structuredTaskDescription} onChange={(e) => setStructuredTaskDescription(e.target.value)} placeholder="Indica el objetivo de la actividad o pautas generales..." rows={2} style={{ width: '100%', padding: '0.65rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', outline: 'none', resize: 'vertical' }} />
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem', marginTop: '0.75rem' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Trimestre</label>
-                <select value={structuredTaskTerm} onChange={(e) => setStructuredTaskTerm(Number(e.target.value))} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}>
-                  <option value={1}>1º Trimestre (Sep - Dic)</option>
-                  <option value={2}>2º Trimestre (Ene - Mar)</option>
-                  <option value={3}>3º Trimestre (Abr - Jun)</option>
-                </select>
-              </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Categoría / Skill</label>
-                <select value={structuredTaskCategory} onChange={(e) => setStructuredTaskCategory(e.target.value)} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}>
-                  <option value="GRAMMAR_VOCABULARY">Grammar & Vocabulary</option>
-                  <option value="READING">Reading</option>
-                  <option value="WRITING">Writing</option>
-                  <option value="LISTENING">Listening</option>
-                  <option value="SPEAKING">Speaking</option>
-                  <option value="MOCK_EXAM">Mock Exam</option>
-                </select>
-              </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Fecha límite (Opcional)</label>
-                <input type="datetime-local" value={structuredTaskDueDate} onChange={(e) => setStructuredTaskDueDate(e.target.value)} style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }} />
-              </div>
-            </div>
-
-            <div style={{ marginTop: '0.75rem', padding: '0.6rem 0.75rem', background: 'var(--primary-subtle)', borderRadius: '8px', border: '1px solid var(--primary-border)' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>
-                <input type="checkbox" checked={structuredTaskIsTemplate} onChange={(e) => setStructuredTaskIsTemplate(e.target.checked)} style={{ width: '16px', height: '16px', accentColor: 'var(--primary)' }} />
-                <span>⭐ Guardar también en el Catálogo de Plantillas Didácticas</span>
-              </label>
-            </div>
-
+          <form onSubmit={saveStructuredTask} className="glass-panel modal-card" onClick={(event) => event.stopPropagation()} style={{ width: 'min(100%, 520px)', padding: '1.5rem' }}>
+            <button type="button" onClick={() => setIsStructuredTaskModalOpen(false)} aria-label="Cerrar" className="modal-close"><X size={19} /></button>
+            <h2 style={{ margin: '0 0 0.35rem', color: 'var(--text-main)', fontSize: '1.2rem' }}>{editingStructuredTask ? 'Editar Tarea Estructurada' : 'Añadir Tarea Estructurada'}</h2>
+            <p style={{ margin: '0 0 1.25rem', color: 'var(--text-muted)', fontSize: '0.88rem' }}>Configura la instrucción y el material opcional de cada paso.</p>
+            <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Título</label>
+            <input required value={structuredTaskTitle} onChange={(event) => setStructuredTaskTitle(event.target.value)} placeholder="Ej. Ensayo B2 Writing" style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', outline: 'none' }} />
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '0.75rem', marginTop: '1rem' }}>
               <div>
                 <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Asignar a</label>
@@ -1107,6 +884,11 @@ const MaterialsManagement: React.FC = () => {
                   <input type="checkbox" checked={structuredTaskIsSequential} onChange={(e) => setStructuredTaskIsSequential(e.target.checked)} style={{ width: '16px', height: '16px', accentColor: 'var(--primary)' }} />
                   Paso a paso (secuencial)
                 </label>
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Publicar el (opcional)</label>
+                <input type="datetime-local" value={structuredTaskPublishAt} onChange={(event) => setStructuredTaskPublishAt(event.target.value)} min={new Date().toISOString().slice(0, 16)} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }} />
+                <small style={{ display: 'block', marginTop: '0.25rem', color: 'var(--text-muted)', fontSize: '0.72rem' }}>Vacío: visible inmediatamente.</small>
               </div>
             </div>
             {structuredTaskAssignmentType === 'INDIVIDUAL' && (() => {
@@ -1162,65 +944,30 @@ const MaterialsManagement: React.FC = () => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', marginTop: '1rem' }}>
               <label style={{ color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Pasos</label>
               {structuredTaskSteps.map((step, index) => (
-                <div key={step.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', padding: '0.6rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '32px minmax(0, 1fr) minmax(150px, 0.8fr) 32px', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '50%', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.8rem', fontWeight: 700 }}>{index + 1}</span>
-                    <input required value={step.title} onChange={(event) => updateStructuredTaskStep(index, { title: event.target.value })} placeholder="Título o instrucción del paso" style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)', outline: 'none' }} />
-                    {getMaterial(step.materialId) ? (
-                      <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.55rem', border: '1px solid var(--primary-border)', borderRadius: '8px', background: 'var(--primary-light)', color: 'var(--primary-text)' }}>
-                        <span style={{ display: 'inline-flex', flexShrink: 0 }}>{getMaterialIcon(getMaterial(step.materialId)!.type)}</span>
-                        <span style={{ minWidth: 0, overflow: 'hidden' }}>
-                          <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.78rem', fontWeight: 700 }}>{getMaterial(step.materialId)!.title}</span>
-                          <span style={{ display: 'block', fontSize: '0.68rem', fontWeight: 600 }}>{getMaterialTypeLabel(getMaterial(step.materialId)!.type)}</span>
-                        </span>
-                        <button type="button" onClick={() => openMaterialPicker(index)} title="Cambiar material" aria-label="Cambiar material" style={{ marginLeft: 'auto', border: 'none', background: 'transparent', color: 'var(--primary-text)', cursor: 'pointer', padding: '0.2rem' }}>✏️</button>
-                        <button type="button" onClick={() => updateStructuredTaskStep(index, { materialId: null })} title="Eliminar material" aria-label="Eliminar material" style={{ border: 'none', background: 'transparent', color: '#b91c1c', cursor: 'pointer', padding: '0.2rem' }}>🗑️</button>
-                      </div>
-                    ) : (
-                      <button type="button" onClick={() => openMaterialPicker(index)} style={{ minWidth: 0, padding: '0.7rem 0.55rem', border: '2px dashed #cbd5e1', borderRadius: '8px', background: 'transparent', color: '#475569', cursor: 'pointer', fontSize: '0.76rem', fontWeight: 600 }}>
-                        📎 Seleccionar Material de Clase
-                      </button>
-                    )}
-                    <button type="button" onClick={() => removeStructuredTaskStep(index)} disabled={structuredTaskSteps.length === 1} title="Eliminar paso" aria-label={`Eliminar paso ${index + 1}`} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: 'none', background: 'transparent', color: '#b91c1c', cursor: 'pointer', padding: '0.35rem', opacity: structuredTaskSteps.length === 1 ? 0.4 : 1 }}><Trash2 size={17} /></button>
-                  </div>
-                  <div style={{ paddingLeft: '38px' }}>
-                    {(() => {
-                      const linkedMat = getMaterial(step.materialId);
-                      const isPassive = linkedMat && (linkedMat.type === 'VIDEO' || linkedMat.type === 'AUDIO' || linkedMat.type === 'IMAGE');
-                      const isForm = linkedMat?.type === 'FORM';
-
-                      if (isPassive) {
-                        return (
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                            <span>📖 Recurso didáctico (Formativo / No evaluable)</span>
-                          </div>
-                        );
-                      }
-
-                      return (
-                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.78rem', color: 'var(--text-muted)', cursor: isForm ? 'default' : 'pointer' }}>
-                          <input
-                            type="checkbox"
-                            checked={isForm || Boolean(step.requiresSubmission)}
-                            disabled={isForm}
-                            onChange={(e) => updateStructuredTaskStep(index, { requiresSubmission: e.target.checked })}
-                            style={{ width: '15px', height: '15px', accentColor: 'var(--primary)' }}
-                          />
-                          <span>
-                            {isForm
-                              ? '📝 Cuestionario evaluable automáticamente con nota'
-                              : '📝 Paso evaluable (requiere entrega de texto/enlace/archivo y asignación de nota)'}
-                          </span>
-                        </label>
-                      );
-                    })()}
-                  </div>
+                <div key={step.id} style={{ display: 'grid', gridTemplateColumns: '32px minmax(0, 1fr) minmax(150px, 0.8fr) 32px', alignItems: 'center', gap: '0.5rem', padding: '0.6rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '50%', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.8rem', fontWeight: 700 }}>{index + 1}</span>
+                  <input required value={step.title} onChange={(event) => updateStructuredTaskStep(index, { title: event.target.value })} placeholder="Título o instrucción del paso" style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', outline: 'none' }} />
+                  {getMaterial(step.materialId) ? (
+                    <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.55rem', border: '1px solid var(--primary-border)', borderRadius: '8px', background: 'var(--primary-light)', color: 'var(--primary-text)' }}>
+                      <span style={{ display: 'inline-flex', flexShrink: 0 }}>{getMaterialIcon(getMaterial(step.materialId)!.type)}</span>
+                      <span style={{ minWidth: 0, overflow: 'hidden' }}>
+                        <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.78rem', fontWeight: 700 }}>{getMaterial(step.materialId)!.title}</span>
+                        <span style={{ display: 'block', fontSize: '0.68rem', fontWeight: 600 }}>{getMaterialTypeLabel(getMaterial(step.materialId)!.type)}</span>
+                      </span>
+                      <button type="button" onClick={() => openMaterialPicker(index)} title="Cambiar material" aria-label="Cambiar material" style={{ marginLeft: 'auto', border: 'none', background: 'transparent', color: 'var(--primary-text)', cursor: 'pointer', padding: '0.2rem' }}>✏️</button>
+                      <button type="button" onClick={() => updateStructuredTaskStep(index, { materialId: null })} title="Eliminar material" aria-label="Eliminar material" style={{ border: 'none', background: 'transparent', color: '#b91c1c', cursor: 'pointer', padding: '0.2rem' }}>🗑️</button>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => openMaterialPicker(index)} style={{ minWidth: 0, padding: '0.7rem 0.55rem', border: '2px dashed #cbd5e1', borderRadius: '8px', background: 'transparent', color: '#475569', cursor: 'pointer', fontSize: '0.76rem', fontWeight: 600 }}>
+                      📎 Seleccionar Material de Clase
+                    </button>
+                  )}
+                  <button type="button" onClick={() => removeStructuredTaskStep(index)} disabled={structuredTaskSteps.length === 1} title="Eliminar paso" aria-label={`Eliminar paso ${index + 1}`} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: 'none', background: 'transparent', color: '#b91c1c', cursor: 'pointer', padding: '0.35rem', opacity: structuredTaskSteps.length === 1 ? 0.4 : 1 }}><Trash2 size={17} /></button>
                 </div>
               ))}
               <button type="button" onClick={addStructuredTaskStep} className="btn-secondary" style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.7rem', fontSize: '0.82rem' }}><Plus size={15} /> Añadir otro paso</button>
             </div>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.65rem', paddingTop: '1rem', marginTop: '0.5rem', borderTop: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.65rem', marginTop: '1.25rem' }}>
               <button type="button" onClick={() => setIsStructuredTaskModalOpen(false)} className="btn-secondary">Cancelar</button>
               <button type="submit" className="btn-primary">Guardar Tarea</button>
             </div>
@@ -1231,7 +978,7 @@ const MaterialsManagement: React.FC = () => {
       {materialPickerStepIndex !== null && createPortal(
         <div className="modal-backdrop" style={{ zIndex: 110, position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', padding: '1rem', background: 'rgba(34, 49, 43, 0.35)' }} onClick={() => setMaterialPickerStepIndex(null)}>
           <div className="glass-panel modal-card modal-card--wide" onClick={(event) => event.stopPropagation()} style={{ maxWidth: '760px', maxHeight: '88vh', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <button type="button" onClick={() => setMaterialPickerStepIndex(null)} aria-label="Cerrar biblioteca" className="modal-close"><X size={19} /></button>
+            <button type="button" onClick={() => setMaterialPickerStepIndex(null)} aria-label="Cerrar biblioteca" title="Cerrar" style={{ position: 'absolute', top: '1rem', right: '1rem', width: '34px', height: '34px', border: 'none', background: 'transparent', color: 'var(--text-muted)', display: 'inline-grid', placeItems: 'center', cursor: 'pointer' }}><X size={19} /></button>
             <div style={{ paddingRight: '2rem' }}>
               <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Elige el material que acompañará este paso.</p>
             </div>
@@ -1255,21 +1002,7 @@ const MaterialsManagement: React.FC = () => {
                   </div>
                   <strong style={{ color: '#0f172a', fontWeight: 700 }}>{material.title}</strong>
                   <p style={{ margin: 0, minHeight: '2.4rem', color: '#64748b', fontSize: '0.75rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{material.description || 'Sin descripción disponible.'}</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const isPassive = material.type === 'VIDEO' || material.type === 'AUDIO' || material.type === 'IMAGE';
-                      updateStructuredTaskStep(materialPickerStepIndex, {
-                        materialId: material.id,
-                        requiresSubmission: material.type === 'FORM' ? true : (isPassive ? false : undefined)
-                      });
-                      setMaterialPickerStepIndex(null);
-                    }}
-                    className="btn-primary"
-                    style={{ width: '100%', padding: '0.55rem', fontSize: '0.82rem', marginTop: 'auto' }}
-                  >
-                    ✓ Seleccionar
-                  </button>
+                  <button type="button" onClick={() => { updateStructuredTaskStep(materialPickerStepIndex, { materialId: material.id }); setMaterialPickerStepIndex(null); }} className="btn-primary" style={{ width: '100%', padding: '0.55rem', fontSize: '0.82rem', marginTop: 'auto' }}>✓ Seleccionar</button>
                 </article>
               ))}
               {filteredPickerMaterials.length === 0 && <p style={{ gridColumn: '1 / -1', padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>No se encontraron materiales.</p>}
@@ -1354,8 +1087,9 @@ const MaterialsManagement: React.FC = () => {
               {viewingMaterial.type === 'IMAGE' && viewingMaterial.url && (
                 <div style={{ textAlign: 'center' }}>
                   <img
-                    src={viewingMaterial.url}
+                    src={getImageDisplayUrl(viewingMaterial.url)}
                     alt={viewingMaterial.title}
+                    referrerPolicy="no-referrer"
                     style={{ maxWidth: '100%', maxHeight: '550px', borderRadius: '8px', objectFit: 'contain' }}
                   />
                   {viewingMaterial.description && (
@@ -1423,6 +1157,12 @@ const MaterialsManagement: React.FC = () => {
                 <input type="date" value={assignmentDeadline} onChange={(event) => setAssignmentDeadline(event.target.value)} min={new Date().toISOString().split('T')[0]} style={{ width: '100%', padding: '0.7rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }} />
               </div>
 
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Publicar el (opcional)</label>
+                <input type="datetime-local" value={assignmentPublishAt} onChange={(event) => setAssignmentPublishAt(event.target.value)} min={new Date().toISOString().slice(0, 16)} style={{ width: '100%', padding: '0.7rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }} />
+                <small style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-muted)', fontSize: '0.75rem' }}>Vacío: visible inmediatamente para el alumnado.</small>
+              </div>
+
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
                 <button type="button" onClick={() => setAssigningMaterial(null)} style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--text)', padding: '0.7rem 1.1rem', borderRadius: '8px', cursor: 'pointer' }}>Cancelar</button>
                 <button type="submit" disabled={assignmentLoading || selectedStudentIds.length === 0} className="btn-primary" style={{ padding: '0.7rem 1.1rem', opacity: assignmentLoading || selectedStudentIds.length === 0 ? 0.55 : 1 }}>{assignmentLoading ? 'Enviando...' : 'Enviar Material'}</button>
@@ -1450,7 +1190,7 @@ const MaterialsManagement: React.FC = () => {
               <h3 style={{ margin: 0, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Plus style={{ color: 'var(--primary)' }} /> Añadir Recurso Multimedia
               </h3>
-              <button onClick={() => setShowAddResourceModal(false)} className="modal-close" aria-label="Cerrar modal">
+              <button onClick={() => { setShowAddResourceModal(false); setEditingStandardMaterial(null); }} className="modal-close" aria-label="Cerrar modal">
                 <X size={20} />
               </button>
             </div>
@@ -1530,7 +1270,7 @@ const MaterialsManagement: React.FC = () => {
                   style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }}
                 />
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'block' }}>
-                  Puedes pegar enlaces de YouTube, Vimeo, audios MP3 en la nube o PDFs de Google Drive.
+                  Para imágenes de Google Drive, usa el enlace individual del archivo, no el enlace de una carpeta. El archivo debe estar compartido para cualquiera con el enlace.
                 </span>
               </div>
 
@@ -1547,13 +1287,13 @@ const MaterialsManagement: React.FC = () => {
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1rem' }}>
                 <button
                   type="button"
-                  onClick={() => setShowAddResourceModal(false)}
+                  onClick={() => { setShowAddResourceModal(false); setEditingStandardMaterial(null); }}
                   style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--text)', padding: '0.75rem 1.25rem', borderRadius: '8px', cursor: 'pointer' }}
                 >
                   Cancelar
                 </button>
                 <button type="submit" className="btn-primary" style={{ padding: '0.75rem 1.5rem' }}>
-                  Guardar Recurso
+                  {editingStandardMaterial ? 'Guardar Cambios' : 'Guardar Recurso'}
                 </button>
               </div>
             </form>

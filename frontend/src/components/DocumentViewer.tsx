@@ -7,9 +7,25 @@ interface DocumentViewerProps {
 }
 
 const DocumentViewer: React.FC<DocumentViewerProps> = ({ url, title }) => {
-  // If it's a PDF link or external document
-  const isGoogleDrive = url.includes('drive.google.com') || url.includes('docs.google.com');
-  const embedUrl = isGoogleDrive ? url.replace('/view', '/preview') : url;
+  const getGoogleDocumentId = (sourceUrl: string) => sourceUrl.match(/docs\.google\.com\/document\/d\/([^/?]+)/)?.[1];
+  const getGoogleDriveFileId = (sourceUrl: string) => sourceUrl.match(/drive\.google\.com\/file\/d\/([^/?]+)/)?.[1]
+    || sourceUrl.match(/[?&]id=([^&/?]+)/)?.[1];
+
+  const getEmbedUrl = (sourceUrl: string) => {
+    const googleDocumentId = getGoogleDocumentId(sourceUrl);
+    if (googleDocumentId) {
+      return `https://docs.google.com/document/d/${googleDocumentId}/preview`;
+    }
+
+    const googleDriveFileId = getGoogleDriveFileId(sourceUrl);
+    return googleDriveFileId
+      ? `https://drive.google.com/file/d/${googleDriveFileId}/preview`
+      : sourceUrl;
+  };
+
+  const embedUrl = getEmbedUrl(url);
+  const googleDocumentId = getGoogleDocumentId(url);
+  const externalUrl = googleDocumentId ? embedUrl : getGoogleDriveFileId(url) ? embedUrl : url;
 
   return (
     <div style={{
@@ -40,7 +56,7 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({ url, title }) => {
 
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <a
-            href={url}
+            href={externalUrl}
             target="_blank"
             rel="noopener noreferrer"
             style={{

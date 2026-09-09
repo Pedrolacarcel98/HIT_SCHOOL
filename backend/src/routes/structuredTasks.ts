@@ -5,6 +5,13 @@ import { authenticateToken, requireTeacher, AuthRequest } from '../middleware/au
 const router = Router();
 const prisma = new PrismaClient();
 
+const parsePublishAt = (value: unknown) => {
+  if (!value) return { value: null as Date | null };
+  const publishAt = new Date(String(value));
+  if (Number.isNaN(publishAt.getTime()) || publishAt <= new Date()) return { error: 'La fecha de publicación debe ser futura.' };
+  return { value: publishAt };
+};
+
 const getStudentName = (student: { profile: { firstName: string; lastName: string } | null; email: string } | null) => {
   if (!student) return null;
   return student.profile ? `${student.profile.firstName} ${student.profile.lastName}`.trim() : student.email;
@@ -304,12 +311,9 @@ router.get('/course/:courseId', authenticateToken, async (req: AuthRequest, res:
       where: {
         courseId,
         isTemplate: false,
-        OR: [
-          { assignmentType: StructuredTaskAssignmentType.CLASS },
-          { assignmentType: StructuredTaskAssignmentType.INDIVIDUAL, assignedStudentId: studentId },
-          { assignmentType: StructuredTaskAssignmentType.INDIVIDUAL, assignedStudents: { some: { studentId } } }
-        ]
-      },
+        AND: [{ OR: [{ publishAt: null }, { publishAt: { lte: new Date() } }] }],
+        assignmentType: StructuredTaskAssignmentType.CLASS
+      } as any,
       include: getTaskInclude(studentId),
       orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }]
     });
@@ -332,12 +336,12 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => 
     const tasks = await prisma.structuredTask.findMany({
       where: {
         isTemplate: false,
+        AND: [{ OR: [{ publishAt: null }, { publishAt: { lte: new Date() } }] }],
         OR: [
-          { courseId: { in: courseIds }, assignmentType: StructuredTaskAssignmentType.CLASS },
           { assignmentType: StructuredTaskAssignmentType.INDIVIDUAL, assignedStudentId: studentId },
           { assignmentType: StructuredTaskAssignmentType.INDIVIDUAL, assignedStudents: { some: { studentId } } }
         ]
-      },
+      } as any,
       include: getTaskInclude(studentId),
       orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }]
     });
@@ -524,11 +528,13 @@ router.post('/steps/:stepId/complete', authenticateToken, async (req: AuthReques
 
 // 8. Crear nueva tarea o plantilla
 router.post('/', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
-  const { title, description, dueDate, term, category, isTemplate, courseId, assignmentType, assignedStudentId, assignedStudentIds, isSequential, steps } = req.body;
+  const { title, description, dueDate, publishAt, term, category, isTemplate, courseId, assignmentType, assignedStudentId, assignedStudentIds, isSequential, steps } = req.body;
   const isTemplateTask = Boolean(isTemplate);
   const recipientIds = Array.isArray(assignedStudentIds) ? assignedStudentIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0) : (assignedStudentId ? [assignedStudentId] : []);
 
   if (!title?.trim() || !Array.isArray(steps) || steps.length === 0) return res.status(400).json({ error: 'Título y al menos un paso son obligatorios.' });
+  const parsedPublishAt = parsePublishAt(publishAt);
+  if (parsedPublishAt.error) return res.status(400).json({ error: parsedPublishAt.error });
 
   if (!isTemplateTask) {
     if (assignmentType !== 'CLASS' && assignmentType !== 'INDIVIDUAL') return res.status(400).json({ error: 'Tipo de asignación no válido.' });
@@ -547,6 +553,7 @@ router.post('/', authenticateToken, requireTeacher, async (req: AuthRequest, res
         title: title.trim(),
         description: description?.trim() || null,
         dueDate: dueDate ? new Date(dueDate) : null,
+        publishAt: isTemplateTask ? null : parsedPublishAt.value,
         term: typeof term === 'number' ? term : (parseInt(term) || 1),
         isTemplate: isTemplateTask,
         category: (category as SkillCategory) || SkillCategory.GRAMMAR_VOCABULARY,
@@ -672,11 +679,13 @@ router.post('/:id/save-as-template', authenticateToken, requireTeacher, async (r
 // 11. Actualizar tarea estructurada (RECONCILIACIÓN SEGURA: no destruye progreso)
 router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
   const taskId = req.params.id as string;
-  const { title, description, dueDate, term, category, isTemplate, courseId, assignmentType, assignedStudentId, assignedStudentIds, isSequential, steps } = req.body;
+  const { title, description, dueDate, publishAt, term, category, isTemplate, courseId, assignmentType, assignedStudentId, assignedStudentIds, isSequential, steps } = req.body;
   const isTemplateTask = Boolean(isTemplate);
   const recipientIds = Array.isArray(assignedStudentIds) ? assignedStudentIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0) : (assignedStudentId ? [assignedStudentId] : []);
 
   if (!title?.trim() || !Array.isArray(steps) || steps.length === 0) return res.status(400).json({ error: 'Título y al menos un paso son obligatorios.' });
+  const parsedPublishAt = parsePublishAt(publishAt);
+  if (parsedPublishAt.error) return res.status(400).json({ error: parsedPublishAt.error });
 
   try {
     const existing = await prisma.structuredTask.findFirst({
@@ -748,6 +757,7 @@ router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, r
           title: title.trim(),
           description: description !== undefined ? (description?.trim() || null) : existing.description,
           dueDate: dueDate !== undefined ? (dueDate ? new Date(dueDate) : null) : existing.dueDate,
+          publishAt: isTemplateTask ? null : parsedPublishAt.value,
           term: term !== undefined ? (typeof term === 'number' ? term : (parseInt(term) || 1)) : existing.term,
           category: category ? (category as SkillCategory) : existing.category,
           isTemplate: isTemplateTask,

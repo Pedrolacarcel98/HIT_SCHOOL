@@ -40,6 +40,22 @@ async function main() {
     },
   });
 
+  const secondTeacher = await prisma.user.upsert({
+    where: { email: 'profesor1@hitschool.com' },
+    update: {},
+    create: {
+      email: 'profesor1@hitschool.com',
+      passwordHash: hashedPassword,
+      role: 'TEACHER',
+      profile: {
+        create: {
+          firstName: 'Inma',
+          lastName: 'Profesora'
+        }
+      }
+    }
+  });
+
   const student = await prisma.user.upsert({
     where: { email: 'alumno@hitschool.com' },
     update: {},
@@ -57,6 +73,7 @@ async function main() {
   });
 
   console.log('Profesor de prueba creado:', teacher.email);
+  console.log('Segundo profesor de prueba creado:', secondTeacher.email);
   console.log('Alumno de prueba creado:', student.email);
 
   // Crear Tutor/Padre Marta Madre

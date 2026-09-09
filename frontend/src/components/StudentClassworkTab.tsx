@@ -1,23 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import {
-  CheckCircle2,
-  Search,
-  X,
-  ExternalLink,
-  Send,
-  Link as LinkIcon,
-  PenTool,
-  Paperclip,
-  ChevronDown,
-  ChevronUp,
-  ListChecks,
-  FileText
-} from 'lucide-react';
+import { CalendarDays, CheckCircle2, ChevronDown, ChevronUp, Clock3, FileText, Search, X, ExternalLink, Send, Link, PenTool, Check } from 'lucide-react';
+import DocumentViewer from './DocumentViewer';
 import FormPlayer from './FormPlayer';
-import ExamReviewModal, { type ReviewQuestion } from './ExamReviewModal';
-import TaskCard, { type TaskItem, type TaskStepItem } from './TaskCard';
+import ExamReviewModal from './ExamReviewModal';
 import { useParent } from '../context/ParentContext';
+import type { ReviewQuestion } from './ExamReviewModal';
 
 const SKILL_CATEGORIES = [
   { id: 'GRAMMAR_VOCABULARY', label: 'Grammar and Vocabulary' },
@@ -28,7 +16,49 @@ const SKILL_CATEGORIES = [
   { id: 'MOCK_EXAM', label: 'Mock Exams' }
 ];
 
-const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+interface AssignedMaterial {
+  id: string;
+  title: string;
+  description: string;
+  level: string;
+  category: string;
+  teacher: string;
+  assignedAt: string;
+  deadline?: string;
+  rawDeadline?: string;
+  status: 'PENDING' | 'COMPLETED';
+  url: string;
+  type?: string;
+  formData?: any;
+  submissionContent?: string | null;
+  submissionGrade?: number | null;
+  submissionFeedback?: string | null;
+  submittedAt?: string | null;
+  structuredStepId?: string;
+  structuredTaskId?: string;
+}
+
+interface StructuredTask {
+  id: string;
+  title: string;
+  category?: string;
+  assignmentType: 'CLASS' | 'INDIVIDUAL';
+  isSequential: boolean;
+  steps: Array<{
+    id: string;
+    order: number;
+    title: string;
+    isCompleted?: boolean;
+    submission?: any;
+    material?: { id: string; title: string; type: string; url?: string | null; description?: string; level?: string; category?: string; formData?: any } | null;
+  }>;
+}
+
+interface ParsedExamData {
+  answers: Record<string, string | number>;
+  score?: number | null;
+  total?: number | null;
+}
 
 interface SubmissionAttachment {
   name: string;
@@ -37,8 +67,15 @@ interface SubmissionAttachment {
   size?: number;
 }
 
-const parseSubmissionContent = (content?: string | null): { text: string; link: string | null; attachment: SubmissionAttachment | null } => {
+interface ParsedSubmissionData {
+  text: string;
+  link: string | null;
+  attachment: SubmissionAttachment | null;
+}
+
+const parseSubmissionContent = (content?: string | null): ParsedSubmissionData => {
   if (!content) return { text: '', link: null, attachment: null };
+
   try {
     const parsed = JSON.parse(content);
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
@@ -56,8 +93,9 @@ const parseSubmissionContent = (content?: string | null): { text: string; link: 
       };
     }
   } catch {
-    // legacy text
+    // Legacy plain text and URL payloads
   }
+
   return {
     text: content,
     link: /^https?:\/\//i.test(content) ? content : null,
@@ -65,7 +103,7 @@ const parseSubmissionContent = (content?: string | null): { text: string; link: 
   };
 };
 
-const parseSavedExam = (content?: string | null) => {
+const parseSavedExam = (content?: string | null): ParsedExamData | null => {
   if (!content) return null;
   try {
     const parsed = JSON.parse(content);
@@ -82,653 +120,966 @@ const parseSavedExam = (content?: string | null) => {
   }
 };
 
+const getResourceOpenUrl = (material: { type: string; url?: string | null }) => {
+  const rawUrl = material.url || '';
+  const googleDocumentId = rawUrl.match(/docs\.google\.com\/document\/d\/([^/?]+)/)?.[1];
+  if (material.type === 'DOCUMENT' && googleDocumentId) {
+    return `https://docs.google.com/document/d/${googleDocumentId}/preview`;
+  }
+  const driveFileId = rawUrl.match(/drive\.google\.com\/file\/d\/([^/?]+)/)?.[1]
+    || rawUrl.match(/[?&]id=([^&/?]+)/)?.[1];
+  if (!driveFileId) return rawUrl;
+  if (material.type === 'IMAGE') return `https://lh3.googleusercontent.com/d/${driveFileId}=w1600`;
+  return `https://drive.google.com/file/d/${driveFileId}/preview`;
+};
+
 const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
-  const [tasks, setTasks] = useState<any[]>([]);
+  const [assignedMaterials, setAssignedMaterials] = useState<AssignedMaterial[]>([]);
+  const [structuredTasks, setStructuredTasks] = useState<StructuredTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'COMPLETED'>('ALL');
-  const [expandedTopics, setExpandedTopics] = useState<Record<string, boolean>>(
-    () => Object.fromEntries(SKILL_CATEGORIES.map(cat => [cat.id, true]))
-  );
-
+  const [statusFilter, setStatusFilter] = useState<'ALL' | AssignedMaterial['status']>('ALL');
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>(() => Object.fromEntries(SKILL_CATEGORIES.map((category) => [category.id, false])));
+  const [viewingMaterial, setViewingMaterial] = useState<AssignedMaterial | null>(null);
+  const [reviewingMaterial, setReviewingMaterial] = useState<AssignedMaterial | null>(null);
   const { selectedStudentId } = useParent();
   const userRole = localStorage.getItem('userRole');
 
-  // Modal: Realizar Form / Examen
-  const [viewingForm, setViewingForm] = useState<{ stepId: string; material: any; title: string } | null>(null);
-
-  // Modal: Revisar Examen Realizado
-  const [reviewingExam, setReviewingExam] = useState<{ title: string; questions: ReviewQuestion[]; answers: any; score: number | null; total?: number | null } | null>(null);
-
-  // Modal: Entregar Paso Manual
-  const [deliveryTarget, setDeliveryTarget] = useState<{ stepId: string; title: string; description?: string; materialUrl?: string | null; isSequential?: boolean; requiresSubmission?: boolean } | null>(null);
+  // Formulario de Entrega
   const [deliveryType, setDeliveryType] = useState<'TEXT' | 'LINK' | 'SIMPLE'>('TEXT');
-  const [deliveryText, setDeliveryText] = useState('');
-  const [deliveryLink, setDeliveryLink] = useState('');
-  const [deliveryAttachment, setDeliveryAttachment] = useState<SubmissionAttachment | null>(null);
-  const [deliveryError, setDeliveryError] = useState('');
-  const [isSubmittingDelivery, setIsSubmittingDelivery] = useState(false);
+  const [textSubmission, setTextSubmission] = useState('');
+  const [urlSubmission, setUrlSubmission] = useState('');
+  const [attachmentFile, setAttachmentFile] = useState<SubmissionAttachment | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
-  // Modal: Revisar Entrega Manual Realizada
-  const [reviewingSubmission, setReviewingSubmission] = useState<{ title: string; submission: any; step: any } | null>(null);
-
-  const toggleTopic = (topicId: string) => {
-    setExpandedTopics(prev => ({ ...prev, [topicId]: !prev[topicId] }));
-  };
-
-  const fetchTasks = async () => {
+  const fetchAssignedMaterials = async () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
       const studentParam = selectedStudentId ? `?studentId=${selectedStudentId}` : '';
-      const res = await fetch(`${apiUrl}/api/structured-tasks/course/${courseId}${studentParam}`, {
-        headers: { Authorization: `Bearer ${token}` }
+      const res = await fetch(`${apiUrl}/api/assignments/me${studentParam}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        setTasks(await res.json());
+        const assignments = await res.json();
+        // Filtrar solo los del curso actual
+        const courseAssignments = assignments.filter((a: any) => a.courseId === courseId);
+        
+        setAssignedMaterials(courseAssignments.map((assignment: any) => {
+          const sub = assignment.submissions && assignment.submissions.length > 0 ? assignment.submissions[0] : null;
+          return {
+            id: assignment.id,
+            title: assignment.title,
+            description: assignment.description || (assignment.material ? assignment.material.description || assignment.material.title : ''),
+            level: assignment.material ? (assignment.material.level || 'GENERAL') : 'GENERAL',
+            category: assignment.category || 'GRAMMAR_VOCABULARY',
+            teacher: assignment.teacher && assignment.teacher.profile ? `${assignment.teacher.profile.firstName} ${assignment.teacher.profile.lastName}`.trim() : 'Profesor',
+            assignedAt: new Date(assignment.createdAt || new Date()).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }),
+            deadline: assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : undefined,
+            rawDeadline: assignment.dueDate,
+            status: sub ? 'COMPLETED' : 'PENDING',
+            url: assignment.material ? assignment.material.url : '',
+            type: assignment.material ? assignment.material.type : (sub?.content?.includes('"answers"') ? 'FORM' : 'DOCUMENT'),
+            formData: assignment.material ? assignment.material.formData : null,
+            submissionContent: sub?.content,
+            submissionGrade: sub?.grade,
+            submissionFeedback: sub?.feedback,
+            submittedAt: sub?.submittedAt
+          };
+        }));
       }
+      const structuredTasksResponse = await fetch(`${apiUrl}/api/structured-tasks/course/${courseId}${studentParam}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (structuredTasksResponse.ok) setStructuredTasks(await structuredTasksResponse.json());
     } catch (err) {
-      console.error('Error fetching student tasks', err);
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchTasks();
+    fetchAssignedMaterials();
   }, [courseId, selectedStudentId]);
 
-
-  // Abrir modal de acción para un paso
-  const handleOpenStep = (step: TaskStepItem, task: TaskItem) => {
-    if (step.material?.type === 'FORM') {
-      if (step.isCompleted && step.submission) {
-        handleReviewStep(step, task);
-        return;
-      }
-      setViewingForm({
-        stepId: step.id,
-        material: step.material,
-        title: step.title || step.material.title
-      });
-      return;
-    }
-
-    // Si ya está completado con entrega, permitir verla
-    if (step.isCompleted && step.submission) {
-      setReviewingSubmission({
-        title: step.title,
-        submission: step.submission,
-        step
-      });
-      return;
-    }
-
-    // Si ya está completado sin entrega, abrir directamente el material si existe
-    if (step.isCompleted && !step.submission) {
-      if (step.material?.url) {
-        window.open(step.material.url, '_blank', 'noopener,noreferrer');
-      }
-      return;
-    }
-
-    const isPassiveMedia = Boolean(step.material && ['VIDEO', 'AUDIO', 'IMAGE'].includes(step.material.type));
-    const requiresSub = !isPassiveMedia && Boolean(step.requiresSubmission);
-
-    setDeliveryTarget({
-      stepId: step.id,
-      title: step.title,
-      description: step.material?.description || task.description || undefined,
-      materialUrl: step.material?.url || null,
-      isSequential: task.isSequential,
-      requiresSubmission: requiresSub
+  const filteredMaterials = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    return assignedMaterials.filter((material) => {
+      const matchesSearch = !query || `${material.title} ${material.description} ${material.category}`.toLowerCase().includes(query);
+      const matchesStatus = statusFilter === 'ALL' || material.status === statusFilter;
+      return matchesSearch && matchesStatus;
     });
-    setDeliveryType(requiresSub ? 'TEXT' : 'SIMPLE');
-    setDeliveryText('');
-    setDeliveryLink('');
-    setDeliveryAttachment(null);
-    setDeliveryError('');
+  }, [searchTerm, statusFilter, assignedMaterials]);
+
+  const groupedMaterials = useMemo(() => SKILL_CATEGORIES.map((category) => ({
+    ...category,
+    materials: filteredMaterials.filter((material) => material.category === category.id),
+    structuredTasks: structuredTasks.filter((task) => (task.category || 'GRAMMAR_VOCABULARY') === category.id)
+  })), [filteredMaterials, structuredTasks]);
+
+  const uncategorizedStructuredTasks = useMemo(() => structuredTasks.filter((task) => !SKILL_CATEGORIES.some((category) => category.id === (task.category || 'GRAMMAR_VOCABULARY'))), [structuredTasks]);
+
+  const toggleCategory = (categoryId: string) => setExpandedCategories((categories) => ({ ...categories, [categoryId]: !categories[categoryId] }));
+
+  const openMaterialModal = (material: AssignedMaterial) => {
+    setViewingMaterial(material);
+    setTextSubmission('');
+    setUrlSubmission('');
+    setAttachmentFile(null);
+    setSubmitError('');
+    setDeliveryType('TEXT');
   };
 
-  // Revisar paso completado
-  const handleReviewStep = (step: TaskStepItem, _task: TaskItem) => {
+  const openActionModal = (step: any, task: StructuredTask) => {
+    setViewingMaterial({
+      id: step.id,
+      title: step.title,
+      description: step.material?.description || '',
+      level: step.material?.level || 'GENERAL',
+      category: step.material?.category || 'GRAMMAR_VOCABULARY',
+      teacher: '',
+      assignedAt: '',
+      status: step.isCompleted ? 'COMPLETED' : 'PENDING',
+      url: step.material?.url || '',
+      type: step.material?.type || 'DOCUMENT',
+      formData: step.material?.formData,
+      submissionContent: step.submission?.content,
+      submissionGrade: step.submission?.grade,
+      submissionFeedback: step.submission?.feedback,
+      submittedAt: step.submission?.submittedAt,
+      structuredStepId: step.id,
+      structuredTaskId: task.id
+    });
+    setTextSubmission('');
+    setUrlSubmission('');
+    setAttachmentFile(null);
+    setSubmitError('');
     if (step.material?.type === 'FORM') {
-      const parsed = parseSavedExam(step.submission?.content);
-      setReviewingExam({
-        title: step.material.title || step.title,
-        questions: (step.material.formData?.questions as ReviewQuestion[]) || [],
-        answers: parsed?.answers || {},
-        score: step.submission?.grade ?? parsed?.score ?? null,
-        total: parsed?.total || step.material.formData?.questions?.length || 0
+       setDeliveryType('TEXT'); 
+    } else {
+       setDeliveryType('TEXT');
+    }
+  };
+
+  const submitDirectly = async (stepId: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+      const res = await fetch(`${apiUrl}/api/structured-tasks/steps/${stepId}/complete`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({})
       });
+      if (res.ok) {
+        await fetchAssignedMaterials();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleTick = (step: any, task: StructuredTask) => {
+    if (step.isCompleted) return;
+    
+    if (step.material?.type === 'VIDEO' || !step.material) {
+      submitDirectly(step.id);
+    } else {
+      openActionModal(step, task);
+    }
+  };
+
+  const openStructuredResource = (step: StructuredTask['steps'][number], task: StructuredTask) => {
+    if (!step.material) return;
+    if (step.material.type === 'FORM') {
+      openActionModal(step, task);
       return;
     }
-
-    if (step.submission) {
-      setReviewingSubmission({
-        title: step.title,
-        submission: step.submission,
-        step
-      });
-    } else if (step.material?.url) {
-      window.open(step.material.url, '_blank', 'noopener,noreferrer');
-    }
+    if (step.material.url) window.open(getResourceOpenUrl(step.material), '_blank', 'noopener,noreferrer');
   };
 
-  // Enviar entrega de paso manual
-  const submitDelivery = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!deliveryTarget || userRole !== 'STUDENT') return;
+  const handleSubmitAssignment = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!viewingMaterial) return;
 
-    let content = '';
-    let link = '';
-    let hasSubmissionContent = false;
+    let finalContent = '';
+    let finalLink = '';
     if (deliveryType === 'TEXT') {
-      if (!deliveryText.trim() && !deliveryAttachment) {
-        setDeliveryError('Por favor, escribe tu respuesta o adjunta un archivo antes de entregar.');
+      if (!viewingMaterial.structuredStepId && !textSubmission.trim() && !attachmentFile) {
+        setSubmitError('Por favor, escribe tu respuesta o redacción antes de entregar.');
         return;
       }
-      content = deliveryText.trim();
-      hasSubmissionContent = true;
+      finalContent = textSubmission.trim();
     } else if (deliveryType === 'LINK') {
-      if (!deliveryLink.trim() && !deliveryAttachment) {
-        setDeliveryError('Por favor, introduce el enlace a tu trabajo en la nube.');
+      if (!urlSubmission.trim() && !attachmentFile) {
+        setSubmitError('Por favor, introduce el enlace a tu documento en la nube.');
         return;
       }
-      if (deliveryLink.trim() && !/^https?:\/\//i.test(deliveryLink.trim())) {
-        setDeliveryError('El enlace debe comenzar por http:// o https://');
+      if (urlSubmission.trim() && !/^https?:\/\//i.test(urlSubmission.trim())) {
+        setSubmitError('El enlace debe ser una URL válida (ej. https://docs.google.com/...)');
         return;
       }
-      link = deliveryLink.trim();
-      content = link;
-      hasSubmissionContent = true;
-    } else if (deliveryAttachment) {
-      hasSubmissionContent = true;
+      finalLink = urlSubmission.trim();
+      finalContent = finalLink;
+    } else {
+      finalContent = viewingMaterial.structuredStepId ? '' : 'Tarea completada por el alumno.';
     }
 
-    const payload = hasSubmissionContent
-      ? (deliveryAttachment
-          ? JSON.stringify({ text: content, link: link || null, attachment: deliveryAttachment })
-          : content)
-      : undefined;
+    const payload = attachmentFile
+      ? JSON.stringify({
+          text: finalContent,
+          link: finalLink || null,
+          attachment: attachmentFile
+        })
+      : finalContent;
 
     try {
-      setIsSubmittingDelivery(true);
-      setDeliveryError('');
+      setIsSubmitting(true);
+      setSubmitError('');
       const token = localStorage.getItem('token');
-      const res = await fetch(`${apiUrl}/api/structured-tasks/steps/${deliveryTarget.stepId}/complete`, {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+      
+      const isStructured = Boolean(viewingMaterial.structuredStepId);
+      const url = isStructured 
+        ? `${apiUrl}/api/structured-tasks/steps/${viewingMaterial.structuredStepId}/complete`
+        : `${apiUrl}/api/assignments/${viewingMaterial.id}/submit`;
+      
+      const body = isStructured
+        ? { submissionContent: finalContent }
+        : { content: attachmentFile ? finalContent : payload, link: finalLink || undefined, attachment: attachmentFile || undefined };
+
+      const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(payload !== undefined ? { submissionContent: payload } : {})
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(body)
       });
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        setDeliveryError(errData.error || 'Error al entregar el paso.');
+        setSubmitError(errData.error || 'Error al enviar la tarea.');
         return;
       }
 
-      setDeliveryTarget(null);
-      await fetchTasks();
+      await fetchAssignedMaterials();
+      setViewingMaterial(null);
+      setAttachmentFile(null);
     } catch (err) {
       console.error(err);
-      setDeliveryError('Error de conexión al enviar la entrega.');
+      setSubmitError('Error de conexión al enviar la tarea.');
     } finally {
-      setIsSubmittingDelivery(false);
+      setIsSubmitting(false);
     }
   };
 
-  const handleDeliveryAttachment = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAttachmentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) {
-      setDeliveryAttachment(null);
+      setAttachmentFile(null);
       return;
     }
+
     if (file.size > 10 * 1024 * 1024) {
-      setDeliveryError('El archivo adjunto no puede superar 10 MB.');
-      setDeliveryAttachment(null);
+      setSubmitError('El archivo adjunto no puede superar 10 MB.');
+      setAttachmentFile(null);
       event.target.value = '';
       return;
     }
+
     const reader = new FileReader();
     reader.onload = () => {
-      setDeliveryAttachment({
+      setAttachmentFile({
         name: file.name,
         mimeType: file.type || 'application/octet-stream',
         dataUrl: String(reader.result || ''),
         size: file.size
       });
-      setDeliveryError('');
+      setSubmitError('');
     };
     reader.readAsDataURL(file);
   };
 
-  // Filtrar tareas por búsqueda y estado
-  const filteredTasks = useMemo(() => {
-    const query = searchTerm.trim().toLowerCase();
-    return tasks.filter((t) => {
-      const matchesSearch = !query || `${t.title} ${t.description || ''} ${t.category || ''}`.toLowerCase().includes(query);
-      const isCompleted = (t.steps || []).length > 0 && (t.steps || []).every((s: any) => s.isCompleted);
-      const matchesStatus = statusFilter === 'ALL' || (statusFilter === 'COMPLETED' ? isCompleted : !isCompleted);
-      return matchesSearch && matchesStatus;
-    });
-  }, [tasks, searchTerm, statusFilter]);
+  const handleFormFinish = async (score: number, total: number, answers: { [key: string]: any }) => {
+    if (!viewingMaterial) return;
+    const grade = total > 0 ? (score / total) * 10 : 0;
+    
+    try {
+      const token = localStorage.getItem('token');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+      
+      const isStructured = Boolean(viewingMaterial.structuredStepId);
+      const url = isStructured 
+        ? `${apiUrl}/api/structured-tasks/steps/${viewingMaterial.structuredStepId}/submit-form`
+        : `${apiUrl}/api/assignments/${viewingMaterial.id}/submit`;
+      
+      const body = isStructured
+        ? { answers }
+        : { content: JSON.stringify({ answers, score, total }), grade };
 
-  // Agrupar tareas filtradas por Disciplina
-  const groupedTasks = useMemo(() => {
-    return SKILL_CATEGORIES.map(cat => ({
-      ...cat,
-      tasks: filteredTasks.filter(t => (t.category || 'GRAMMAR_VOCABULARY') === cat.id)
-    }));
-  }, [filteredTasks]);
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(body)
+      });
+      if (res.ok) {
+        await fetchAssignedMaterials();
+        setViewingMaterial(null);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   return (
-    <div className="animate-fade-in" style={{ maxWidth: '1200px', margin: '0 auto', padding: '1.5rem 0' }}>
-      {/* Cabecera y Filtros */}
-      <div className="glass-panel" style={{ padding: '1.25rem 1.5rem', marginBottom: '2rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: '1.4rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <ListChecks style={{ color: 'var(--primary)' }} /> Tareas
-          </h2>
-          <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-            Trabajos, actividades y exámenes interactivos organizados por disciplina.
-          </p>
+    <div className="animate-fade-in" style={{ padding: '2rem 1.5rem', maxWidth: '1200px', margin: '0 auto' }}>
+      {/* Barra de Búsqueda y Filtros */}
+      <div className="glass-panel" style={{ padding: '1rem 1.25rem', marginBottom: '2rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ position: 'relative', flex: '1 1 220px', minWidth: 0 }}>
+          <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+          <input
+            type="search"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Buscar tarea o material..."
+            style={{ width: '100%', padding: '0.7rem 1rem 0.7rem 2.5rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', outline: 'none' }}
+          />
         </div>
-
-        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          <div style={{ position: 'relative', minWidth: '220px' }}>
-            <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-            <input
-              type="search"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar por título o disciplina..."
-              style={{ width: '100%', padding: '0.6rem 1rem 0.6rem 2.25rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', outline: 'none', fontSize: '0.88rem' }}
-            />
-          </div>
-
-          <div className="scrollable-tabs">
-            {([['ALL', 'Todas'], ['PENDING', 'Pendientes'], ['COMPLETED', 'Completadas']] as const).map(([val, label]) => (
-              <button
-                key={val}
-                onClick={() => setStatusFilter(val)}
-                style={{
-                  padding: '0.5rem 0.9rem',
-                  borderRadius: '16px',
-                  border: statusFilter === val ? '1px solid var(--primary)' : '1px solid var(--border)',
-                  background: statusFilter === val ? 'var(--primary-light)' : 'var(--surface)',
-                  color: statusFilter === val ? 'var(--primary-text)' : 'var(--text-muted)',
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                  fontSize: '0.82rem',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+        <div className="scrollable-tabs" style={{ flexWrap: 'wrap' }}>
+          {([['ALL', 'Todas'], ['PENDING', 'Pendientes'], ['COMPLETED', 'Completadas']] as const).map(([value, label]) => (
+            <button key={value} onClick={() => setStatusFilter(value)} style={{ padding: '0.6rem 0.9rem', borderRadius: '18px', border: statusFilter === value ? '1px solid var(--primary)' : '1px solid var(--border)', background: statusFilter === value ? 'var(--primary-light)' : 'var(--surface)', color: statusFilter === value ? 'var(--primary-text)' : 'var(--text-muted)', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
       {loading ? (
-        <div className="glass-panel" style={{ textAlign: 'center', padding: '4rem 2rem', color: 'var(--text-muted)' }}>
-          Cargando tareas de la clase...
-        </div>
-      ) : tasks.length === 0 ? (
+        <div className="glass-panel" style={{ textAlign: 'center', padding: '4rem 2rem', color: 'var(--text-muted)' }}>Cargando tareas de la clase...</div>
+      ) : filteredMaterials.length === 0 ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
           <FileText size={46} style={{ color: 'var(--primary)', opacity: 0.45, marginBottom: '1rem' }} />
-          <h2 style={{ fontSize: '1.25rem', marginBottom: '0.5rem', color: 'var(--text-main)' }}>Aún no hay tareas en esta clase</h2>
-          <p style={{ color: 'var(--text-muted)', margin: 0 }}>Tu profesor publicará aquí las actividades y ejercicios del curso.</p>
-        </div>
-      ) : filteredTasks.length === 0 ? (
-        <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem 2rem' }}>
-          <p style={{ color: 'var(--text-muted)', margin: 0 }}>No hay tareas que coincidan con los filtros aplicados.</p>
+          <h2 style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>No hay tareas para mostrar</h2>
+          <p style={{ color: 'var(--text-muted)' }}>Prueba con otra búsqueda o cambia el filtro de estado.</p>
         </div>
       ) : (
-        /* Acordeones por Disciplina idénticos al profesor */
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          {groupedTasks.map(group => {
-            const isExpanded = !!expandedTopics[group.id];
-            if (group.tasks.length === 0 && (searchTerm || statusFilter !== 'ALL')) {
-              // Ocultar categorías vacías si hay búsqueda activa
-              return null;
-            }
+          {groupedMaterials.map((group) => {
+            const isExpanded = Boolean(expandedCategories[group.id]);
+            return (
+            <section key={group.id} className="glass-panel" style={{ padding: '1.25rem' }}>
+              <header onClick={() => toggleCategory(group.id)} role="button" tabIndex={0} aria-expanded={isExpanded} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleCategory(group.id); } }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.65rem', cursor: 'pointer', userSelect: 'none' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                  <h2 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-main)' }}>{group.label}</h2>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.2rem 0.6rem', borderRadius: '12px', background: group.materials.length + group.structuredTasks.length ? 'var(--primary-light)' : 'var(--surface-alt)', color: group.materials.length + group.structuredTasks.length ? 'var(--primary-text)' : 'var(--text-muted)' }}>{group.materials.length + group.structuredTasks.length} {group.materials.length + group.structuredTasks.length === 1 ? 'tarea' : 'tareas'}</span>
+                </div>
+                {isExpanded ? <ChevronUp size={20} style={{ color: 'var(--text-muted)' }} /> : <ChevronDown size={20} style={{ color: 'var(--text-muted)' }} />}
+              </header>
+              {isExpanded && <>
+              <div style={{ borderTop: '1px solid var(--border)', marginTop: '0.85rem', paddingTop: '1rem' }}>
+              {group.materials.length === 0 && group.structuredTasks.length === 0 ? (
+                <p style={{ margin: 0, padding: '0.5rem 0', color: 'var(--text-muted)', fontSize: '0.88rem', fontStyle: 'italic' }}>No hay tareas asignadas en esta materia.</p>
+              ) : (
+              <><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '1.25rem' }}>
+          {group.materials.map((material) => {
+            const examData = parseSavedExam(material.submissionContent);
+            const isExam = material.type === 'FORM' || Boolean(examData);
 
             return (
-              <div key={group.id} className="glass-panel" style={{ padding: '1.25rem 1.5rem', borderRadius: '12px' }}>
-                <div
-                  onClick={() => toggleTopic(group.id)}
-                  role="button"
-                  tabIndex={0}
-                  aria-expanded={isExpanded}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleTopic(group.id); } }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: '0.75rem',
-                    cursor: 'pointer',
-                    userSelect: 'none'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--text-main)' }}>
-                      {group.label}
-                    </h3>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '0.2rem 0.6rem', borderRadius: '12px', background: group.tasks.length > 0 ? 'var(--primary-light)' : 'var(--surface-alt)', color: group.tasks.length > 0 ? 'var(--primary-text)' : 'var(--text-muted)' }}>
-                      {group.tasks.length} {group.tasks.length === 1 ? 'tarea' : 'tareas'}
-                    </span>
+              <article key={material.id} className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: '310px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.15rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#2b6cb0', fontSize: '0.76rem', fontWeight: 700, textTransform: 'uppercase' }}>
+                    <span style={{ padding: '0.45rem', borderRadius: '8px', background: '#eef6fc', display: 'flex' }}><FileText size={18} /></span>
+                    {isExam ? 'Examen Interactivo' : material.type === 'VIDEO' ? 'Vídeo' : 'Tarea / Redacción'}
                   </div>
-
+                  <span style={{ padding: '0.2rem 0.55rem', borderRadius: '12px', background: 'var(--primary-light)', color: 'var(--primary-text)', border: '1px solid var(--primary-border)', fontSize: '0.72rem', fontWeight: 700 }}>{material.level}</span>
+                </div>
+                <h2 style={{ fontSize: '1.1rem', lineHeight: 1.35, marginBottom: '0.55rem' }}>{material.title}</h2>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.86rem', lineHeight: 1.45, marginBottom: '1.25rem', flex: 1 }}>{material.description}</p>
+                <div style={{ display: 'grid', gap: '0.45rem', borderTop: '1px solid var(--border)', paddingTop: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  {material.deadline && (() => {
+                    let color = 'var(--text-muted)';
+                    if (material.status === 'PENDING' && material.rawDeadline) {
+                      const diff = new Date(material.rawDeadline).getTime() - new Date().getTime();
+                      const hours = diff / (1000 * 60 * 60);
+                      if (hours < 0) color = '#e53e3e';
+                      else if (hours < 48) color = '#d69e2e';
+                    }
+                    return (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color, fontWeight: color !== 'var(--text-muted)' ? 'bold' : 'normal' }}>
+                        <CalendarDays size={14} /> Entrega: {material.deadline}
+                      </span>
+                    );
+                  })()}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginTop: '1.25rem' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: material.status === 'COMPLETED' ? '#24583e' : '#8d5b12', background: material.status === 'COMPLETED' ? 'var(--primary-light)' : '#fef7e8', padding: '0.3rem 0.65rem', borderRadius: '14px', border: material.status === 'COMPLETED' ? '1px solid var(--primary-border)' : '1px solid #fae0b0', fontSize: '0.82rem', fontWeight: 700 }}>
+                    {material.status === 'COMPLETED' ? <><CheckCircle2 size={16} /> Entregado</> : <><Clock3 size={16} /> Pendiente</>}
+                  </span>
                   <button
-                    type="button"
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}
-                    aria-label={isExpanded ? 'Contraer disciplina' : 'Expandir disciplina'}
+                    onClick={() => {
+                      if (material.status === 'COMPLETED' && isExam) {
+                        setReviewingMaterial(material);
+                      } else {
+                        openMaterialModal(material);
+                      }
+                    }}
+                    className="btn-primary"
+                    style={{ padding: '0.55rem 0.9rem', fontSize: '0.84rem' }}
                   >
-                    {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                    {material.status === 'COMPLETED' ? (isExam ? 'Ver Examen' : 'Ver Entrega') : (userRole === 'PARENT' ? 'Ver Detalle' : 'Realizar Tarea')}
                   </button>
                 </div>
-
-                {isExpanded && (
-                  <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    {group.tasks.length === 0 ? (
-                      <p style={{ color: 'var(--text-muted)', fontStyle: 'italic', margin: '0.5rem 0', paddingLeft: '0.5rem', fontSize: '0.88rem' }}>
-                        Sin tareas asignadas en esta disciplina.
-                      </p>
-                    ) : (
-                      group.tasks.map((task) => {
-                        const taskItem: TaskItem = {
-                          id: task.id,
-                          title: task.title,
-                          description: task.description,
-                          dueDate: task.dueDate,
-                          category: task.category,
-                          isSequential: task.isSequential,
-                          isTemplate: task.isTemplate,
-                          assignmentType: task.assignmentType,
-                          courseId: task.courseId,
-                          steps: (task.steps || []).map((s: any) => ({
-                            id: s.id,
-                            order: s.order,
-                            title: s.title,
-                            materialId: s.materialId,
-                            material: s.material,
-                            requiresSubmission: s.requiresSubmission,
-                            isEvaluable: s.isEvaluable,
-                            isCompleted: s.isCompleted,
-                            submission: s.submission
-                          }))
-                        };
-
-                        return (
-                          <TaskCard
-                            key={task.id}
-                            task={taskItem}
-                            mode="STUDENT"
-                            onOpenStep={(step) => handleOpenStep(step, taskItem)}
-                            onReviewStep={(step) => handleReviewStep(step, taskItem)}
-                          />
-                        );
-                      })
-                    )}
-                  </div>
-                )}
+              </article>
+            );
+          })}
               </div>
+              {group.structuredTasks.map((task) => (
+                <article key={task.id} className="glass-panel" style={{ marginTop: '1rem', padding: '1rem 1.15rem', border: '1px solid var(--primary-border)' }}>
+                  <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+                    <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1rem' }}>{task.title}</h3>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      {task.isSequential && <span style={{ padding: '0.2rem 0.55rem', borderRadius: '12px', background: '#fef3c7', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}>Paso a paso</span>}
+                      <span style={{ padding: '0.2rem 0.55rem', borderRadius: '12px', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.72rem', fontWeight: 700 }}>{task.steps.length} pasos</span>
+                    </div>
+                  </header>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                    {task.steps.map((step) => (
+                      <div key={step.id} style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.75rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)' }}>
+                        <input type="checkbox" checked={Boolean(step.isCompleted)} disabled style={{ width: '20px', height: '20px', accentColor: 'var(--primary)' }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <strong style={{ fontSize: '0.9rem', color: step.isCompleted ? 'var(--text-muted)' : 'var(--text-main)', textDecoration: step.isCompleted ? 'line-through' : 'none' }}>{step.order}. {step.title}</strong>
+                          {step.material && <button type="button" onClick={() => openStructuredResource(step, task)} disabled={!step.material.url && step.material.type !== 'FORM'} style={{ display: 'inline-flex', marginTop: '0.45rem', padding: '0.35rem 0.65rem', borderRadius: '10px', border: '1px solid var(--primary-border)', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>[ {step.material.type} ] {step.material.title}</button>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </article>
+              ))}</>
+              )}
+              </div>
+              </>}
+            </section>
             );
           })}
         </div>
       )}
 
-      {/* Modal: FormPlayer para Examen Interactivo */}
-      {viewingForm && createPortal(
-        <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.25rem', background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)' }}>
-          <div className="modal-card modal-card--player" style={{ width: '100%', maxWidth: '980px', maxHeight: '90vh', overflowY: 'auto', background: 'var(--background)', borderRadius: '14px', padding: '1.5rem', margin: 'auto', position: 'relative' }}>
-            <button onClick={() => setViewingForm(null)} aria-label="Cerrar examen" className="modal-close"><X size={22} /></button>
-            {userRole === 'PARENT' ? (
-              <div style={{ padding: '2rem', textAlign: 'center', color: '#24583e', background: '#eaf4ef', borderRadius: '10px', border: '1px solid #bfe0d0', margin: '2rem 0', fontWeight: 600 }}>
-                Vista del Tutor (Solo Lectura): el examen debe ser realizado directamente por el alumno.
-              </div>
-            ) : (
-              <FormPlayer
-                title={viewingForm.title}
-                description={viewingForm.material?.description || undefined}
-                questions={(viewingForm.material?.formData?.questions as never[]) || []}
-                onFinish={async (_score, _total, answers) => {
-                  try {
-                    const token = localStorage.getItem('token');
-                    const response = await fetch(`${apiUrl}/api/structured-tasks/steps/${viewingForm.stepId}/submit-form`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                      body: JSON.stringify({ answers })
+      {uncategorizedStructuredTasks.length > 0 && (
+        <section style={{ marginTop: '2rem' }}>
+          <h2 style={{ margin: '0 0 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-main)', fontSize: '1.2rem' }}>
+            <FileText size={20} style={{ color: 'var(--primary)' }} /> Tareas Estructuradas
+          </h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+            {uncategorizedStructuredTasks.map((task) => (
+              <article key={task.id} className="glass-panel" style={{ padding: '1rem 1.15rem', border: '1px solid var(--primary-border)' }}>
+                <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+                  <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1rem' }}>{task.title}</h3>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    {task.isSequential && <span style={{ padding: '0.2rem 0.55rem', borderRadius: '12px', background: '#fef3c7', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}>Paso a paso</span>}
+                    <span style={{ padding: '0.2rem 0.55rem', borderRadius: '12px', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.72rem', fontWeight: 700 }}>{task.steps.length} pasos</span>
+                  </div>
+                </header>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                  {(() => {
+                    let firstIncompleteFound = false;
+                    return task.steps.map((step) => {
+                      const isBlocked = task.isSequential && firstIncompleteFound;
+                      if (!step.isCompleted) firstIncompleteFound = true;
+                      
+                      return (
+                        <div key={step.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.85rem', padding: '0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)', opacity: isBlocked ? 0.6 : 1, pointerEvents: isBlocked ? 'none' : 'auto' }}>
+                          <div style={{ paddingTop: '0.15rem' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={step.isCompleted} 
+                              disabled={isBlocked || step.isCompleted}
+                              onChange={(e) => {
+                                if (e.target.checked) handleTick(step, task);
+                              }}
+                              style={{ width: '22px', height: '22px', cursor: (isBlocked || step.isCompleted) ? 'default' : 'pointer', accentColor: 'var(--primary)' }}
+                            />
+                          </div>
+                          
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', color: 'var(--text-main)', fontSize: '0.95rem' }}>
+                              <span style={{ fontWeight: 600, textDecoration: step.isCompleted ? 'line-through' : 'none', color: step.isCompleted ? 'var(--text-muted)' : 'inherit' }}>
+                                {step.order}. {step.title}
+                              </span>
+                            </div>
+                            
+                            {step.material && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                <button 
+                                  type="button" 
+                                  onClick={() => openStructuredResource(step, task)}
+                                  disabled={!step.material?.url && step.material?.type !== 'FORM'} 
+                                  style={{ padding: '0.35rem 0.65rem', borderRadius: '10px', border: '1px solid var(--primary-border)', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.78rem', fontWeight: 700, cursor: (step.material?.url || step.material?.type === 'FORM') ? 'pointer' : 'default', opacity: (step.material?.url || step.material?.type === 'FORM') ? 1 : 0.6 }}
+                                >
+                                  [ {step.material.type} ] {step.material.title}
+                                </button>
+                                
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
                     });
-                    if (response.ok) {
-                      await fetchTasks();
-                    }
-                  } catch (err) {
-                    console.error('Error al enviar respuestas:', err);
-                  }
-                }}
-                onClose={() => setViewingForm(null)}
-              />
-            )}
+                  })()}
+                </div>
+              </article>
+            ))}
           </div>
-        </div>,
-        document.body
+        </section>
       )}
 
-      {/* Modal: Revisar Examen Realizado */}
-      {reviewingExam && (
-        <ExamReviewModal
-          title={reviewingExam.title}
-          questions={reviewingExam.questions}
-          answers={reviewingExam.answers}
-          score={reviewingExam.score}
-          total={reviewingExam.total}
-          onClose={() => setReviewingExam(null)}
-        />
-      )}
-
-      {/* Modal: Entregar Paso Manual */}
-      {deliveryTarget && createPortal(
-        <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)' }}>
-          <div className="modal-card" style={{ width: '100%', maxWidth: '620px', maxHeight: 'calc(100vh - 2rem)', overflowY: 'auto', background: 'var(--background)', borderRadius: '12px', padding: '1.5rem', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '1rem' }}>
+      {/* Modal Principal de Tarea / Entrega */}
+      {viewingMaterial && createPortal(
+        <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'stretch', justifyContent: 'center', zIndex: 100, padding: '0.75rem 1rem 0', overflow: 'hidden' }}>
+          <div className="modal-card modal-card--player" style={{ width: '100%', maxWidth: viewingMaterial.type === 'FORM' ? '980px' : '920px', height: 'calc(100vh - 0.75rem)', background: 'var(--background)', borderRadius: '12px 12px 0 0', overflow: 'hidden', display: 'flex', flexDirection: 'column', margin: '0 auto', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
+            
+            {/* Header del Modal */}
+            <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface)' }}>
               <div>
-                <span style={{ color: 'var(--primary)', fontSize: '0.76rem', fontWeight: 700, textTransform: 'uppercase' }}>Entrega de Tarea</span>
-                <h2 style={{ margin: '0.2rem 0 0', fontSize: '1.25rem', color: 'var(--text-main)' }}>{deliveryTarget.title}</h2>
+                <span style={{ color: 'var(--primary)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  {viewingMaterial.type === 'FORM' ? 'EXAMEN / TEST INTERACTIVO' : 'TRABAJO DE CLASE Y ENTREGA'}
+                </span>
+                <h2 style={{ margin: '0.2rem 0 0', fontSize: '1.25rem', color: 'var(--text-main)' }}>{viewingMaterial.title}</h2>
               </div>
-              <button onClick={() => setDeliveryTarget(null)} aria-label="Cerrar entrega" className="modal-close"><X size={22} /></button>
+              <button onClick={() => setViewingMaterial(null)} className="modal-close" aria-label="Cerrar modal"><X size={22} /></button>
             </div>
-
-            {deliveryTarget.description && (
-              <div style={{ padding: '0.9rem 1rem', background: 'var(--surface-alt)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-main)', fontSize: '0.9rem', lineHeight: 1.5, marginBottom: '1rem' }}>
-                {deliveryTarget.description}
-              </div>
-            )}
-
-            {deliveryTarget.materialUrl && (
-              <div style={{ marginBottom: '1.25rem' }}>
-                <a
-                  href={deliveryTarget.materialUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn-secondary"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}
-                >
-                  <ExternalLink size={16} /> Abrir material adjunto original
-                </a>
-              </div>
-            )}
-
-            {userRole === 'PARENT' ? (
-              <div style={{ padding: '1.5rem', textAlign: 'center', background: 'var(--surface-alt)', borderRadius: '8px', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-                Vista del Tutor (Solo Lectura): las entregas deben ser realizadas por el alumno.
-              </div>
-            ) : (
-              <form onSubmit={submitDelivery} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {deliveryTarget.requiresSubmission !== false && (
-                  <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.25rem' }}>
+            
+            {/* Contenido del Modal */}
+            <div style={{ padding: '1.5rem', flex: 1, minHeight: 0, overflowY: 'auto' }}>
+              {viewingMaterial.type === 'FORM' && viewingMaterial.formData ? (
+                viewingMaterial.status === 'COMPLETED' ? (
+                  <div style={{ textAlign: 'center', padding: '3rem' }}>
+                    <CheckCircle2 size={64} style={{ color: '#22c55e', margin: '0 auto 1rem' }} />
+                    <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Examen completado con éxito</h2>
+                    <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
+                      Puedes consultar el desglose y corrección detallada en la pestaña de Calificaciones.
+                    </p>
                     <button
                       type="button"
-                      onClick={() => setDeliveryType('TEXT')}
-                      className={`btn-tab ${deliveryType === 'TEXT' ? 'active' : ''}`}
-                      style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', padding: '0.5rem', fontSize: '0.85rem', borderRadius: '6px', cursor: 'pointer', border: deliveryType === 'TEXT' ? '1px solid var(--primary)' : '1px solid var(--border)', background: deliveryType === 'TEXT' ? 'var(--primary-light)' : 'transparent', color: deliveryType === 'TEXT' ? 'var(--primary-text)' : 'var(--text-main)', fontWeight: deliveryType === 'TEXT' ? 700 : 500 }}
+                      onClick={() => {
+                        const target = viewingMaterial;
+                        setViewingMaterial(null);
+                        setReviewingMaterial(target);
+                      }}
+                      className="btn-primary"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', margin: '0 auto' }}
                     >
-                      <PenTool size={15} /> Redacción
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDeliveryType('LINK')}
-                      className={`btn-tab ${deliveryType === 'LINK' ? 'active' : ''}`}
-                      style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', padding: '0.5rem', fontSize: '0.85rem', borderRadius: '6px', cursor: 'pointer', border: deliveryType === 'LINK' ? '1px solid var(--primary)' : '1px solid var(--border)', background: deliveryType === 'LINK' ? 'var(--primary-light)' : 'transparent', color: deliveryType === 'LINK' ? 'var(--primary-text)' : 'var(--text-main)', fontWeight: deliveryType === 'LINK' ? 700 : 500 }}
-                    >
-                      <LinkIcon size={15} /> Enlace Nube
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDeliveryType('SIMPLE')}
-                      className={`btn-tab ${deliveryType === 'SIMPLE' ? 'active' : ''}`}
-                      style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', padding: '0.5rem', fontSize: '0.85rem', borderRadius: '6px', cursor: 'pointer', border: deliveryType === 'SIMPLE' ? '1px solid var(--primary)' : '1px solid var(--border)', background: deliveryType === 'SIMPLE' ? 'var(--primary-light)' : 'transparent', color: deliveryType === 'SIMPLE' ? 'var(--primary-text)' : 'var(--text-main)', fontWeight: deliveryType === 'SIMPLE' ? 700 : 500 }}
-                    >
-                      <CheckCircle2 size={15} /> Marcar Hecho
+                      <FileText size={16} /> Ver Examen Corregido
                     </button>
                   </div>
-                )}
-
-                {deliveryType === 'TEXT' && (
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem' }}>Tu respuesta o redacción</label>
-                    <textarea
-                      value={deliveryText}
-                      onChange={(e) => setDeliveryText(e.target.value)}
-                      rows={5}
-                      placeholder="Escribe aquí tu entrega..."
-                      style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', resize: 'vertical' }}
-                    />
-                  </div>
-                )}
-
-                {deliveryType === 'LINK' && (
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem' }}>Enlace del documento (Google Docs, Drive, etc.)</label>
-                    <input
-                      type="url"
-                      value={deliveryLink}
-                      onChange={(e) => setDeliveryLink(e.target.value)}
-                      placeholder="https://docs.google.com/..."
-                      style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
-                    />
-                  </div>
-                )}
-
-                {deliveryType === 'SIMPLE' && (
-                  <div style={{ padding: '0.85rem 1rem', background: '#eaf4ef', borderRadius: '8px', border: '1px solid #bfe0d0', color: '#24583e', fontSize: '0.88rem' }}>
-                    Al pulsar en Entregar, se marcará este paso como completado y el profesor podrá revisarlo.
-                  </div>
-                )}
-
-                <div>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem', cursor: 'pointer' }}>
-                    <Paperclip size={15} /> Archivo adjunto opcional (PDF, imagen - Máx. 10MB)
-                  </label>
-                  <input type="file" onChange={handleDeliveryAttachment} style={{ fontSize: '0.85rem', color: 'var(--text-main)' }} />
-                  {deliveryAttachment && (
-                    <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span>✓ {deliveryAttachment.name} ({deliveryAttachment.size ? `${(deliveryAttachment.size / 1024 / 1024).toFixed(2)} MB` : 'Listo'})</span>
-                      <button type="button" onClick={() => setDeliveryAttachment(null)} style={{ background: 'none', border: 'none', color: '#c53030', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700 }}>Quitar</button>
+                ) : (
+                  <FormPlayer 
+                    title={viewingMaterial.title} 
+                    description={viewingMaterial.description} 
+                    questions={viewingMaterial.formData.questions} 
+                    onFinish={handleFormFinish} 
+                  />
+                )
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  {/* Bloque 1: Instrucciones y Material Adjunto */}
+                  {viewingMaterial.description && (
+                    <div style={{ padding: '1.15rem 1.25rem', background: 'var(--surface-alt)', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                      <h3 style={{ margin: '0 0 0.4rem 0', fontSize: '0.98rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <FileText size={17} style={{ color: 'var(--primary)' }} /> Instrucciones de la tarea
+                      </h3>
+                      <p style={{ margin: 0, fontSize: '0.92rem', color: 'var(--text-main)', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>
+                        {viewingMaterial.description}
+                      </p>
                     </div>
                   )}
-                </div>
 
-                {deliveryError && (
-                  <div style={{ padding: '0.75rem', background: '#fee2e2', border: '1px solid #ef4444', borderRadius: '6px', color: '#b91c1c', fontSize: '0.85rem' }}>
-                    {deliveryError}
+                  {viewingMaterial.url && (
+                    <div>
+                      <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.92rem', color: 'var(--text-muted)' }}>Material de consulta:</h4>
+                      <DocumentViewer url={viewingMaterial.url} title={viewingMaterial.title} />
+                    </div>
+                  )}
+
+                  {/* Bloque 2: Área de Entrega del Alumno */}
+                  <div className="glass-panel" style={{ padding: '1.5rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <PenTool size={18} style={{ color: 'var(--primary)' }} /> Tu Entrega
+                      </h3>
+
+                      {viewingMaterial.status === 'COMPLETED' ? (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                          padding: '0.3rem 0.75rem',
+                          borderRadius: '16px',
+                          background: '#eaf4ef',
+                          color: '#24583e',
+                          border: '1px solid #bfe0d0',
+                          fontWeight: 700,
+                          fontSize: '0.85rem'
+                        }}>
+                          <CheckCircle2 size={15} /> Entregada el {viewingMaterial.submittedAt ? new Date(viewingMaterial.submittedAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'recientemente'}
+                        </span>
+                      ) : (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                          padding: '0.3rem 0.75rem',
+                          borderRadius: '16px',
+                          background: '#fef7e8',
+                          color: '#8d5b12',
+                          border: '1px solid #fae0b0',
+                          fontWeight: 600,
+                          fontSize: '0.82rem'
+                        }}>
+                          <Clock3 size={14} /> Pendiente de entrega
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Caso A: Tarea ya completada */}
+                    {viewingMaterial.status === 'COMPLETED' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        {(() => {
+                          const submissionDetails = parseSubmissionContent(viewingMaterial.submissionContent);
+                          const hasLink = Boolean(submissionDetails.link);
+                          const hasAttachment = Boolean(submissionDetails.attachment && submissionDetails.attachment.dataUrl);
+                          const renderedText = submissionDetails.text?.trim();
+
+                          return (
+                            <div style={{ padding: '1rem', background: 'var(--surface-alt)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                              <span style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
+                                Contenido que enviaste:
+                              </span>
+                              {hasLink ? (
+                                <a
+                                  href={submissionDetails.link!}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.4rem',
+                                    color: 'var(--primary)',
+                                    fontWeight: 600,
+                                    textDecoration: 'none',
+                                    padding: '0.5rem 0.85rem',
+                                    background: 'var(--surface)',
+                                    borderRadius: '6px',
+                                    border: '1px solid var(--border)'
+                                  }}
+                                >
+                                  <ExternalLink size={15} /> Abrir documento entregado en la nube
+                                </a>
+                              ) : renderedText ? (
+                                <p style={{ margin: 0, color: 'var(--text-main)', fontSize: '0.92rem', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                                  {renderedText}
+                                </p>
+                              ) : hasAttachment ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+                                  <span style={{ color: 'var(--text-main)', fontSize: '0.92rem' }}>Archivo adjunto enviado:</span>
+                                  <a
+                                    href={submissionDetails.attachment!.dataUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    download={submissionDetails.attachment!.name}
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}
+                                  >
+                                    <FileText size={15} /> {submissionDetails.attachment!.name}
+                                  </a>
+                                </div>
+                              ) : (
+                                <p style={{ margin: 0, color: 'var(--text-main)', fontSize: '0.92rem', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                                  Tarea marcada como completada.
+                                </p>
+                              )}
+                              {hasAttachment && submissionDetails.attachment && (
+                                <div style={{ marginTop: '0.75rem' }}>
+                                  <a
+                                    href={submissionDetails.attachment.dataUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    download={submissionDetails.attachment.name}
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: 'var(--primary)', fontWeight: 700, textDecoration: 'none' }}
+                                  >
+                                    <ExternalLink size={14} /> Descargar archivo adjunto
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+
+                        {/* Calificación y feedback del profesor si existe */}
+                        {viewingMaterial.submissionGrade !== null && viewingMaterial.submissionGrade !== undefined ? (
+                          <div style={{ padding: '1rem 1.25rem', background: 'var(--primary-light)', borderRadius: '8px', border: '1px solid var(--primary-border)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: viewingMaterial.submissionFeedback ? '0.5rem' : 0 }}>
+                              <span style={{ fontWeight: 700, color: 'var(--primary-text)', fontSize: '0.9rem' }}>
+                                Calificación del profesor:
+                              </span>
+                              <strong style={{ fontSize: '1.15rem', color: 'var(--primary-text)' }}>
+                                {viewingMaterial.submissionGrade.toFixed(1)} / 10
+                              </strong>
+                            </div>
+                            {viewingMaterial.submissionFeedback && (
+                              <p style={{ margin: 0, fontSize: '0.88rem', color: 'var(--text-main)', lineHeight: 1.45, borderTop: '1px dashed var(--primary-border)', paddingTop: '0.5rem' }}>
+                                💬 <em>"{viewingMaterial.submissionFeedback}"</em>
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-muted)', fontSize: '0.84rem', fontStyle: 'italic' }}>
+                            <Clock3 size={15} /> Tu profesor revisará y calificará esta entrega próximamente.
+                          </div>
+                        )}
+                      </div>
+                    ) : userRole === 'PARENT' ? (
+                      <div style={{ padding: '1rem 1.25rem', background: '#eaf4ef', borderRadius: '8px', border: '1px solid #bfe0d0', color: '#24583e', fontSize: '0.88rem', fontWeight: 600 }}>
+                        🛡️ Vista del Tutor (Modo Solo Lectura): Esta tarea está pendiente de entrega por parte del alumno.
+                      </div>
+                    ) : (
+                      /* Caso B: Formulario interactivo para enviar la entrega */
+                      <form onSubmit={handleSubmitAssignment} style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
+                        {submitError && (
+                          <div style={{ padding: '0.75rem 1rem', background: '#fdf0f0', color: '#9e2a2b', border: '1px solid #f7caca', borderRadius: '8px', fontSize: '0.88rem' }}>
+                            {submitError}
+                          </div>
+                        )}
+
+                        {/* Selector de tipo de entrega */}
+                        {!viewingMaterial.structuredStepId && <div>
+                          <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                            ¿Cómo deseas realizar tu entrega?
+                          </label>
+                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              onClick={() => setDeliveryType('TEXT')}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.4rem',
+                                padding: '0.5rem 0.9rem',
+                                borderRadius: '8px',
+                                border: deliveryType === 'TEXT' ? '1px solid var(--primary)' : '1px solid var(--border)',
+                                background: deliveryType === 'TEXT' ? 'var(--primary-light)' : 'var(--surface-alt)',
+                                color: deliveryType === 'TEXT' ? 'var(--primary-text)' : 'var(--text-main)',
+                                fontWeight: deliveryType === 'TEXT' ? 700 : 500,
+                                fontSize: '0.85rem',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <PenTool size={15} /> Redacción / Escribir texto
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setDeliveryType('LINK')}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.4rem',
+                                padding: '0.5rem 0.9rem',
+                                borderRadius: '8px',
+                                border: deliveryType === 'LINK' ? '1px solid var(--primary)' : '1px solid var(--border)',
+                                background: deliveryType === 'LINK' ? 'var(--primary-light)' : 'var(--surface-alt)',
+                                color: deliveryType === 'LINK' ? 'var(--primary-text)' : 'var(--text-main)',
+                                fontWeight: deliveryType === 'LINK' ? 700 : 500,
+                                fontSize: '0.85rem',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <Link size={15} /> Enlace en la nube (Docs / Drive / PDF)
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setDeliveryType('SIMPLE')}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.4rem',
+                                padding: '0.5rem 0.9rem',
+                                borderRadius: '8px',
+                                border: deliveryType === 'SIMPLE' ? '1px solid var(--primary)' : '1px solid var(--border)',
+                                background: deliveryType === 'SIMPLE' ? 'var(--primary-light)' : 'var(--surface-alt)',
+                                color: deliveryType === 'SIMPLE' ? 'var(--primary-text)' : 'var(--text-main)',
+                                fontWeight: deliveryType === 'SIMPLE' ? 700 : 500,
+                                fontSize: '0.85rem',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <Check size={15} /> Solo marcar realizada
+                            </button>
+                          </div>
+                        </div>}
+
+                        {viewingMaterial.structuredStepId && (
+                          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.85rem', lineHeight: 1.45 }}>
+                            Puedes añadir una breve respuesta, un archivo adjunto o entregar el paso sin contenido.
+                          </p>
+                        )}
+
+                        {/* Campo: Redacción de Texto */}
+                        {deliveryType === 'TEXT' && (
+                          <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                              <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                                {viewingMaterial.structuredStepId ? 'Breve redacción (opcional):' : 'Tu Redacción o Respuestas:'}
+                              </label>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                {textSubmission.length} caracteres
+                              </span>
+                            </div>
+                            <textarea
+                              rows={6}
+                              required={!viewingMaterial.structuredStepId}
+                              placeholder={viewingMaterial.structuredStepId ? 'Escribe una breve respuesta o comentario...' : 'Escribe aquí tu ensayo, respuestas a los ejercicios o redacción para que tu profesor la corrija...'}
+                              value={textSubmission}
+                              onChange={e => setTextSubmission(e.target.value)}
+                              style={{
+                                width: '100%',
+                                padding: '0.85rem 1rem',
+                                borderRadius: '8px',
+                                border: '1px solid var(--border)',
+                                background: 'var(--surface-alt)',
+                                color: 'var(--text-main)',
+                                fontSize: '0.92rem',
+                                lineHeight: '1.5',
+                                resize: 'vertical',
+                                outline: 'none'
+                              }}
+                              autoFocus
+                            />
+                          </div>
+                        )}
+
+                        {viewingMaterial.type !== 'FORM' && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                              Archivo adjunto (opcional)
+                            </label>
+                            <input
+                              type="file"
+                              onChange={handleAttachmentChange}
+                              style={{ width: '100%', padding: '0.7rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
+                            />
+                            {attachmentFile && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', padding: '0.7rem 0.8rem', borderRadius: '8px', background: 'var(--primary-light)', border: '1px solid var(--primary-border)', color: 'var(--primary-text)', fontSize: '0.83rem' }}>
+                                <Check size={15} />
+                                <span>{attachmentFile.name}</span>
+                                <button type="button" onClick={() => setAttachmentFile(null)} style={{ background: 'transparent', border: 'none', color: 'var(--primary-text)', cursor: 'pointer', fontWeight: 700, padding: 0 }}>
+                                  Quitar
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Campo: Enlace a Documento */}
+                        {!viewingMaterial.structuredStepId && deliveryType === 'LINK' && (
+                          <div>
+                            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.35rem' }}>
+                              Enlace de tu documento compartido:
+                            </label>
+                            <input
+                              type="url"
+                              required
+                              placeholder="https://docs.google.com/document/d/... o enlace a Dropbox/OneDrive"
+                              value={urlSubmission}
+                              onChange={e => setUrlSubmission(e.target.value)}
+                              style={{
+                                width: '100%',
+                                padding: '0.75rem 1rem',
+                                borderRadius: '8px',
+                                border: '1px solid var(--border)',
+                                background: 'var(--surface-alt)',
+                                color: 'var(--text-main)',
+                                fontSize: '0.9rem',
+                                outline: 'none'
+                              }}
+                              autoFocus
+                            />
+                            <small style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                              Asegúrate de que el documento tenga permisos de lectura abiertos para tu profesor.
+                            </small>
+                          </div>
+                        )}
+
+                        {/* Campo: Simple */}
+                        {!viewingMaterial.structuredStepId && deliveryType === 'SIMPLE' && (
+                          <div style={{ padding: '0.85rem 1rem', background: 'var(--surface-alt)', borderRadius: '8px', fontSize: '0.88rem', color: 'var(--text-muted)' }}>
+                            Al pulsar en Entregar, se notificará a tu profesor de que has leído y completado la actividad.
+                          </div>
+                        )}
+
+                        {/* Botón de Enviar */}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+                          <button
+                            type="button"
+                            onClick={() => setViewingMaterial(null)}
+                            style={{
+                              padding: '0.65rem 1.25rem',
+                              borderRadius: '8px',
+                              border: '1px solid var(--border)',
+                              background: 'transparent',
+                              color: 'var(--text-main)',
+                              cursor: 'pointer',
+                              fontWeight: 600
+                            }}
+                          >
+                            Cerrar
+                          </button>
+
+                          <button
+                            type="submit"
+                            disabled={isSubmitting}
+                            className="btn-primary"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.5rem',
+                              padding: '0.65rem 1.5rem',
+                              fontSize: '0.92rem'
+                            }}
+                          >
+                            <Send size={16} />
+                            {isSubmitting ? 'Entregando...' : 'Entregar Tarea al Profesor'}
+                          </button>
+                        </div>
+                      </form>
+                    )}
                   </div>
-                )}
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
-                  <button type="button" onClick={() => setDeliveryTarget(null)} className="btn-secondary">Cancelar</button>
-                  <button type="submit" disabled={isSubmittingDelivery} className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <Send size={15} /> {isSubmittingDelivery ? 'Entregando...' : 'Confirmar Entrega'}
-                  </button>
                 </div>
-              </form>
-            )}
+              )}
+            </div>
           </div>
-        </div>,
-        document.body
+        </div>, document.body
       )}
 
-      {/* Modal: Revisar Entrega Manual Realizada */}
-      {reviewingSubmission && createPortal(
-        <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.25rem', background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)' }}>
-          <div className="modal-card" style={{ width: '100%', maxWidth: '640px', maxHeight: '90vh', overflowY: 'auto', background: 'var(--background)', borderRadius: '14px', padding: '1.75rem', position: 'relative' }}>
-            <button onClick={() => setReviewingSubmission(null)} aria-label="Cerrar revisión" className="modal-close"><X size={22} /></button>
-            <h2 style={{ margin: '0 0 1rem', fontSize: '1.35rem', color: 'var(--text-main)' }}>Detalles de la Entrega</h2>
-
-            <div style={{ marginBottom: '1.25rem', padding: '1rem', background: 'var(--surface-alt)', borderRadius: '8px', border: '1px solid var(--border)' }}>
-              <h4 style={{ margin: '0 0 0.4rem', color: 'var(--text-main)' }}>{reviewingSubmission.title}</h4>
-              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                Entregado el: {reviewingSubmission.submission?.submittedAt ? new Date(reviewingSubmission.submission.submittedAt).toLocaleString('es-ES') : 'Fecha no disponible'}
-              </p>
-            </div>
-
-            {(() => {
-              const parsed = parseSubmissionContent(reviewingSubmission.submission?.content);
-              return (
-                <>
-                  {parsed.text && (
-                    <div style={{ marginBottom: '1.25rem' }}>
-                      <h4 style={{ margin: '0 0 0.4rem', color: 'var(--text-main)', fontSize: '0.92rem' }}>Tu respuesta / redacción:</h4>
-                      <div style={{ padding: '0.85rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '0.9rem', whiteSpace: 'pre-wrap', maxHeight: '200px', overflowY: 'auto' }}>
-                        {parsed.text}
-                      </div>
-                    </div>
-                  )}
-
-                  {parsed.link && (
-                    <div style={{ marginBottom: '1.25rem' }}>
-                      <h4 style={{ margin: '0 0 0.4rem', color: 'var(--text-main)', fontSize: '0.92rem' }}>Enlace entregado:</h4>
-                      <a href={parsed.link} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: 'var(--primary)', wordBreak: 'break-all', fontWeight: 600 }}>
-                        <LinkIcon size={16} /> {parsed.link}
-                      </a>
-                    </div>
-                  )}
-
-                  {parsed.attachment && (
-                    <div style={{ marginBottom: '1.25rem' }}>
-                      <h4 style={{ margin: '0 0 0.4rem', color: 'var(--text-main)', fontSize: '0.92rem' }}>Archivo Adjunto:</h4>
-                      <a href={parsed.attachment.dataUrl} download={parsed.attachment.name} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: 'var(--primary)', fontWeight: 600 }}>
-                        <Paperclip size={16} /> Descargar {parsed.attachment.name}
-                      </a>
-                    </div>
-                  )}
-                </>
-              );
-            })()}
-
-            {/* Calificación y Feedback del Profesor */}
-            {reviewingSubmission.submission?.grade !== null && reviewingSubmission.submission?.grade !== undefined && (
-              <div style={{ padding: '1rem', background: '#eaf4ef', borderRadius: '8px', border: '1px solid #bfe0d0', color: '#24583e', marginBottom: '1rem' }}>
-                <strong>Calificación del Paso: {reviewingSubmission.submission.grade} / 10</strong>
-              </div>
-            )}
-
-            {reviewingSubmission.submission?.feedback && (
-              <div style={{ padding: '0.9rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #cbd5e1', color: '#334155', fontSize: '0.9rem' }}>
-                <strong style={{ display: 'block', marginBottom: '0.3rem', color: '#0f172a' }}>Comentarios del Profesor:</strong>
-                <p style={{ margin: 0, fontStyle: 'italic', whiteSpace: 'pre-wrap' }}>"{reviewingSubmission.submission.feedback}"</p>
-              </div>
-            )}
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
-              <button className="btn-secondary" onClick={() => setReviewingSubmission(null)}>Cerrar</button>
-            </div>
-          </div>
-        </div>,
-        document.body
+      {/* Modal de Revisión de Examen */}
+      {reviewingMaterial && (
+        <ExamReviewModal
+          title={reviewingMaterial.title}
+          questions={(reviewingMaterial.formData?.questions || []) as ReviewQuestion[]}
+          answers={parseSavedExam(reviewingMaterial.submissionContent)?.answers || {}}
+          score={reviewingMaterial.submissionGrade}
+          total={parseSavedExam(reviewingMaterial.submissionContent)?.total}
+          onClose={() => setReviewingMaterial(null)}
+        />
       )}
     </div>
   );

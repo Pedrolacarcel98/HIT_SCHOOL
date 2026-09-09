@@ -13,14 +13,14 @@ A continuación se detallan los 11 requerimientos acordados en la última reuni�
 | :-: | :--- | :--- | :-: |
 | **1** | **Extractos de pago por años con total** | Filtro por ejercicio anual y cuadro de totales (Total Facturado, Total Abonado, Saldo Pendiente) en el PDF. | `[x] Completado` |
 | **2** | **Calificaciones trimestrales (Middle & Final Term)** | 2 notas trimestrales. Presencial: media entre Middle/Final y tareas. Online: media 100% automática de tareas y exámenes. | `[ ] Pendiente` |
-| **3** | **Programación diferida de tareas** | Programar fecha/hora de publicación de tareas estilo Google Classroom (ocultas para el alumno hasta la fecha). | `[ ] Pendiente` |
-| **4** | **Adjuntar archivos del profesor en tareas** | Permitir al docente adjuntar documentos/archivos locales como material de apoyo descargable al crear la tarea. | `[ ] Pendiente` |
-| **5** | **Previsualización de audio en creador de exámenes** | Reproductor visual inmediato al asociar una pista de audio opcional a una pregunta interactiva. | `[ ] Pendiente` |
+| **3** | **Programación diferida de tareas** | Programar fecha/hora de publicación de tareas estilo Google Classroom (ocultas para el alumno hasta la fecha). | `[x] Completado` |
+| **4** | **Recursos del profesor mediante Google Drive** | El docente comparte recursos mediante enlaces individuales de Google Drive y el alumno puede descargar, completar y adjuntar documentos en su entrega. | `[x] Completado` |
+| **5** | **Previsualización de audio en creador de exámenes** | Reproductor visual inmediato al asociar una pista de audio opcional a una pregunta interactiva. | `[x] Completado` |
 | **6** | **Acceso directo Web desde móvil y ordenador (PWA)** | Configuración de Web App Manifest, meta tags e iconos para instalación directa en pantalla de inicio. | `[ ] Pendiente` |
-| **7** | **Fotos y vídeos locales en Tablón de Anuncios** | Subida y reproducción directa de imágenes y vídeos almacenados localmente en las publicaciones de clase. | `[ ] Pendiente` |
-| **8** | **Chat con visibilidad global para docentes** | Todos los profesores/administradores ven todos los chats de la academia; el alumno solo ve a quien se dirige. | `[ ] Pendiente` |
+| **7** | **Fotos y vídeos locales en Tablón de Anuncios** | Subida y reproducción directa de imágenes y vídeos almacenados localmente en las publicaciones de clase. | `[x] Completado` |
+| **8** | **Chat con visibilidad global para docentes** | Todos los profesores/administradores ven todos los chats de la academia; el alumno solo ve a quien se dirige. | `[x] Completado` |
 | **9** | **Paleta de fondos visuales y mayor contraste** | Rediseño visual con fondos diferenciados por sección y badges cromáticos para aumentar el engagement. | `[ ] Pendiente` |
-| **10** | **Vuelco masivo de alumnos (Exportar / Importar Excel)** | Descarga de expedientes a Excel/CSV e importador masivo con vista previa y creación transaccional. | `[ ] Pendiente` |
+| **10** | **Vuelco masivo de alumnos (Exportar / Importar Excel)** | Descarga de expedientes a Excel/CSV e importador masivo con vista previa y creación transaccional. | `[/] Parcial` |
 
 ---
 
@@ -28,13 +28,10 @@ A continuación se detallan los 11 requerimientos acordados en la última reuni�
 
 ### 0.1 Extracto de Pagos por Años con Desglose de Totales `[x]`
 - [x] Selector de ejercicio/año dinámico en la interfaz del profesor (`/teacher/payments`) y del alumno/padre (`/student/payments`).
-- [x] Soporte en el generador de PDF (`generateStatementPDF`) para filtrar las mensualidades por año o emitir histórico completo.
+- [x] Soporte en el generador de PDF (`generateStatementPDF`) para filtrar las mensualidades abonadas por año o emitir histórico completo.
 - [x] Inclusión del ejercicio fiscal en la cabecera del documento y en el nombre del archivo (`Extracto_{Alumno}_{Año}.pdf`).
-- [x] Fila de totales en el pie de tabla (`foot`) con distinción cromática (verde para abonadas, rojo para impagos).
-- [x] Cuadro resumen de tres tarjetas métricas al pie del documento:
-  - **TOTAL FACTURADO (€):** Importe global emitido y número de mensualidades emitidas.
-  - **TOTAL ABONADO (€):** Importe cobrado y número de recibos pagados.
-  - **SALDO PENDIENTE (€):** Estado de cuenta con alerta en rojo si hay deuda o confirmación en verde si está al corriente de pago (`0,00 €`).
+- [x] Tabla simplificada con `Periodo / Mensualidad`, `Importe` y `Fecha de Pago`, sin estados de impago.
+- [x] Fila final `TOTAL` con el importe abonado, sin bloque adicional de resumen.
 - [x] Paginación dinámica multihélice (*Página X de Y*).
 
 ### 0.2 Motor de Calificaciones Trimestrales (Middle Term y Final Term) `[ ]`
@@ -48,20 +45,21 @@ A continuación se detallan los 11 requerimientos acordados en la última reuni�
   - El cálculo de las calificaciones finales trimestrales debe ser **100% automático** a partir del promedio ponderado en tiempo real de todas las tareas, tests autocorregibles y redacciones entregadas en la plataforma durante ese periodo.
 - [ ] Interfaz de visualización para alumnos y padres con el desglose trimestral (*Middle*, *Final*, *Media Tareas* y *Calificación Definitiva*).
 
-### 0.3 Programación de Tareas Diferidas (Estilo Google Classroom) `[ ]`
-- [ ] Soporte para campo `publishAt` / `scheduledAt` (fecha y hora) en la creación y edición de tareas y asignaciones.
-- [ ] **Visibilidad condicionada:**
+### 0.3 Programación de Tareas Diferidas (Estilo Google Classroom) `[x]`
+- [x] Soporte para campo `publishAt` (fecha y hora) en la creación y edición de tareas, materiales asignados y tareas estructuradas.
+- [x] **Visibilidad condicionada:**
   - El profesor puede ver las tareas programadas con un badge distintivo (*"Programada para el DD/MM/AAAA HH:mm"*).
   - Los alumnos y tutores no ven la tarea ni reciben notificación hasta que se alcanza la fecha y hora programada.
-- [ ] Publicación instantánea automática en el momento en que expira la fecha de programación.
+- [x] Publicación automática al expirar la fecha de programación mediante filtros de visibilidad en backend.
 
-### 0.4 Adjuntos de Archivos Locales en Tareas del Profesor `[ ]`
-- [ ] Selector de archivos locales desde el modal de creación de tareas del profesor (PDF, audio, imágenes, documentos Office).
-- [ ] Almacenamiento seguro en el backend (directorio `uploads/` o multipart) y vinculación al registro de la tarea.
-- [ ] Visualización y botón de descarga directa para el alumno en el encabezado de las instrucciones de la tarea.
+### 0.4 Recursos del Profesor mediante Google Drive `[x]`
+- [x] El docente vincula documentos PDF/Office, audios, imágenes y vídeos mediante enlaces individuales compartidos de Google Drive en Material de Clase.
+- [x] Los recursos se visualizan o reproducen con compatibilidad para Google Drive, sin consumir almacenamiento del servidor de HitSchool.
+- [x] El alumno puede abrir o descargar un documento, completarlo y adjuntarlo opcionalmente desde su dispositivo al entregar la tarea.
+- [x] El profesor puede revisar y descargar el archivo adjunto por el alumno desde Calificaciones.
 
-### 0.5 Reproductor Visual de Audios en el Creador de Exámenes `[ ]`
-- [ ] Al añadir una pista de audio (URL o archivo de Listening) a una pregunta del Form Builder:
+### 0.5 Reproductor Visual de Audios en el Creador de Exámenes `[x]`
+- [x] Al seleccionar una pista de audio existente en Material de Clase para una pregunta del Form Builder:
   - Mostrar de inmediato un reproductor interactivo embebido con controles (play/pause, barra de progreso y volumen).
   - Permitir al profesor escuchar y validar el corte de audio antes de guardar el examen.
 
@@ -70,14 +68,14 @@ A continuación se detallan los 11 requerimientos acordados en la última reuni�
 - [ ] Meta tags para Safari/iOS (`apple-mobile-web-app-capable`, `apple-mobile-web-app-status-bar-style`, `apple-touch-icon`).
 - [ ] Banner / Botón accesible en la interfaz para instalar como acceso directo en escritorio (Chrome/Edge) o móvil (Android/iOS).
 
-### 0.7 Soporte Multimedia Local en el Tablón de Anuncios (`Stream`) `[ ]`
-- [ ] Posibilidad de adjuntar imágenes y vídeos desde el almacenamiento local del dispositivo al publicar un anuncio en el aula.
-- [ ] Almacenamiento en el servidor con endpoint de subida multimedia.
-- [ ] Visor integrado en el tablón para reproducir el vídeo directamente en el feed de la clase o ampliar las imágenes adjuntas.
+### 0.7 Soporte Multimedia Local en el Tablón de Anuncios (`Stream`) `[x]`
+- [x] Posibilidad de adjuntar imágenes y vídeos desde el almacenamiento local del dispositivo al publicar un anuncio en el aula.
+- [x] Almacenamiento en el servidor mediante endpoint multipart y directorio `uploads/posts`.
+- [x] Visor integrado en el tablón para reproducir vídeo, mostrar imágenes y descargar archivos desde profesor, alumno y tutor.
 
-### 0.8 Visibilidad de Chat Multi-Profesor / Supervisión Centralizada `[ ]`
-- [ ] **Acceso Docente / Administrativo:** Cualquier profesor o administrador puede consultar y participar en las conversaciones abiertas con los alumnos o padres de la academia (supervisión colegiada del equipo docente).
-- [ ] **Aislamiento del Alumno / Padre:** El alumno y el tutor solo ven la conversación con su profesor asignado y a quien se están dirigiendo específicamente, sin visibilidad sobre hilos de otros compañeros.
+### 0.8 Visibilidad de Chat Multi-Profesor / Supervisión Centralizada `[x]`
+- [x] **Acceso Docente / Administrativo:** Cualquier profesor o administrador puede consultar y participar en las conversaciones abiertas con los alumnos o padres de la academia (supervisión colegiada del equipo docente).
+- [x] **Aislamiento del Alumno / Padre:** El alumno y el tutor solo ven la conversación con su profesor asignado y a quien se están dirigiendo específicamente, sin visibilidad sobre hilos de otros compañeros.
 
 ### 0.9 Diseño Visual Enriquecido con Fondos y Acentos de Color `[ ]`
 - [ ] Introducción de gradientes y tonalidades suaves de fondo que rompan la monotonía de pantallas planas.
@@ -87,9 +85,9 @@ A continuación se detallan los 11 requerimientos acordados en la última reuni�
   - Exámenes y evaluaciones: azules/violetas pastel.
 - [ ] Mayor contraste y jerarquía tipográfica en paneles, tarjetas y cabeceras.
 
-### 0.10 Exportación e Importación Masiva de Alumnos (Excel / CSV) `[ ]`
-- [ ] **Exportación a Excel (`.xlsx` / `.csv`):**
-  - Descarga con 1 clic de la base de datos de alumnos con todos sus campos: Nombre, Apellidos, DNI, Email, Teléfono, Fecha Nacimiento, Dirección, Modalidad (Presencial/Online), Cuota Mensual, Tutor vinculado y Cursos matriculados.
+### 0.10 Exportación e Importación Masiva de Alumnos (Excel / CSV) `[/]`
+- [x] **Exportación a Excel (`.xlsx`):**
+  - Descarga con 1 clic desde Gestión de Alumnos con: nombre, apellidos, correo, fecha de nacimiento, curso escolar, padre/madre, móvil, grupo, alergias, autorización de imagen y observaciones.
 - [ ] **Importación Masiva desde Excel:**
   - Asistente de carga de ficheros Excel/CSV con plantilla modelo descargable.
   - Mapeo automático de columnas y vista previa interactiva con validación previa de duplicados (email o DNI).
@@ -199,7 +197,7 @@ A continuación se detallan los 11 requerimientos acordados en la última reuni�
 - [x] Pestaña «Mis Calificaciones» integrada en el aula virtual del alumno (`StudentCourseView.tsx`).
 - [x] Panel global de calificaciones con notas numéricas sobre 10 y desglose CEFR.
 - [x] Modal interactivo de revisión pedagógica de exámenes con diseño Glassmorphism y desenfoque de fondo.
-- [x] Pestaña «Compañeros» para consultar la lista de clase.
+- [x] Pestaña «Compañeros» para consultar la lista de clase (retirada posteriormente de la vista del alumno por decisión funcional).
 
 ### 2.4 Ajustes y Perfil
 - [x] Modal de ajustes de cuenta disponible tanto para alumnos (`STUDENT`) como para tutores (`PARENT`).

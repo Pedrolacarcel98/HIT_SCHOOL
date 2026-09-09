@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import * as XLSX from 'xlsx';
 import {
   UserPlus,
   Search,
@@ -14,7 +15,8 @@ import {
   Phone,
   Eye,
   UserCheck,
-  FileText
+  FileText,
+  FileSpreadsheet
 } from 'lucide-react';
 
 interface ParentData {
@@ -52,6 +54,10 @@ interface Student {
     phone?: string | null;
     birthDate?: string | null;
     address?: string | null;
+    schoolYear?: string | null;
+    allergies?: string | null;
+    imageAuthorization?: boolean | null;
+    observations?: string | null;
   };
   parent?: {
     id: string;
@@ -68,6 +74,12 @@ interface Student {
     course: {
       title: string;
     };
+  }[];
+  academyEnrollments?: {
+    id: string;
+    monthlyFee: number;
+    billingPeriod?: 'MONTHLY' | 'QUARTERLY';
+    endDate?: string | null;
   }[];
 }
 
@@ -117,6 +129,8 @@ const StudentsManagement: React.FC = () => {
   const [editAddress, setEditAddress] = useState('');
   const [editParentId, setEditParentId] = useState('');
   const [editModality, setEditModality] = useState<'PRESENCIAL' | 'ONLINE' | 'HIBRIDO'>('PRESENCIAL');
+  const [editBillingPeriod, setEditBillingPeriod] = useState<'MONTHLY' | 'QUARTERLY'>('MONTHLY');
+  const [editBillingAmount, setEditBillingAmount] = useState('');
 
   // Modal Eliminar
   const [deletingStudent, setDeletingStudent] = useState<Student | null>(null);
@@ -269,6 +283,9 @@ const StudentsManagement: React.FC = () => {
     setEditAddress(student.profile?.address || '');
     setEditParentId(student.parentId || '');
     setEditModality(student.modality || 'PRESENCIAL');
+    const activeEnrollment = student.academyEnrollments?.find((enrollment) => !enrollment.endDate);
+    setEditBillingPeriod(activeEnrollment?.billingPeriod || 'MONTHLY');
+    setEditBillingAmount(activeEnrollment ? String(activeEnrollment.monthlyFee) : '');
   };
 
   const handleUpdate = async (e: React.FormEvent) => {
@@ -292,7 +309,9 @@ const StudentsManagement: React.FC = () => {
           birthDate: editBirthDate ? editBirthDate : null,
           address: editAddress.trim() || null,
           parentId: editParentId || null,
-          modality: editModality
+          modality: editModality,
+          billingPeriod: editBillingAmount ? editBillingPeriod : undefined,
+          billingAmount: editBillingAmount ? Number(editBillingAmount) : undefined
         })
       });
 
@@ -363,6 +382,37 @@ const StudentsManagement: React.FC = () => {
     return matchesSearch;
   });
 
+  const handleExportExcel = () => {
+    const valueOrDash = (value?: string | null) => value?.trim() || '-';
+    const formatBirthDate = (birthDate?: string | null) => {
+      if (!birthDate) return '-';
+      const date = new Date(birthDate);
+      return Number.isNaN(date.getTime()) ? '-' : date.toLocaleDateString('es-ES');
+    };
+
+    const rows = students.map((student) => ({
+      'NOMBRE ALUMNO': valueOrDash(student.profile?.firstName),
+      'APELLIDOS ALUMNO': valueOrDash(student.profile?.lastName),
+      'CORREO': valueOrDash(student.email),
+      'FECHA NACIMIENTO': formatBirthDate(student.profile?.birthDate),
+      'CURSO ESCOLAR': valueOrDash(student.profile?.schoolYear),
+      'PADRE/MADRE': student.parent?.profile ? valueOrDash(`${student.parent.profile.firstName} ${student.parent.profile.lastName}`) : '-',
+      'MOVIL': valueOrDash(student.profile?.phone || student.parent?.profile?.phone),
+      'GRUPO': student.enrollments?.map((enrollment) => enrollment.course.title).join(', ') || '-',
+      'ALERGIAS': valueOrDash(student.profile?.allergies),
+      'AUTORIZACIÓN IMAGEN': student.profile?.imageAuthorization === true ? 'Sí' : student.profile?.imageAuthorization === false ? 'No' : '-',
+      'OBSERVACIONES': valueOrDash(student.profile?.observations)
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(rows, {
+      header: ['NOMBRE ALUMNO', 'APELLIDOS ALUMNO', 'CORREO', 'FECHA NACIMIENTO', 'CURSO ESCOLAR', 'PADRE/MADRE', 'MOVIL', 'GRUPO', 'ALERGIAS', 'AUTORIZACIÓN IMAGEN', 'OBSERVACIONES']
+    });
+    worksheet['!cols'] = [22, 24, 30, 18, 18, 26, 16, 28, 24, 22, 34].map((width) => ({ wch: width }));
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Alumnos');
+    XLSX.writeFile(workbook, `Alumnos_HitSchool_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
   return (
     <div className="page-container">
       {/* Toast Notification */}
@@ -398,13 +448,18 @@ const StudentsManagement: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => { resetCreateForm(); setShowCreateModal(true); }}
-          className="btn-primary"
-          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.25rem' }}
-        >
-          <UserPlus size={18} /> Nuevo Alumno
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <button onClick={handleExportExcel} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: '#ecfdf5', color: '#047857', border: '1px solid #6ee7b7', padding: '0.65rem 1rem', borderRadius: '12px', fontSize: '0.875rem', fontWeight: 500, cursor: 'pointer', transition: 'background 0.2s ease' }}>
+            <FileSpreadsheet size={17} /> Exportar a Excel
+          </button>
+          <button
+            onClick={() => { resetCreateForm(); setShowCreateModal(true); }}
+            className="btn-primary"
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.25rem' }}
+          >
+            <UserPlus size={18} /> Nuevo Alumno
+          </button>
+        </div>
       </div>
 
       {/* Selector de Modalidad & Filtros & Buscador */}
@@ -1169,6 +1224,22 @@ const StudentsManagement: React.FC = () => {
                   </select>
                 </div>
               </div>
+
+              {editingStudent.academyEnrollments?.some((enrollment) => !enrollment.endDate) && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 130px', gap: '0.75rem', padding: '0.9rem', border: '1px solid var(--primary-border)', borderRadius: '8px', background: 'var(--primary-subtle)' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Tipo de pago</label>
+                    <select value={editBillingPeriod} onChange={(event) => setEditBillingPeriod(event.target.value as 'MONTHLY' | 'QUARTERLY')} style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}>
+                      <option value="MONTHLY">Mensual</option>
+                      <option value="QUARTERLY">Trimestral</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Importe (€)</label>
+                    <input type="number" min="1" step="0.01" required value={editBillingAmount} onChange={(event) => setEditBillingAmount(event.target.value)} style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }} />
+                  </div>
+                </div>
+              )}
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.75rem' }}>
                 <button

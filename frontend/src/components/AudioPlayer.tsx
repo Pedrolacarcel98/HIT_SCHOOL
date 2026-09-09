@@ -15,6 +15,12 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, title, autoPlay = false 
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
 
+  const getGoogleDriveFileId = (rawUrl: string) => rawUrl.match(/drive\.google\.com\/file\/d\/([^/?]+)/)?.[1]
+      || rawUrl.match(/[?&]id=([^&/?]+)/)?.[1];
+
+  const googleDriveFileId = getGoogleDriveFileId(src);
+  const audioSource = googleDriveFileId ? '' : src;
+
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -36,7 +42,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, title, autoPlay = false 
       audio.removeEventListener('timeupdate', setAudioTime);
       audio.removeEventListener('ended', onEnded);
     };
-  }, [src]);
+  }, [audioSource]);
 
   const togglePlay = () => {
     if (!audioRef.current) return;
@@ -96,7 +102,26 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, title, autoPlay = false 
       gap: '0.75rem',
       boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
     }}>
-      <audio ref={audioRef} src={src} autoPlay={autoPlay} />
+      {googleDriveFileId ? (
+        <>
+          {title && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontWeight: '600', fontSize: '0.95rem', color: 'var(--text)' }}>{title}</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--primary-text)', fontWeight: 'bold', background: 'var(--primary-light)', border: '1px solid var(--primary-border)', padding: '2px 8px', borderRadius: '4px' }}>
+                LISTENING AUDIO
+              </span>
+            </div>
+          )}
+          <iframe
+            src={`https://drive.google.com/file/d/${googleDriveFileId}/preview`}
+            title={title || 'Reproductor de audio'}
+            allow="autoplay"
+            style={{ width: '100%', height: '84px', border: 'none', borderRadius: '6px', background: 'var(--background)' }}
+          />
+        </>
+      ) : (
+        <>
+      <audio ref={audioRef} src={audioSource} autoPlay={autoPlay} />
 
       {title && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -210,6 +235,8 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, title, autoPlay = false 
           </button>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 };

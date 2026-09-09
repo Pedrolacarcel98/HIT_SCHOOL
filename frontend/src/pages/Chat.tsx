@@ -22,6 +22,9 @@ interface ChatMessage {
   senderId: string;
   senderRole: 'TEACHER' | 'STUDENT' | 'PARENT';
   senderName?: string;
+  recipientId?: string;
+  recipientName?: string;
+  recipientEmail?: string;
   studentId?: string;
   content: string;
   createdAt: string;
@@ -56,9 +59,6 @@ const getInitials = (name: string) =>
 
 const getDisplayName = (contact?: { name: string; role: string } | null, viewerRole?: string | null) => {
   if (!contact) return 'Usuario';
-  if (contact.role === 'TEACHER' && viewerRole !== 'TEACHER' && viewerRole !== 'ADMIN') {
-    return 'Profesor';
-  }
   return contact.name;
 };
 
@@ -278,14 +278,14 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
         <h1 style={{ margin: 0, fontSize: '1.8rem', display: 'flex', alignItems: 'center', gap: '0.7rem' }}>
           <MessageCircle style={{ color: 'var(--primary)' }} />
           {role === 'TEACHER'
-            ? 'Chat Alumnos'
+            ? 'Chats de la Academia'
             : userRole === 'PARENT'
               ? `Chat con Profesor de ${activeStudentName}`
               : 'Chat con Profesor'}
         </h1>
         <p style={{ margin: '0.3rem 0 0', color: 'var(--text-muted)' }}>
           {role === 'TEACHER' 
-            ? 'Canal directo y privado con tus alumnos matriculados.' 
+            ? 'Consulta y responde las conversaciones de todos los alumnos de la academia.' 
             : userRole === 'PARENT'
               ? `Canal directo y privado con el profesor asignado a ${activeStudentName}.`
               : 'Canal directo y privado con tu profesor asignado.'}
@@ -300,107 +300,106 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
 
       <div className="chat-layout" style={{
         display: 'grid',
-        gridTemplateColumns: (role === 'TEACHER' || contacts.length > 1) ? 'minmax(250px, 320px) 1fr' : '1fr',
-        minHeight: '600px',
+        gridTemplateColumns: 'minmax(250px, 4fr) minmax(0, 8fr)',
+        height: 'calc(100vh - 190px)',
+        minHeight: '520px',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius)',
         overflow: 'hidden',
         background: 'var(--surface)',
         boxShadow: 'var(--shadow-md)'
       }}>
-        {/* Barra Lateral de Contactos (Para Profesores o Alumnos con múltiples profesores) */}
-        {(role === 'TEACHER' || contacts.length > 1) && (
-          <aside style={{ borderRight: '1px solid var(--border)', background: 'var(--surface-alt)', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ padding: '1rem', borderBottom: '1px solid var(--border)' }}>
-              <label htmlFor="chat-search" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)' }}>
-                {role === 'TEACHER' ? <><Users size={16} /> Alumnos ({contacts.length})</> : <><GraduationCap size={16} /> Tus Profesores</>}
-              </label>
-              <div style={{ position: 'relative' }}>
-                <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                <input
-                  id="chat-search"
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  placeholder={role === 'TEACHER' ? 'Buscar alumno o tutor...' : 'Buscar profesor...'}
-                  style={{
-                    width: '100%',
-                    padding: '0.6rem 0.65rem 0.6rem 2.2rem',
-                    border: '1px solid var(--border)',
-                    borderRadius: '8px',
-                    background: 'var(--surface)',
-                    color: 'var(--text-main)',
-                    fontSize: '0.88rem',
-                    outline: 'none'
-                  }}
-                />
-              </div>
+        {/* Barra lateral de contactos */}
+        <aside style={{ borderRight: '1px solid var(--border)', background: 'var(--surface-alt)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <div style={{ padding: '1rem', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+            <label htmlFor="chat-search" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)' }}>
+              {role === 'TEACHER' ? <><Users size={16} /> Alumnos ({contacts.length})</> : <><GraduationCap size={16} /> Profesores ({contacts.length})</>}
+            </label>
+            <div style={{ position: 'relative' }}>
+              <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input
+                id="chat-search"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                placeholder={role === 'TEACHER' ? 'Buscar alumno o tutor...' : 'Buscar profesor...'}
+                style={{
+                  width: '100%',
+                  padding: '0.6rem 0.65rem 0.6rem 2.2rem',
+                  border: '1px solid var(--border)',
+                  borderRadius: '8px',
+                  background: 'var(--surface)',
+                  color: 'var(--text-main)',
+                  fontSize: '0.88rem',
+                  outline: 'none'
+                }}
+              />
             </div>
+          </div>
 
-            <div style={{ padding: '0.5rem', flex: 1, overflowY: 'auto' }}>
-              {loading ? (
-                <p style={{ padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.88rem', textAlign: 'center' }}>
-                  Cargando contactos...
-                </p>
-              ) : filteredContacts.length === 0 ? (
-                <p style={{ padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.88rem', textAlign: 'center' }}>
-                  {searchTerm ? 'No se encontraron resultados.' : (role === 'TEACHER' ? 'No hay alumnos registrados.' : 'No tienes profesores asignados.')}
-                </p>
-              ) : (
-                filteredContacts.map(contact => {
-                  const contactKey = contact.contactKey || contact.id;
-                  const isSelected = selectedContactId === contactKey || selectedContactId === contact.id;
+          <div style={{ padding: '0.5rem', flex: 1, minHeight: 0, overflowY: 'auto' }}>
+            {loading ? (
+              <p style={{ padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.88rem', textAlign: 'center' }}>
+                Cargando contactos...
+              </p>
+            ) : filteredContacts.length === 0 ? (
+              <p style={{ padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.88rem', textAlign: 'center' }}>
+                {searchTerm ? 'No se encontraron resultados.' : (role === 'TEACHER' ? 'No hay alumnos registrados.' : 'No hay profesores disponibles.')}
+              </p>
+            ) : (
+              filteredContacts.map(contact => {
+                const contactKey = contact.contactKey || contact.id;
+                const isSelected = selectedContactId === contactKey || selectedContactId === contact.id;
 
-                  return (
-                    <button
-                      key={contactKey}
-                      onClick={() => setSelectedContactId(contactKey)}
-                      style={{
-                        width: '100%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.75rem',
-                        padding: '0.75rem 0.85rem',
-                        marginBottom: '0.35rem',
-                        textAlign: 'left',
-                        border: isSelected ? '1px solid var(--primary-border)' : '1px solid transparent',
-                        borderRadius: '10px',
-                        background: isSelected ? 'var(--primary-light)' : 'transparent',
-                        color: 'var(--text-main)',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease'
-                      }}
-                    >
-                      <Avatar name={getDisplayName(contact, userRole)} />
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-                          <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.92rem', color: isSelected ? 'var(--primary-text)' : 'var(--text-main)' }}>
-                            {getDisplayName(contact, userRole)}
-                          </strong>
-                          {contact.role === 'PARENT' && (
-                            <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '1px 5px', borderRadius: '8px', background: '#eaf4ef', color: '#24583e', border: '1px solid #bfe0d0' }}>
-                              TUTOR
-                            </span>
-                          )}
-                          {contact.role === 'STUDENT' && role === 'TEACHER' && (
-                            <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '1px 5px', borderRadius: '8px', background: 'var(--surface-alt)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
-                              Alumno
-                            </span>
-                          )}
-                        </div>
-                        <small style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: '2px' }}>
-                          {contact.subtitle || contact.courseTitle || contact.email}
-                        </small>
+                return (
+                  <button
+                    key={contactKey}
+                    onClick={() => setSelectedContactId(contactKey)}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      padding: '0.75rem 0.85rem',
+                      marginBottom: '0.35rem',
+                      textAlign: 'left',
+                      border: isSelected ? '1px solid var(--primary-border)' : '1px solid transparent',
+                      borderRadius: '10px',
+                      background: isSelected ? 'var(--primary-light)' : 'transparent',
+                      color: 'var(--text-main)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <Avatar name={getDisplayName(contact, userRole)} />
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                        <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.92rem', color: isSelected ? 'var(--primary-text)' : 'var(--text-main)' }}>
+                          {getDisplayName(contact, userRole)}
+                        </strong>
+                        {contact.role === 'PARENT' && (
+                          <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '1px 5px', borderRadius: '8px', background: '#eaf4ef', color: '#24583e', border: '1px solid #bfe0d0' }}>
+                            TUTOR
+                          </span>
+                        )}
+                        {contact.role === 'STUDENT' && role === 'TEACHER' && (
+                          <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '1px 5px', borderRadius: '8px', background: 'var(--surface-alt)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
+                            Alumno
+                          </span>
+                        )}
                       </div>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </aside>
-        )}
+                      <small style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: '2px' }}>
+                        {contact.subtitle || contact.courseTitle || contact.email}
+                      </small>
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </aside>
 
         {/* Área Principal de Conversación */}
-        <section style={{ display: 'flex', flexDirection: 'column', minWidth: 0, height: '100%' }}>
+        <section style={{ display: 'flex', flexDirection: 'column', minWidth: 0, height: '100%', minHeight: 0, overflow: 'hidden' }}>
           {/* Header del Contacto Activo */}
           <div style={{
             display: 'flex',
@@ -408,7 +407,8 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
             gap: '0.85rem',
             padding: '1rem 1.5rem',
             borderBottom: '1px solid var(--border)',
-            background: 'var(--surface)'
+            background: 'var(--surface)',
+            flexShrink: 0
           }}>
             {selectedContact ? (
               <>
@@ -477,6 +477,7 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
           {/* Historial de Mensajes */}
           <div style={{
             flex: 1,
+            minHeight: 0,
             padding: '1.5rem',
             overflowY: 'auto',
             background: 'var(--background)',
@@ -514,7 +515,7 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
                     gap: '0.6rem'
                   }}
                 >
-                  {!isMine && <Avatar name={getDisplayName(selectedContact, userRole)} />}
+                  {!isMine && <Avatar name={message.senderName || getDisplayName(selectedContact, userRole)} />}
                   
                   <div style={{
                     maxWidth: 'min(82%, 600px)',
@@ -527,6 +528,12 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
                     <p style={{ margin: 0, color: 'var(--text-main)', fontSize: '0.94rem', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', lineHeight: '1.45' }}>
                       {message.content}
                     </p>
+
+                    {(userRole === 'TEACHER' || userRole === 'ADMIN') && message.senderRole === 'STUDENT' && (
+                      <span style={{ display: 'block', marginTop: '0.45rem', color: isMine ? 'var(--primary-text)' : 'var(--text-muted)', fontSize: '0.72rem', fontWeight: 600 }}>
+                        Para: {message.recipientName || message.recipientEmail || getDisplayName(selectedContact, userRole)}
+                      </span>
+                    )}
 
                     <div style={{
                       display: 'flex',
@@ -581,7 +588,8 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
               gap: '0.75rem',
               padding: '1rem 1.5rem',
               borderTop: '1px solid var(--border)',
-              background: 'var(--surface)'
+              background: 'var(--surface)',
+              flexShrink: 0
             }}
           >
             <textarea
@@ -663,11 +671,13 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
         @media (max-width: 768px) {
           .chat-layout {
             grid-template-columns: 1fr !important;
+            height: calc(100vh - 150px) !important;
+            min-height: 480px !important;
           }
           .chat-layout aside {
             border-right: 0 !important;
             border-bottom: 1px solid var(--border);
-            max-height: 220px;
+            max-height: 180px;
           }
         }
       `}</style>

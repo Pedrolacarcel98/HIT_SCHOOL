@@ -1,6 +1,5 @@
-import { PaymentState, PrismaClient, Role, AcademyEnrollment } from '@prisma/client';
+import { BillingPeriod, PaymentState, PrismaClient, Role, AcademyEnrollment } from '@prisma/client';
 
-export const ALLOWED_MONTHLY_FEES = [35, 65] as const;
 export const DEFAULT_VISIBLE_MONTH_COUNT = 3;
 
 export interface MonthTarget {
@@ -124,6 +123,7 @@ export const ensureStudentPaymentScheduleById = async (prisma: PrismaClient, stu
     const end = enrollment.endDate ? new Date(enrollment.endDate) : new Date();
     const endMonthDate = new Date(end.getFullYear(), end.getMonth(), 1, 12, 0, 0, 0);
 
+    const billingInterval = enrollment.billingPeriod === BillingPeriod.QUARTERLY ? 3 : 1;
     let current = new Date(startMonthDate);
     
     while (current.getTime() <= Math.max(startMonthDate.getTime(), endMonthDate.getTime())) {
@@ -167,7 +167,7 @@ export const ensureStudentPaymentScheduleById = async (prisma: PrismaClient, stu
       }
 
       generatedPayments.push({ month, year });
-      current = addMonths(current, 1);
+      current = addMonths(current, billingInterval);
     }
   }
 

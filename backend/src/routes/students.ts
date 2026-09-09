@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import { authenticateToken, requireTeacher, AuthRequest } from '../middleware/auth';
 import { getChildrenForParent } from './auth';
+import { ensureStudentPaymentScheduleById } from '../services/payments';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -162,7 +163,7 @@ router.put('/:id/evaluation', authenticateToken, requireTeacher, async (req: Aut
 
 // Ruta protegida: crear alumno (con soporte de ficha extendida y vinculación familiar)
 router.post('/', authenticateToken, requireTeacher, async (req, res) => {
-  const { email, firstName, lastName, dni, phone, birthDate, address, parentId, parentData, modality } = req.body;
+  const { email, firstName, lastName, dni, phone, birthDate, address, schoolYear, allergies, imageAuthorization, observations, parentId, parentData, modality } = req.body;
 
   if (!email || !firstName || !lastName) {
     return res.status(400).json({ error: 'Faltan campos requeridos (email, nombre y apellidos del alumno)' });
@@ -228,7 +229,11 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
             dni: dni?.trim() || null,
             phone: phone?.trim() || null,
             birthDate: birthDate ? new Date(birthDate) : null,
-            address: address?.trim() || null
+            address: address?.trim() || null,
+            schoolYear: schoolYear?.trim() || null,
+            allergies: allergies?.trim() || null,
+            imageAuthorization: typeof imageAuthorization === 'boolean' ? imageAuthorization : null,
+            observations: observations?.trim() || null
           }
         }
       },
@@ -315,7 +320,11 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
             dni: true,
             phone: true,
             birthDate: true,
-            address: true
+            address: true,
+            schoolYear: true,
+            allergies: true,
+            imageAuthorization: true,
+            observations: true
           }
         },
         parent: {
@@ -366,7 +375,7 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
 // Ruta para actualizar un alumno
 router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
   const studentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const { firstName, lastName, email, dni, phone, birthDate, address, parentId, modality } = req.body;
+  const { firstName, lastName, email, dni, phone, birthDate, address, schoolYear, allergies, imageAuthorization, observations, parentId, modality, billingPeriod, billingAmount } = req.body;
 
   if (!firstName || !lastName || !email) {
     return res.status(400).json({ error: 'Nombre, apellidos y email son obligatorios' });
@@ -379,6 +388,8 @@ router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
     if (existingUser) {
       return res.status(400).json({ error: 'Este correo ya pertenece a otro usuario' });
     }
+    if (billingPeriod !== undefined && billingPeriod !== 'MONTHLY' && billingPeriod !== 'QUARTERLY') return res.status(400).json({ error: 'El tipo de pago no es válido.' });
+    if (billingAmount !== undefined && (!Number.isFinite(Number(billingAmount)) || Number(billingAmount) <= 0)) return res.status(400).json({ error: 'El importe de pago debe ser mayor que cero.' });
 
     const updatedUser = await prisma.user.update({
       where: { id: studentId },
@@ -394,7 +405,11 @@ router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
               dni: dni?.trim() || null,
               phone: phone?.trim() || null,
               birthDate: birthDate ? new Date(birthDate) : null,
-              address: address?.trim() || null
+              address: address?.trim() || null,
+              schoolYear: schoolYear?.trim() || null,
+              allergies: allergies?.trim() || null,
+              imageAuthorization: typeof imageAuthorization === 'boolean' ? imageAuthorization : null,
+              observations: observations?.trim() || null
             },
             update: {
               firstName: firstName.trim(),
@@ -402,7 +417,11 @@ router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
               dni: dni !== undefined ? (dni?.trim() || null) : undefined,
               phone: phone !== undefined ? (phone?.trim() || null) : undefined,
               birthDate: birthDate !== undefined ? (birthDate ? new Date(birthDate) : null) : undefined,
-              address: address !== undefined ? (address?.trim() || null) : undefined
+              address: address !== undefined ? (address?.trim() || null) : undefined,
+              schoolYear: schoolYear !== undefined ? (schoolYear?.trim() || null) : undefined,
+              allergies: allergies !== undefined ? (allergies?.trim() || null) : undefined,
+              imageAuthorization: typeof imageAuthorization === 'boolean' ? imageAuthorization : undefined,
+              observations: observations !== undefined ? (observations?.trim() || null) : undefined
             }
           }
         }
@@ -414,6 +433,23 @@ router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
         }
       }
     });
+
+    if (billingPeriod !== undefined || billingAmount !== undefined) {
+      const activeEnrollment = await prisma.academyEnrollment.findFirst({ where: { studentId, endDate: null }, orderBy: { startDate: 'desc' } });
+      if (activeEnrollment) {
+        await prisma.$transaction([
+          prisma.academyEnrollment.update({
+            where: { id: activeEnrollment.id },
+            data: {
+              billingPeriod: billingPeriod || activeEnrollment.billingPeriod,
+              monthlyFee: billingAmount !== undefined ? Number(billingAmount) : activeEnrollment.monthlyFee
+            }
+          }),
+          prisma.paymentStatus.deleteMany({ where: { enrollmentId: activeEnrollment.id, isPaid: false } })
+        ]);
+        await ensureStudentPaymentScheduleById(prisma, studentId);
+      }
+    }
 
     res.json({
       message: 'Alumno actualizado con éxito',

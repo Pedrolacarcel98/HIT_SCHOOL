@@ -35,6 +35,7 @@ interface SubmissionItem {
   };
   assignmentTitle: string;
   assignmentCategory: string;
+  dueDate?: string | null;
   materialType?: string;
   materialUrl?: string | null;
   materialFormData?: any;
@@ -177,6 +178,7 @@ const GradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
             ...sub,
             assignmentTitle: assignment.title,
             assignmentCategory: assignment.category || 'GRAMMAR_VOCABULARY',
+            dueDate: assignment.dueDate,
             materialType: assignment.material?.type || (sub.content?.includes('"answers"') ? 'FORM' : 'DOCUMENT'),
             materialUrl: assignment.material?.url || null,
             materialFormData: assignment.material?.formData || null,
@@ -1084,6 +1086,7 @@ const GradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                       </strong>
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                         {sub.studentName} ({sub.studentEmail}) · {new Date(sub.submittedAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                        {sub.dueDate && new Date(sub.submittedAt) > new Date(sub.dueDate) && <span style={{ display: 'inline-flex', marginLeft: '0.5rem', padding: '0.15rem 0.45rem', borderRadius: '10px', background: '#fef3c7', border: '1px solid #fde68a', color: '#92400e', fontSize: '0.7rem', fontWeight: 700 }}>Fuera de plazo</span>}
                         {examData && examData.total !== null && examData.score !== null && (
                           <span style={{ marginLeft: '6px', fontWeight: 600, color: 'var(--primary)' }}>
                             · {examData.score} / {examData.total} aciertos

@@ -59,7 +59,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedTopics, setExpandedTopics] = useState<Record<string, boolean>>(
-    () => Object.fromEntries(SKILL_CATEGORIES.map(cat => [cat.id, true]))
+    () => Object.fromEntries(SKILL_CATEGORIES.map(cat => [cat.id, false]))
   );
 
   // Modal para Crear / Editar Tarea en esta clase
@@ -69,6 +69,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const [taskDescription, setTaskDescription] = useState('');
   const [taskCategory, setTaskCategory] = useState('GRAMMAR_VOCABULARY');
   const [taskDueDate, setTaskDueDate] = useState('');
+  const [taskPublishAt, setTaskPublishAt] = useState('');
   const [taskTerm, setTaskTerm] = useState(1);
   const [taskIsSequential, setTaskIsSequential] = useState(false);
   const [taskIsTemplate, setTaskIsTemplate] = useState(false);
@@ -136,6 +137,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     setTaskDescription('');
     setTaskCategory(categoryPreset || 'GRAMMAR_VOCABULARY');
     setTaskDueDate('');
+    setTaskPublishAt('');
     setTaskTerm(1);
     setTaskIsSequential(false);
     setTaskIsTemplate(false);
@@ -155,6 +157,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     setTaskDescription(orig.description || '');
     setTaskCategory(orig.category || 'GRAMMAR_VOCABULARY');
     setTaskDueDate(orig.dueDate ? new Date(orig.dueDate).toISOString().slice(0, 16) : '');
+    setTaskPublishAt(orig.publishAt ? new Date(orig.publishAt).toISOString().slice(0, 16) : '');
     setTaskTerm(orig.term || 1);
     setTaskIsSequential(Boolean(orig.isSequential));
     setTaskIsTemplate(Boolean(orig.isTemplate));
@@ -210,6 +213,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
         title: taskTitle.trim(),
         description: taskDescription.trim() || null,
         dueDate: taskDueDate ? new Date(taskDueDate).toISOString() : null,
+        publishAt: taskPublishAt ? new Date(taskPublishAt).toISOString() : null,
         term: taskTerm,
         category: taskCategory,
         isTemplate: taskIsTemplate,
@@ -564,7 +568,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
             className="glass-panel modal-card"
             onClick={(e) => e.stopPropagation()}
             style={{
-              width: 'min(100%, 580px)',
+              width: 'min(100%, 760px)',
               maxHeight: '90vh',
               display: 'flex',
               flexDirection: 'column',
@@ -651,6 +655,12 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                     onChange={(e) => setTaskDueDate(e.target.value)}
                     style={inputStyle}
                   />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Publicar el</label>
+                  <input type="datetime-local" value={taskPublishAt} onChange={(e) => setTaskPublishAt(e.target.value)} min={new Date().toISOString().slice(0, 16)} style={inputStyle} />
+                  <small style={{ display: 'block', marginTop: '0.25rem', color: 'var(--text-muted)', fontSize: '0.72rem' }}>Vacío: publicación inmediata.</small>
                 </div>
               </div>
 
@@ -790,7 +800,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                 <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--text-main)' }}>Seleccionar Material de la Academia</h3>
                 <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Elige el material o cuestionario para este paso de la tarea.</p>
               </div>
-              <button type="button" onClick={() => setMaterialPickerStepIndex(null)} className="modal-close"><X size={19} /></button>
+              <button type="button" onClick={() => setMaterialPickerStepIndex(null)} aria-label="Cerrar biblioteca" title="Cerrar" style={{ width: '34px', height: '34px', flexShrink: 0, border: 'none', background: 'transparent', color: 'var(--text-muted)', display: 'inline-grid', placeItems: 'center', cursor: 'pointer' }}><X size={19} /></button>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>

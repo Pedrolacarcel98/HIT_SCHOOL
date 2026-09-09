@@ -197,3 +197,30 @@ HIT_SCHOOL/
 
 ---
 *HitSchool © 2026 — Plataforma Educativa Integral.*
+
+---
+
+## Recursos en Google Drive
+
+Google Drive alojará los archivos, así que no consumirá almacenamiento ni ancho de banda del servidor. HitSchool solo guarda y muestra el enlace.
+
+Para organizar los recursos:
+
+1. Crea una carpeta en Google Drive, por ejemplo `HitSchool - Recursos`.
+2. Dentro crea subcarpetas: `Imágenes`, `Vídeos`, `Audios` y `Documentos`.
+3. Pulsa con botón derecho en cada carpeta y selecciona `Compartir`.
+4. En “Acceso general”, selecciona `Cualquier persona con el enlace`.
+5. Asigna el rol `Lector`.
+6. Sube los archivos a sus carpetas correspondientes.
+7. Para añadir un recurso en HitSchool, abre el archivo concreto, pulsa `Compartir` → `Copiar enlace`, y pega ese enlace individual en Material de Clase.
+
+No pegues el enlace de la carpeta en un recurso: debe usarse siempre el enlace del archivo concreto.
+
+Compatible con:
+
+- Imágenes: se pueden previsualizar.
+- Vídeos: compatibles; MP4 es el formato más fiable.
+- Audios: compatibles; MP3 es el formato recomendado.
+- Documentos/PDF: compatibles.
+
+La carpeta pública facilita que los archivos hereden permisos de lectura, pero HitSchool debe recibir el enlace individual de cada archivo.

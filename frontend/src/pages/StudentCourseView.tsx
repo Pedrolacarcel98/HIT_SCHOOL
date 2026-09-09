@@ -1,16 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, MessageSquare, BookOpen, Award, Users } from 'lucide-react';
+import { ArrowLeft, MessageSquare, BookOpen, Award } from 'lucide-react';
 import StudentStreamTab from '../components/StudentStreamTab';
 import StudentClassworkTab from '../components/StudentClassworkTab';
 import StudentGradesTab from '../components/StudentGradesTab';
-import StudentPeopleTab from '../components/StudentPeopleTab';
 import { useParent } from '../context/ParentContext';
 
 const StudentCourseView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'stream' | 'classwork' | 'grades' | 'people'>('stream');
+  const [activeTab, setActiveTab] = useState<'stream' | 'classwork' | 'grades'>('stream');
   const [course, setCourse] = useState<any>(null);
   const { selectedStudentId } = useParent();
 
@@ -65,7 +64,6 @@ const StudentCourseView: React.FC = () => {
           <TabButton active={activeTab === 'stream'} onClick={() => setActiveTab('stream')} icon={<MessageSquare size={18}/>} label="Tablón" />
           <TabButton active={activeTab === 'classwork'} onClick={() => setActiveTab('classwork')} icon={<BookOpen size={18}/>} label="Material Asignado / Tareas" />
           <TabButton active={activeTab === 'grades'} onClick={() => setActiveTab('grades')} icon={<Award size={18}/>} label="Mis Calificaciones" />
-          <TabButton active={activeTab === 'people'} onClick={() => setActiveTab('people')} icon={<Users size={18}/>} label="Compañeros" />
         </div>
       </nav>
 
@@ -74,7 +72,6 @@ const StudentCourseView: React.FC = () => {
         {activeTab === 'stream' && <StudentStreamTab courseId={id!} />}
         {activeTab === 'classwork' && <StudentClassworkTab courseId={id!} />}
         {activeTab === 'grades' && <StudentGradesTab courseId={id!} />}
-        {activeTab === 'people' && <StudentPeopleTab courseId={id!} />}
       </main>
     </div>
   );

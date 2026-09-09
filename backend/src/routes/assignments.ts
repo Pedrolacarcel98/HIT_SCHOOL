@@ -8,6 +8,13 @@ interface AuthRequest extends Request {
   user?: any;
 }
 
+const parsePublishAt = (value: unknown) => {
+  if (!value) return { value: null as Date | null };
+  const publishAt = new Date(String(value));
+  if (Number.isNaN(publishAt.getTime()) || publishAt <= new Date()) return { error: 'La fecha de publicación debe ser futura.' };
+  return { value: publishAt };
+};
+
 // 1. Obtener tareas para el estudiante logueado (o el alumno seleccionado por el tutor)
 router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
@@ -52,9 +59,19 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => 
     // Buscar tareas asignadas directamente al estudiante o a sus cursos
     const assignments = await prisma.assignment.findMany({
       where: {
-        OR: [
-          { studentId },
-          { courseId: { in: courseIds } }
+        AND: [
+          {
+            OR: [
+              { studentId },
+              { courseId: { in: courseIds } }
+            ]
+          },
+          {
+            OR: [
+              { publishAt: null },
+              { publishAt: { lte: new Date() } }
+            ]
+          }
         ]
       },
       include: {
@@ -102,11 +119,13 @@ router.get('/teacher', authenticateToken, requireTeacher, async (req: AuthReques
 
 // 3. Crear una nueva tarea (Profesor)
 router.post('/', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
-  const { title, description, category, dueDate, courseId, studentId, materialId } = req.body;
+  const { title, description, category, dueDate, publishAt, courseId, studentId, materialId } = req.body;
   const teacherId = req.user!.id;
 
   if (!title) return res.status(400).json({ error: 'El título es obligatorio' });
   if (!courseId && !studentId) return res.status(400).json({ error: 'Debe asignar la tarea a un curso o a un alumno' });
+  const parsedPublishAt = parsePublishAt(publishAt);
+  if (parsedPublishAt.error) return res.status(400).json({ error: parsedPublishAt.error });
 
   try {
     const assignment = await prisma.assignment.create({
@@ -115,6 +134,7 @@ router.post('/', authenticateToken, requireTeacher, async (req: AuthRequest, res
         description: description || '',
         category: category || 'GRAMMAR_VOCABULARY',
         dueDate: dueDate ? new Date(dueDate) : null,
+        publishAt: parsedPublishAt.value,
         courseId: courseId || null,
         studentId: studentId || null,
         materialId: materialId || null,
@@ -194,10 +214,12 @@ router.post('/:id/submit', authenticateToken, async (req: AuthRequest, res: Resp
 
 router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
   const assignmentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const { title, description, category, dueDate, courseId, studentId, materialId } = req.body;
+  const { title, description, category, dueDate, publishAt, courseId, studentId, materialId } = req.body;
   if (!title?.trim() || (!courseId && !studentId)) {
     return res.status(400).json({ error: 'Título y destinatario son obligatorios' });
   }
+  const parsedPublishAt = parsePublishAt(publishAt);
+  if (parsedPublishAt.error) return res.status(400).json({ error: parsedPublishAt.error });
 
   try {
     const assignment = await prisma.assignment.updateMany({
@@ -207,6 +229,7 @@ router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, r
         description: description || '',
         category: category || 'GRAMMAR_VOCABULARY',
         dueDate: dueDate ? new Date(dueDate) : null,
+        publishAt: parsedPublishAt.value,
         courseId: courseId || null,
         studentId: studentId || null,
         materialId: materialId || null

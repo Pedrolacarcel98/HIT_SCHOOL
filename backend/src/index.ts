@@ -1,6 +1,7 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import cors from 'cors';
+import path from 'path';
 
 const app = express();
 const prisma = new PrismaClient();
@@ -20,6 +21,7 @@ import termGradeRoutes from './routes/termGrades';
 
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/students', studentRoutes);

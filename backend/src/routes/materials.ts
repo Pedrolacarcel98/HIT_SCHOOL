@@ -5,6 +5,13 @@ import { authenticateToken, requireTeacher, AuthRequest } from '../middleware/au
 const router = Router();
 const prisma = new PrismaClient();
 
+const parsePublishAt = (value: unknown) => {
+  if (!value) return { value: null as Date | null };
+  const publishAt = new Date(String(value));
+  if (Number.isNaN(publishAt.getTime()) || publishAt <= new Date()) return { error: 'La fecha de publicación debe ser futura.' };
+  return { value: publishAt };
+};
+
 // Listar materiales con filtros opcionales (type, level, category, search)
 router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
@@ -95,7 +102,10 @@ router.get('/assigned-to-me', authenticateToken, async (req: AuthRequest, res: R
     }
 
     const assignments = await prisma.materialAssignment.findMany({
-      where: { studentId },
+      where: {
+        studentId,
+        OR: [{ publishAt: null }, { publishAt: { lte: new Date() } }]
+      } as any,
       orderBy: { assignedAt: 'desc' },
       include: {
         material: {
@@ -225,7 +235,7 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
 // Asignar un material a uno o varios alumnos
 router.post('/:id/assignments', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
   const materialId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const { studentIds, deadline } = req.body as { studentIds?: unknown; deadline?: unknown };
+  const { studentIds, deadline, publishAt } = req.body as { studentIds?: unknown; deadline?: unknown; publishAt?: unknown };
 
   if (!Array.isArray(studentIds) || studentIds.length === 0 || studentIds.some((id) => typeof id !== 'string')) {
     return res.status(400).json({ error: 'Debes seleccionar al menos un alumno' });
@@ -238,6 +248,8 @@ router.post('/:id/assignments', authenticateToken, requireTeacher, async (req: A
       return res.status(400).json({ error: 'La fecha de entrega no es válida' });
     }
   }
+  const parsedPublishAt = parsePublishAt(publishAt);
+  if (parsedPublishAt.error) return res.status(400).json({ error: parsedPublishAt.error });
 
   try {
     const material = await prisma.material.findFirst({ where: { id: materialId, teacherId: req.user!.id } });
@@ -255,8 +267,8 @@ router.post('/:id/assignments', authenticateToken, requireTeacher, async (req: A
     const assignments = await prisma.$transaction(
       students.map((student) => prisma.materialAssignment.upsert({
         where: { materialId_studentId: { materialId, studentId: student.id } },
-        update: { deadline: parsedDeadline, status: 'PENDING' },
-        create: { materialId, studentId: student.id, deadline: parsedDeadline }
+        update: { deadline: parsedDeadline, publishAt: parsedPublishAt.value, status: 'PENDING' },
+        create: { materialId, studentId: student.id, deadline: parsedDeadline, publishAt: parsedPublishAt.value }
       }))
     );
     if (material.type === 'FORM') {
@@ -342,6 +354,32 @@ router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, r
   }
 });
 
+// Duplicar un recurso, incluyendo la configuración completa de los formularios
+router.post('/:id/duplicate', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const source = await prisma.material.findFirst({ where: { id, teacherId: req.user!.id } });
+    if (!source) return res.status(404).json({ error: 'Material no encontrado' });
+
+    const duplicated = await prisma.material.create({
+      data: {
+        title: `${source.title} (copia)`,
+        description: source.description,
+        type: source.type,
+        level: source.level,
+        category: source.category,
+        url: source.url,
+        formData: source.formData ?? undefined,
+        teacherId: req.user!.id
+      }
+    });
+    res.status(201).json(duplicated);
+  } catch (error) {
+    console.error('Error al duplicar material:', error);
+    res.status(500).json({ error: 'Error al duplicar el material' });
+  }
+});
+
 // Eliminar material
 router.delete('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
   try {
@@ -367,37 +405,10 @@ router.delete('/:id', authenticateToken, requireTeacher, async (req: AuthRequest
       await transaction.material.delete({ where: { id } });
     });
 
-    res.json({ message: 'Material eliminado correctamente' });
+    res.json({ message: 'Material eliminado con éxito' });
   } catch (error) {
     console.error('Error al eliminar material:', error);
-    res.status(500).json({ error: 'Error interno al eliminar el material' });
-  }
-});
-
-// Duplicar material / examen
-router.post('/:id/duplicate', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
-  try {
-    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const original = await prisma.material.findUnique({ where: { id } });
-    if (!original) return res.status(404).json({ error: 'Material no encontrado' });
-
-    const duplicated = await prisma.material.create({
-      data: {
-        title: req.body.title || `[Copia] ${original.title}`,
-        description: original.description,
-        type: original.type,
-        level: original.level,
-        category: original.category,
-        url: original.url,
-        formData: original.formData ? JSON.parse(JSON.stringify(original.formData)) : null,
-        teacherId: req.user!.id
-      }
-    });
-
-    res.status(201).json(duplicated);
-  } catch (error) {
-    console.error('Error al duplicar material:', error);
-    res.status(500).json({ error: 'Error al duplicar el material' });
+    res.status(500).json({ error: 'Error al eliminar el material' });
   }
 });
 

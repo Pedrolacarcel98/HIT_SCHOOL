@@ -106,53 +106,55 @@ router.get('/contacts', authenticateToken, async (req: AuthRequest, res: Respons
         return res.json([]);
       }
 
-      const studentUser = await prisma.user.findUnique({
-        where: { id: targetStudentId },
-        select: {
-          id: true,
-          email: true,
-          profile: { select: { firstName: true, lastName: true } }
-        }
-      });
+      if (role === 'STUDENT') {
+        const teachers = await prisma.user.findMany({
+          where: { role: { in: ['TEACHER', 'ADMIN'] } },
+          select: {
+            id: true,
+            email: true,
+            profile: { select: { firstName: true, lastName: true, avatarUrl: true } }
+          },
+          orderBy: { profile: { firstName: 'asc' } }
+        });
 
-      const enrollments = await prisma.enrollment.findMany({
-        where: { studentId: targetStudentId },
-        include: {
-          course: {
-            include: {
-              teacher: {
-                select: {
-                  id: true,
-                  email: true,
-                  profile: { select: { firstName: true, lastName: true, avatarUrl: true } }
-                }
-              }
-            }
-          }
-        }
-      });
+        return res.json(teachers.map((teacher) => ({
+          id: teacher.id,
+          name: teacher.profile ? `${teacher.profile.firstName} ${teacher.profile.lastName}`.trim() || teacher.email : teacher.email,
+          email: teacher.email,
+          avatarUrl: teacher.profile?.avatarUrl || null,
+          role: 'TEACHER',
+          subtitle: 'Profesor/a de la academia',
+          studentId: targetStudentId
+        })));
+      }
 
-      const teacherMap = new Map<string, any>();
-      enrollments.forEach(e => {
-        const t = e.course?.teacher;
-        if (t && !teacherMap.has(t.id)) {
-          const teacherName = t.profile ? `${t.profile.firstName} ${t.profile.lastName}`.trim() || 'Profesor' : 'Profesor';
-          const studentFirstName = studentUser?.profile?.firstName || 'el alumno';
+      const [studentUser, teachers] = await Promise.all([
+        prisma.user.findUnique({
+          where: { id: targetStudentId },
+          select: { profile: { select: { firstName: true } } }
+        }),
+        prisma.user.findMany({
+          where: { role: { in: ['TEACHER', 'ADMIN'] } },
+          select: {
+            id: true,
+            email: true,
+            profile: { select: { firstName: true, lastName: true, avatarUrl: true } }
+          },
+          orderBy: { profile: { firstName: 'asc' } }
+        })
+      ]);
+      const studentFirstName = studentUser?.profile?.firstName || 'el alumno';
 
-          teacherMap.set(t.id, {
-            id: t.id,
-            name: teacherName,
-            email: t.email,
-            avatarUrl: t.profile?.avatarUrl || null,
-            courseTitle: `${teacherName} — Profesor de ${studentFirstName}`,
-            role: 'TEACHER',
-            studentId: targetStudentId,
-            studentFirstName
-          });
-        }
-      });
-
-      res.json(Array.from(teacherMap.values()));
+      res.json(teachers.map((teacher) => ({
+        id: teacher.id,
+        name: teacher.profile ? `${teacher.profile.firstName} ${teacher.profile.lastName}`.trim() || teacher.email : teacher.email,
+        email: teacher.email,
+        avatarUrl: teacher.profile?.avatarUrl || null,
+        courseTitle: `${teacher.email} — Profesor/a de ${studentFirstName}`,
+        role: 'TEACHER',
+        studentId: targetStudentId,
+        studentFirstName
+      })));
     }
   } catch (error) {
     console.error('Error al cargar contactos de chat:', error);
@@ -177,14 +179,18 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
     const isParentTeacherChat = (req.user.role === 'PARENT' && partnerUser?.role === 'TEACHER') ||
       ((req.user.role === 'TEACHER' || req.user.role === 'ADMIN') && partnerUser?.role === 'PARENT');
 
-    const whereCondition: any = {
-      OR: [
-        { senderId: req.user.id, recipientId: partnerId },
-        { senderId: partnerId, recipientId: req.user.id }
-      ]
-    };
+    const isTeacherOrAdmin = req.user.role === 'TEACHER' || req.user.role === 'ADMIN';
+    const conversationStudentId = reqStudentId || (partnerUser?.role === 'STUDENT' ? partnerId : '');
+    const whereCondition: any = isTeacherOrAdmin && conversationStudentId
+      ? { studentId: conversationStudentId }
+      : {
+          OR: [
+            { senderId: req.user.id, recipientId: partnerId },
+            { senderId: partnerId, recipientId: req.user.id }
+          ]
+        };
 
-    if (isParentTeacherChat && reqStudentId) {
+    if (!isTeacherOrAdmin && isParentTeacherChat && reqStudentId) {
       whereCondition.studentId = reqStudentId;
     }
 
@@ -192,6 +198,14 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       where: whereCondition,
       include: {
         sender: {
+          select: {
+            id: true,
+            role: true,
+            email: true,
+            profile: { select: { firstName: true, lastName: true } }
+          }
+        },
+        recipient: {
           select: {
             id: true,
             role: true,
@@ -209,12 +223,18 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
         : message.sender.email;
 
       const senderRole = message.sender.role === 'PARENT' ? 'TUTOR' : message.sender.role;
+      const recipientName = message.recipient.profile
+        ? `${message.recipient.profile.firstName} ${message.recipient.profile.lastName}`.trim() || message.recipient.email
+        : message.recipient.email;
 
       return {
         id: message.id,
         senderId: message.senderId,
         senderRole,
         senderName,
+        recipientId: message.recipientId,
+        recipientName,
+        recipientEmail: message.recipient.email,
         studentId: message.studentId,
         content: message.content,
         createdAt: message.createdAt,
@@ -265,6 +285,14 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
           email: true,
           profile: { select: { firstName: true, lastName: true } }
         }
+      },
+      recipient: {
+        select: {
+          id: true,
+          role: true,
+          email: true,
+          profile: { select: { firstName: true, lastName: true } }
+        }
       }
     }
   });
@@ -274,12 +302,18 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
     : message.sender.email;
 
   const senderRole = message.sender.role === 'PARENT' ? 'TUTOR' : message.sender.role;
+  const recipientName = message.recipient.profile
+    ? `${message.recipient.profile.firstName} ${message.recipient.profile.lastName}`.trim() || message.recipient.email
+    : message.recipient.email;
 
   res.status(201).json({
     id: message.id,
     senderId: message.senderId,
     senderRole,
     senderName,
+    recipientId: message.recipientId,
+    recipientName,
+    recipientEmail: message.recipient.email,
     studentId: message.studentId,
     content: message.content,
     createdAt: message.createdAt

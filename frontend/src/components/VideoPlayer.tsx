@@ -7,7 +7,7 @@ interface VideoPlayerProps {
 
 const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title }) => {
   // Convert YouTube normal URL to embed URL
-  const getEmbedUrl = (rawUrl: string): { type: 'youtube' | 'vimeo' | 'direct'; embedUrl: string } => {
+  const getEmbedUrl = (rawUrl: string): { type: 'youtube' | 'vimeo' | 'drive' | 'direct'; embedUrl: string } => {
     if (!rawUrl) return { type: 'direct', embedUrl: '' };
 
     // YouTube: https://www.youtube.com/watch?v=XXXX or https://youtu.be/XXXX
@@ -25,6 +25,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title }) => {
       return {
         type: 'vimeo',
         embedUrl: `https://player.vimeo.com/video/${vimeoMatch[1]}`
+      };
+    }
+
+    const driveFileId = rawUrl.match(/drive\.google\.com\/file\/d\/([^/?]+)/)?.[1]
+      || rawUrl.match(/[?&]id=([^&/?]+)/)?.[1];
+    if (driveFileId) {
+      return {
+        type: 'drive',
+        embedUrl: `https://drive.google.com/file/d/${driveFileId}/preview`
       };
     }
 
@@ -50,7 +59,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title }) => {
       )}
 
       <div style={{ position: 'relative', width: '100%', paddingBottom: '56.25%', background: '#0a0a0a' }}>
-        {type === 'youtube' || type === 'vimeo' ? (
+        {type === 'youtube' || type === 'vimeo' || type === 'drive' ? (
           <iframe
             src={embedUrl}
             title={title || 'Video Player'}

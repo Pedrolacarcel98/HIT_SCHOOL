@@ -126,9 +126,19 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => 
 
       const tasks = await prisma.assignment.findMany({
         where: {
-          OR: [
-            { studentId: student.id },
-            { courseId: { in: courseIds } }
+          AND: [
+            {
+              OR: [
+                { studentId: student.id },
+                { courseId: { in: courseIds } }
+              ]
+            },
+            {
+              OR: [
+                { publishAt: null },
+                { publishAt: { lte: new Date() } }
+              ]
+            }
           ]
         },
         include: {
@@ -144,11 +154,15 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => 
         const sub = t.submissions[0];
         if (!sub) {
           pendingTasksCount++;
-          if (t.dueDate) upcomingTasks.push({ id: t.id, title: t.title, course: t.course?.title || 'General', deadline: t.dueDate });
+          upcomingTasks.push({ id: t.id, title: t.title, course: t.course?.title || 'General', deadline: t.dueDate });
         }
       }
 
-      upcomingTasks.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
+      upcomingTasks.sort((a, b) => {
+        if (!a.deadline) return 1;
+        if (!b.deadline) return -1;
+        return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+      });
 
       // 3. Grades
       const gradesData = await prisma.submission.findMany({

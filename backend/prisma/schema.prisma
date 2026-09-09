@@ -48,6 +48,11 @@ enum PaymentState {
   PAID
 }
 
+enum BillingPeriod {
+  MONTHLY
+  QUARTERLY
+}
+
 model User {
   id           String       @id @default(uuid())
   email        String       @unique
@@ -109,6 +114,10 @@ model Profile {
   phone     String?   // Teléfono de contacto / WhatsApp
   birthDate DateTime? // Fecha de nacimiento
   address   String?   // Dirección completa
+  schoolYear String?  // Curso escolar
+  allergies String?   // Alergias o necesidades médicas
+  imageAuthorization Boolean? // Autorización para uso de imagen
+  observations String? // Observaciones del alumno
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -136,7 +145,10 @@ model Course {
 model Post {
   id        String   @id @default(uuid())
   courseId  String
-  content   String
+  content   String   @default("")
+  mediaUrl  String?
+  mediaType String?
+  mediaName String?
   createdAt DateTime @default(now())
   course    Course   @relation(fields: [courseId], references: [id])
 }
@@ -158,6 +170,7 @@ model AcademyEnrollment {
   startDate  DateTime
   endDate    DateTime?
   monthlyFee Int
+  billingPeriod BillingPeriod @default(MONTHLY)
   student    User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
   payments   PaymentStatus[]
 
@@ -174,6 +187,7 @@ model Assignment {
   title       String
   description String?
   dueDate     DateTime?
+  publishAt   DateTime?
   category    SkillCategory  @default(GRAMMAR_VOCABULARY)
   
   teacher     User           @relation("TeacherAssignments", fields: [teacherId], references: [id])
@@ -229,6 +243,7 @@ model StructuredTask {
   title                 String
   description           String?
   dueDate               DateTime?
+  publishAt             DateTime?
   term                  Int                          @default(1)
   isTemplate            Boolean                      @default(false)
   category              SkillCategory                @default(GRAMMAR_VOCABULARY)
@@ -300,6 +315,7 @@ model MaterialAssignment {
   materialId String
   studentId  String
   deadline   DateTime?
+  publishAt  DateTime?
   status     MaterialAssignmentStatus @default(PENDING)
   assignedAt DateTime                 @default(now())
   material   Material                 @relation(fields: [materialId], references: [id], onDelete: Cascade)

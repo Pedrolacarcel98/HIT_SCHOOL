@@ -1,9 +1,28 @@
 import { Router, Response } from 'express';
 import { Prisma, PrismaClient, SkillCategory } from '@prisma/client';
 import { authenticateToken, requireTeacher, AuthRequest } from '../middleware/auth';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 
 const router = Router();
 const prisma = new PrismaClient();
+const postUploadsDirectory = path.join(process.cwd(), 'uploads', 'posts');
+fs.mkdirSync(postUploadsDirectory, { recursive: true });
+
+const postUpload = multer({
+  storage: multer.diskStorage({
+    destination: postUploadsDirectory,
+    filename: (_req, file, callback) => {
+      const extension = path.extname(file.originalname);
+      callback(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${extension}`);
+    }
+  }),
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (_req, file, callback) => {
+    callback(null, file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/'));
+  }
+});
 
 // Listar todos los cursos del usuario (incluyendo datos del profesor para el alumno/tutor)
 router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
@@ -220,20 +239,24 @@ router.get('/:id/posts', authenticateToken, verifyCourseAccess, async (req: Auth
   }
 });
 
-router.post('/:id/posts', authenticateToken, requireTeacher, verifyCourseAccess, async (req: AuthRequest, res: Response) => {
-  const { content } = req.body;
-  if (!content) return res.status(400).json({ error: 'El contenido es obligatorio' });
+router.post('/:id/posts', authenticateToken, requireTeacher, verifyCourseAccess, postUpload.single('media'), async (req: AuthRequest, res: Response) => {
+  const content = typeof req.body.content === 'string' ? req.body.content.trim() : '';
+  if (!content && !req.file) return res.status(400).json({ error: 'Escribe un mensaje o adjunta una imagen o vídeo.' });
 
   try {
     const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const post = await prisma.post.create({
       data: {
         content,
-        courseId
+        courseId,
+        mediaUrl: req.file ? `/uploads/posts/${req.file.filename}` : null,
+        mediaType: req.file?.mimetype || null,
+        mediaName: req.file?.originalname || null
       }
     });
     res.status(201).json(post);
   } catch (error) {
+    console.error('Error al crear post:', error);
     res.status(500).json({ error: 'Error al crear post' });
   }
 });
