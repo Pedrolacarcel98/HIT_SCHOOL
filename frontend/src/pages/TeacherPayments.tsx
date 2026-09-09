@@ -58,6 +58,11 @@ const TeacherPayments: React.FC = () => {
   const [error, setError] = useState('');
   const [selectedStudentPaymentId, setSelectedStudentPaymentId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState(searchParams.get('student') || '');
+  const [statementYear, setStatementYear] = useState<string>('ALL');
+
+  useEffect(() => {
+    setStatementYear('ALL');
+  }, [selectedStudentPaymentId]);
 
   const monthLabel = (month: number, year: number) => {
     const date = new Date(year, month - 1, 1);
@@ -103,9 +108,15 @@ const TeacherPayments: React.FC = () => {
     });
   };
 
-  const handleDownloadStatement = (student: PaymentStudent) => {
+  const handleDownloadStatement = (student: PaymentStudent, yearFilter: string = 'ALL') => {
     const studentName = `${student.firstName} ${student.lastName}`.trim();
-    const payments = student.payments.filter(p => p.isApplicable).map(p => {
+    const filteredRaw = student.payments.filter(p => {
+      if (!p.isApplicable) return false;
+      if (yearFilter !== 'ALL' && p.year !== Number(yearFilter)) return false;
+      return true;
+    });
+
+    const payments = filteredRaw.map(p => {
       let amount = p.amount;
       if (!amount) {
         const cardDate = new Date(p.year, p.month - 1, 1);
@@ -126,7 +137,8 @@ const TeacherPayments: React.FC = () => {
         monthLabel: monthLabel(p.month, p.year),
         amount,
         isPaid: p.isPaid,
-        paidAt: p.paidAt
+        paidAt: p.paidAt,
+        year: p.year
       };
     });
 
@@ -139,6 +151,7 @@ const TeacherPayments: React.FC = () => {
       studentName: billedName,
       studentDni: billedDni,
       studentEmail: student.email,
+      year: yearFilter === 'ALL' ? null : yearFilter,
       payments
     });
   };
@@ -209,6 +222,25 @@ const TeacherPayments: React.FC = () => {
     () => students.find((student) => student.id === selectedStudentPaymentId) || null,
     [students, selectedStudentPaymentId]
   );
+
+  const availableStatementYears = useMemo(() => {
+    if (!selectedStudent) return [];
+    const years = Array.from(
+      new Set(
+        selectedStudent.payments
+          .filter((p) => p.isApplicable)
+          .map((p) => p.year)
+      )
+    ).sort((a, b) => b - a);
+    return years;
+  }, [selectedStudent]);
+
+  const visibleStudentPayments = useMemo(() => {
+    if (!selectedStudent) return [];
+    if (statementYear === 'ALL') return selectedStudent.payments;
+    const targetYear = Number(statementYear);
+    return selectedStudent.payments.filter((p) => p.year === targetYear);
+  }, [selectedStudent, statementYear]);
 
   const togglePayment = async (studentId: string, payment: StudentPaymentItem) => {
     try {
@@ -466,25 +498,55 @@ const TeacherPayments: React.FC = () => {
               </div>
 
               {selectedStudent.payments.filter((payment) => payment.isApplicable).length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => handleDownloadStatement(selectedStudent)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.45rem',
-                    padding: '0.55rem 0.95rem',
-                    fontSize: '0.9rem',
-                    borderRadius: '8px',
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    color: 'var(--text-main)',
-                    cursor: 'pointer',
-                    fontWeight: 600
-                  }}
-                >
-                  <FileText size={16} /> Generar Extracto Global
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <label htmlFor="teacher-statement-year" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                      Año:
+                    </label>
+                    <select
+                      id="teacher-statement-year"
+                      value={statementYear}
+                      onChange={(e) => setStatementYear(e.target.value)}
+                      style={{
+                        padding: '0.5rem 0.75rem',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border)',
+                        background: 'var(--surface)',
+                        color: 'var(--text-main)',
+                        fontSize: '0.88rem',
+                        fontWeight: 500,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <option value="ALL">Todos los años</option>
+                      {availableStatementYears.map((yr) => (
+                        <option key={yr} value={yr}>
+                          Año {yr}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadStatement(selectedStudent, statementYear)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.45rem',
+                      padding: '0.55rem 0.95rem',
+                      fontSize: '0.9rem',
+                      borderRadius: '8px',
+                      background: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--text-main)',
+                      cursor: 'pointer',
+                      fontWeight: 600
+                    }}
+                  >
+                    <FileText size={16} /> Descargar Extracto {statementYear === 'ALL' ? 'Completo' : `(${statementYear})`}
+                  </button>
+                </div>
               )}
             </header>
 
@@ -513,11 +575,16 @@ const TeacherPayments: React.FC = () => {
 
             <div style={{ background: '#fff', border: '1px solid rgba(226, 232, 240, 0.8)', borderRadius: '16px', boxShadow: 'var(--shadow-sm)', padding: '1.5rem' }}>
               <h4 style={{ margin: '0 0 1rem', fontSize: '1rem', color: 'var(--text-main)' }}>
-                Historial de Mensualidades ({selectedStudent.payments.length})
+                Historial de Mensualidades {statementYear !== 'ALL' ? `- Año ${statementYear}` : ''} ({visibleStudentPayments.length})
               </h4>
 
               <div style={{ display: 'grid', gap: '1rem' }}>
-                {selectedStudent.payments.map((payment) => {
+                {visibleStudentPayments.length === 0 ? (
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: '0.5rem 0' }}>
+                    No hay mensualidades registradas para este año seleccionado.
+                  </p>
+                ) : (
+                  visibleStudentPayments.map((payment) => {
                   const styles = getStatusStyles(payment);
                   const paymentKey = `${selectedStudent.id}-${payment.year}-${payment.month}`;
                   const isUpdating = updatingKey === paymentKey;
@@ -630,7 +697,7 @@ const TeacherPayments: React.FC = () => {
                       </div>
                     </div>
                   );
-                })}
+                }))}
               </div>
             </div>
           </div>

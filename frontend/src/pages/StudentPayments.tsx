@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { CheckCircle2, Clock3, FileText, XCircle, CalendarDays } from 'lucide-react';
 import { useParent } from '../context/ParentContext';
 import { generateInvoicePDF, generateStatementPDF } from '../utils/invoice';
@@ -57,9 +57,35 @@ interface EnrollmentGroup {
 
 const StudentPayments: React.FC = () => {
   const [groupedPayments, setGroupedPayments] = useState<EnrollmentGroup[]>([]);
+  const [statementYear, setStatementYear] = useState<string>('ALL');
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(true);
   const { selectedStudentId, selectedStudent } = useParent();
+
+  useEffect(() => {
+    setStatementYear('ALL');
+  }, [selectedStudentId]);
+
+  const availableYears = useMemo(() => {
+    const yearSet = new Set<number>();
+    groupedPayments.forEach((g) => {
+      g.payments.forEach((p) => {
+        if (p.year) yearSet.add(p.year);
+      });
+    });
+    return Array.from(yearSet).sort((a, b) => b - a);
+  }, [groupedPayments]);
+
+  const displayedGroups = useMemo(() => {
+    if (statementYear === 'ALL') return groupedPayments;
+    const targetYear = Number(statementYear);
+    return groupedPayments
+      .map((g) => ({
+        ...g,
+        payments: g.payments.filter((p) => p.year === targetYear)
+      }))
+      .filter((g) => g.payments.length > 0);
+  }, [groupedPayments, statementYear]);
 
   const getMonthLabel = (month: number, year: number) => {
     const date = new Date(year, month - 1, 1);
@@ -171,7 +197,7 @@ const StudentPayments: React.FC = () => {
     });
   };
 
-  const handleDownloadStatement = () => {
+  const handleDownloadStatement = (yearFilter: string = 'ALL') => {
     if (groupedPayments.length === 0) return;
     const firstGroup = groupedPayments[0];
     const student = firstGroup.payments[0]?.data?.student;
@@ -179,15 +205,20 @@ const StudentPayments: React.FC = () => {
 
     const studentName = `${student.profile?.firstName || 'Alumno'} ${student.profile?.lastName || ''}`.trim();
     
-    // Flatten all payments from all groups
-    const allPayments = groupedPayments.flatMap(g => 
-      g.payments.map(p => ({
-        monthLabel: p.label,
-        amount: p.data?.amount || g.enrollment.monthlyFee || 35,
-        isPaid: p.data?.isPaid || false,
-        paidAt: p.data?.paidAt
-      }))
+    // Flatten all payments from all groups, applying yearFilter
+    const allPayments = groupedPayments.flatMap((g) => 
+      g.payments
+        .filter((p) => yearFilter === 'ALL' || p.year === Number(yearFilter))
+        .map((p) => ({
+          monthLabel: p.label,
+          amount: p.data?.amount || g.enrollment.monthlyFee || 35,
+          isPaid: p.data?.isPaid || false,
+          paidAt: p.data?.paidAt,
+          year: p.year
+        }))
     );
+
+    if (allPayments.length === 0) return;
 
     const billedName = student.parent?.profile 
       ? `${student.parent.profile.firstName} ${student.parent.profile.lastName}`.trim()
@@ -198,6 +229,7 @@ const StudentPayments: React.FC = () => {
       studentName: billedName,
       studentDni: billedDni,
       studentEmail: student.email,
+      year: yearFilter === 'ALL' ? null : yearFilter,
       payments: allPayments
     });
   };
@@ -221,24 +253,54 @@ const StudentPayments: React.FC = () => {
           </p>
         </div>
         {groupedPayments.length > 0 && (
-          <button
-            onClick={handleDownloadStatement}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.45rem',
-              padding: '0.55rem 0.95rem',
-              fontSize: '0.9rem',
-              borderRadius: '8px',
-              background: 'var(--surface)',
-              border: '1px solid var(--border)',
-              color: 'var(--text-main)',
-              cursor: 'pointer',
-              fontWeight: 600
-            }}
-          >
-            <FileText size={16} /> Generar Extracto Global
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+              <label htmlFor="student-statement-year" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                Año:
+              </label>
+              <select
+                id="student-statement-year"
+                value={statementYear}
+                onChange={(e) => setStatementYear(e.target.value)}
+                style={{
+                  padding: '0.5rem 0.75rem',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface)',
+                  color: 'var(--text-main)',
+                  fontSize: '0.88rem',
+                  fontWeight: 500,
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="ALL">Todos los años</option>
+                {availableYears.map((yr) => (
+                  <option key={yr} value={yr}>
+                    Año {yr}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              onClick={() => handleDownloadStatement(statementYear)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                padding: '0.55rem 0.95rem',
+                fontSize: '0.9rem',
+                borderRadius: '8px',
+                background: 'var(--surface)',
+                border: '1px solid var(--border)',
+                color: 'var(--text-main)',
+                cursor: 'pointer',
+                fontWeight: 600
+              }}
+            >
+              <FileText size={16} /> Descargar Extracto {statementYear === 'ALL' ? 'Completo' : `(${statementYear})`}
+            </button>
+          </div>
         )}
       </header>
 
@@ -252,9 +314,11 @@ const StudentPayments: React.FC = () => {
         <p style={{ color: 'var(--text-muted)' }}>Cargando estado de pago...</p>
       ) : groupedPayments.length === 0 ? (
         <p style={{ color: 'var(--text-muted)' }}>No tienes periodos de matrícula registrados.</p>
+      ) : displayedGroups.length === 0 ? (
+        <p style={{ color: 'var(--text-muted)' }}>No tienes mensualidades registradas para el año {statementYear}.</p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-          {groupedPayments.map((group) => (
+          {displayedGroups.map((group) => (
             <div key={group.enrollment.id} className="glass-panel" style={{ padding: '1.5rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
                 <CalendarDays size={20} style={{ color: 'var(--primary)' }} />
