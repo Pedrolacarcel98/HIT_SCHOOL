@@ -325,7 +325,7 @@ const StudentPayments: React.FC = () => {
                 <h2 style={{ margin: 0, fontSize: '1.3rem', color: 'var(--text-main)' }}>
                   Periodo de Matrícula: {new Date(group.enrollment.startDate).toLocaleDateString()} {group.enrollment.endDate ? `- ${new Date(group.enrollment.endDate).toLocaleDateString()}` : '(Activa)'}
                 </h2>
-                <span style={{ marginLeft: 'auto', background: 'var(--surface-alt)', padding: '0.25rem 0.75rem', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 600 }}>
+                <span style={{ marginLeft: 'auto', background: '#fef9c3', border: '1px solid #fde68a', color: '#854d0e', padding: '0.25rem 0.75rem', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 600 }}>
                   {group.enrollment.monthlyFee} € / mes
                 </span>
               </div>
@@ -340,7 +340,7 @@ const StudentPayments: React.FC = () => {
                       style={{
                         border: '1px solid var(--border)',
                         borderRadius: '12px',
-                        background: 'var(--surface-alt)',
+                        background: '#fffdf0',
                         padding: '1.25rem'
                       }}
                     >

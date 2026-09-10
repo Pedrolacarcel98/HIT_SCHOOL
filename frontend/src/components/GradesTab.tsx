@@ -905,6 +905,11 @@ const GradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                                     <Clock3 size={13} /> En Progreso
                                   </span>
                                 )}
+                                {isCompleted && studentTask.dueDate && (
+                                  <span style={{ fontSize: '0.72rem', color: studentTask.isLate ? '#92400e' : '#166534', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.2rem', padding: '0.12rem 0.45rem', borderRadius: '10px', background: studentTask.isLate ? '#fef3c7' : '#ecfdf5', border: `1px solid ${studentTask.isLate ? '#fde68a' : '#bbf7d0'}` }}>
+                                    {studentTask.isLate ? 'Fuera de plazo' : 'Dentro de plazo'}
+                                  </span>
+                                )}
                               </div>
 
                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>

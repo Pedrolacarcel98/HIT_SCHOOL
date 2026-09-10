@@ -117,6 +117,7 @@ model Profile {
   schoolYear String?  // Curso escolar
   allergies String?   // Alergias o necesidades médicas
   imageAuthorization Boolean? // Autorización para uso de imagen
+  imageAuthorizationScope String? // Alcance de autorización de imagen
   observations String? // Observaciones del alumno
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

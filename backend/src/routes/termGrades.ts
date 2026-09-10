@@ -58,6 +58,13 @@ export const calculateTermOverallGrade = (
   };
 };
 
+const hasEvaluableStructuredStep = (task: { steps: Array<{ requiresSubmission?: boolean; material?: { type?: string } | null }> }) => {
+  return task.steps.some((step) => {
+    const isPassiveMedia = Boolean(step.material && ['VIDEO', 'AUDIO', 'IMAGE'].includes(step.material.type || ''));
+    return !isPassiveMedia && Boolean(step.requiresSubmission || step.material?.type === 'FORM');
+  });
+};
+
 // 1. Obtener matriz trimestral de calificaciones para un curso (Profesor)
 router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
   try {
@@ -112,6 +119,7 @@ router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: A
       },
       orderBy: [{ dueDate: 'asc' }, { createdAt: 'asc' }]
     });
+    const evaluableTasks = tasks.filter(hasEvaluableStructuredStep);
 
     // Obtener registros existentes de TermGrade para este curso y trimestre
     const termGrades = await prisma.termGrade.findMany({
@@ -130,7 +138,7 @@ router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: A
 
       // Calcular la media de tareas del trimestre para este estudiante
       const studentTasksScores: number[] = [];
-      const studentTasksBreakdown = tasks.map((task) => {
+      const studentTasksBreakdown = evaluableTasks.map((task) => {
         // Buscar delivery de la tarea
         const delivery = task.deliveries.find((d) => d.studentId === student.id);
         
@@ -176,6 +184,13 @@ router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: A
         }
 
         const allStepsCompleted = stepsDetail.every((s) => s.isCompleted);
+        const completedAtDates = stepsDetail
+          .map((s) => s.completedAt ? new Date(s.completedAt) : null)
+          .filter((date): date is Date => date instanceof Date && !Number.isNaN(date.getTime()));
+        const completedAt = allStepsCompleted && completedAtDates.length > 0
+          ? new Date(Math.max(...completedAtDates.map((date) => date.getTime())))
+          : null;
+        const isLate = Boolean(task.dueDate && completedAt && completedAt.getTime() > new Date(task.dueDate).getTime());
 
         return {
           taskId: task.id,
@@ -186,6 +201,8 @@ router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: A
           taskGrade,
           taskFeedback: delivery?.feedback || null,
           isCompleted: allStepsCompleted,
+          completedAt,
+          isLate,
           status: delivery?.status || (allStepsCompleted ? 'COMPLETED' : 'IN_PROGRESS')
         };
       });
@@ -216,7 +233,7 @@ router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: A
         listening: existingRecord?.listening ?? null,
         speaking: existingRecord?.speaking ?? null,
         observations: existingRecord?.observations ?? '',
-        tasksCount: tasks.length,
+        tasksCount: evaluableTasks.length,
         completedTasksCount: studentTasksBreakdown.filter((t) => t.isCompleted).length,
         tasks: studentTasksBreakdown
       };
@@ -226,7 +243,7 @@ router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: A
       course: { id: course.id, title: course.title },
       term,
       academicYear,
-      tasksSummary: tasks.map((t) => ({ id: t.id, title: t.title, category: t.category, dueDate: t.dueDate })),
+      tasksSummary: evaluableTasks.map((t) => ({ id: t.id, title: t.title, category: t.category, dueDate: t.dueDate })),
       students: studentsData
     });
   } catch (error) {
@@ -435,6 +452,7 @@ router.get('/student/:studentId', authenticateToken, async (req: AuthRequest, re
       },
       orderBy: [{ dueDate: 'asc' }, { createdAt: 'asc' }]
     });
+    const evaluableTasks = tasks.filter(hasEvaluableStructuredStep);
 
     // Obtener todos los TermGrade existentes
     const termGrades = await prisma.termGrade.findMany({
@@ -449,7 +467,7 @@ router.get('/student/:studentId', authenticateToken, async (req: AuthRequest, re
     const termsData: Record<number, any> = {};
 
     for (let t = 1; t <= 3; t++) {
-      const termTasks = tasks.filter((task) => task.term === t);
+      const termTasks = evaluableTasks.filter((task) => task.term === t);
       const existingTermGrade = termGrades.find((tg) => tg.term === t);
 
       const taskScores: number[] = [];
@@ -491,6 +509,15 @@ router.get('/student/:studentId', authenticateToken, async (req: AuthRequest, re
           taskScores.push(finalTaskGrade);
         }
 
+        const allStepsCompleted = stepsFormatted.every((s) => s.isCompleted);
+        const completedAtDates = stepsFormatted
+          .map((s) => s.completedAt ? new Date(s.completedAt) : null)
+          .filter((date): date is Date => date instanceof Date && !Number.isNaN(date.getTime()));
+        const completedAt = allStepsCompleted && completedAtDates.length > 0
+          ? new Date(Math.max(...completedAtDates.map((date) => date.getTime())))
+          : null;
+        const isLate = Boolean(task.dueDate && completedAt && completedAt.getTime() > new Date(task.dueDate).getTime());
+
         return {
           taskId: task.id,
           title: task.title,
@@ -499,7 +526,9 @@ router.get('/student/:studentId', authenticateToken, async (req: AuthRequest, re
           steps: stepsFormatted,
           taskGrade: finalTaskGrade,
           taskFeedback: delivery?.feedback || null,
-          isCompleted: stepsFormatted.every((s) => s.isCompleted)
+          isCompleted: allStepsCompleted,
+          completedAt,
+          isLate
         };
       });
 

@@ -126,6 +126,8 @@ interface StructuredTaskStep {
   id: string;
   order: number;
   title: string;
+  requiresSubmission?: boolean;
+  isEvaluable?: boolean;
   isCompleted: boolean;
   material?: { id: string; title: string; type: string; url?: string | null; description?: string | null; formData?: { questions?: unknown[] } | null } | null;
   submission?: { id: string; content: string | null; grade: number | null; feedback: string | null; submittedAt: string } | null;
@@ -530,7 +532,7 @@ const StudentCourses: React.FC = () => {
                               disabled={isBlocked || step.isCompleted}
                               onChange={(e) => {
                                 if (e.target.checked) {
-                                  if (step.material?.type === 'VIDEO' || !step.material) {
+                                  if (!step.isEvaluable) {
                                     completeStructuredStep(step.id);
                                   } else if (step.material?.type === 'DOCUMENT') {
                                     openStructuredDelivery(step.id, step.title);

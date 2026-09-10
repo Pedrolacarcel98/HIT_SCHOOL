@@ -302,7 +302,8 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
       if (res.ok) {
         window.alert('¡Tarea guardada con éxito en el Catálogo Central de Plantillas!');
       } else {
-        window.alert('No se pudo guardar como plantilla.');
+        const data = await res.json().catch(() => ({}));
+        window.alert(data.error || 'No se pudo guardar como plantilla.');
       }
     } catch (err) {
       console.error(err);
@@ -384,8 +385,9 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   // Agrupación directa de Tareas por Disciplina / Categoría
   const groupedTasks = SKILL_CATEGORIES.map(cat => ({
     ...cat,
-    tasks: structuredTasks.filter(t => (t.category || 'GRAMMAR_VOCABULARY') === cat.id)
+    tasks: structuredTasks.filter(t => t.assignmentType === 'CLASS' && (t.category || 'GRAMMAR_VOCABULARY') === cat.id)
   }));
+  const classStructuredTasks = structuredTasks.filter(t => t.assignmentType === 'CLASS');
 
   return (
     <div>
@@ -421,7 +423,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
         </div>
 
         <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-          {structuredTasks.length} {structuredTasks.length === 1 ? 'tarea en total' : 'tareas en total'}
+          {classStructuredTasks.length} {classStructuredTasks.length === 1 ? 'tarea en total' : 'tareas en total'}
         </span>
       </div>
 
@@ -429,7 +431,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
         <div className="glass-panel" style={{ textAlign: 'center', padding: '4rem 2rem', color: 'var(--text-muted)' }}>
           Cargando tareas de la clase...
         </div>
-      ) : structuredTasks.length === 0 ? (
+      ) : classStructuredTasks.length === 0 ? (
         <div style={{ padding: '3rem 2rem', border: '1px dashed var(--primary-border)', borderRadius: '12px', background: 'var(--primary-subtle)', textAlign: 'center', color: 'var(--text-muted)', marginBottom: '2rem' }}>
           <ListChecks size={42} style={{ color: 'var(--primary)', opacity: 0.5, marginBottom: '0.75rem' }} />
           <h3 style={{ margin: '0 0 0.5rem', color: 'var(--text-main)', fontSize: '1.2rem' }}>Aún no hay tareas en esta clase</h3>
@@ -508,6 +510,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                         title: task.title,
                         description: task.description,
                         dueDate: task.dueDate,
+                        publishAt: task.publishAt,
                         category: task.category,
                         isSequential: task.isSequential,
                         isTemplate: task.isTemplate,

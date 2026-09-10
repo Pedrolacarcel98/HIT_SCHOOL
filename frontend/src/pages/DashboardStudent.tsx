@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { CircleDollarSign, AlertTriangle, BookOpen, Award, CheckCircle2 } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { CircleDollarSign, AlertTriangle, BookOpen, Award, CheckCircle2, FileText, Receipt } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useParent } from '../context/ParentContext';
+import { generateFamilyMonthlyInvoicePDF, generateFamilyStatementPDF } from '../utils/invoice';
 
 interface DashboardStudentData {
   student: { id: string; name: string };
@@ -16,11 +18,34 @@ interface DashboardStudentData {
   grades: { courseTitle: string; average: number }[];
 }
 
+interface FamilyPaymentLine {
+  studentId: string;
+  studentName: string;
+  studentDni?: string | null;
+  studentEmail?: string | null;
+  month: number;
+  year: number;
+  monthLabel: string;
+  amount: number;
+  isPaid: boolean;
+  paidAt?: string | Date | null;
+}
+
 const DashboardStudent: React.FC = () => {
   const [dashboardData, setDashboardData] = useState<DashboardStudentData[]>([]);
+  const [familyPayments, setFamilyPayments] = useState<FamilyPaymentLine[]>([]);
+  const [familyMonthKey, setFamilyMonthKey] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const { childrenList, parentName, parentUser } = useParent();
+  const userRole = localStorage.getItem('userRole');
+
+  const getMonthLabel = (month: number, year: number) => {
+    const date = new Date(year, month - 1, 1);
+    const raw = date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+    return raw.charAt(0).toUpperCase() + raw.slice(1).replace(' de ', ' ');
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -45,6 +70,89 @@ const DashboardStudent: React.FC = () => {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    if (userRole !== 'PARENT' || childrenList.length === 0) return;
+
+    const fetchFamilyPayments = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+        const results = await Promise.all(childrenList.map(async (child) => {
+          const res = await fetch(`${apiUrl}/api/payments/me?all=true&studentId=${child.id}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (!res.ok) return [] as FamilyPaymentLine[];
+          const payments = await res.json();
+          const studentName = child.profile?.firstName || child.profile?.lastName
+            ? `${child.profile?.firstName || ''} ${child.profile?.lastName || ''}`.trim()
+            : child.email;
+
+          return payments
+            .filter((payment: any) => payment?.isPaid)
+            .map((payment: any) => ({
+              studentId: child.id,
+              studentName,
+              studentDni: child.profile?.dni || null,
+              studentEmail: child.email,
+              month: payment.month,
+              year: payment.year,
+              monthLabel: getMonthLabel(payment.month, payment.year),
+              amount: Number(payment.amount) || 0,
+              isPaid: Boolean(payment.isPaid),
+              paidAt: payment.paidAt
+            }));
+        }));
+        setFamilyPayments(results.flat());
+      } catch (err) {
+        console.error('Error al cargar pagos familiares:', err);
+        setFamilyPayments([]);
+      }
+    };
+
+    fetchFamilyPayments();
+  }, [userRole, childrenList]);
+
+  const familyMonthOptions = useMemo(() => {
+    const optionMap = new Map<string, string>();
+    familyPayments.forEach((payment) => {
+      const key = `${payment.year}-${String(payment.month).padStart(2, '0')}`;
+      optionMap.set(key, payment.monthLabel);
+    });
+    return Array.from(optionMap.entries()).sort(([a], [b]) => b.localeCompare(a));
+  }, [familyPayments]);
+
+  useEffect(() => {
+    if (!familyMonthKey && familyMonthOptions.length > 0) {
+      setFamilyMonthKey(familyMonthOptions[0][0]);
+    }
+  }, [familyMonthKey, familyMonthOptions]);
+
+  const handleDownloadFamilyStatement = () => {
+    if (familyPayments.length === 0) return;
+    generateFamilyStatementPDF({
+      parentName,
+      parentDni: parentUser?.profile?.dni || null,
+      parentEmail: parentUser?.email || null,
+      payments: familyPayments
+    });
+  };
+
+  const handleDownloadFamilyInvoice = () => {
+    if (!familyMonthKey) return;
+    const [yearValue, monthValue] = familyMonthKey.split('-').map(Number);
+    const payments = familyPayments.filter((payment) => payment.year === yearValue && payment.month === monthValue);
+    if (payments.length === 0) return;
+    generateFamilyMonthlyInvoicePDF({
+      parentName,
+      parentDni: parentUser?.profile?.dni || null,
+      parentEmail: parentUser?.email || null,
+      month: monthValue,
+      year: yearValue,
+      monthLabel: payments[0].monthLabel,
+      payments
+    });
+  };
+
   if (loading) {
     return (
       <div className="page-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
@@ -62,8 +170,6 @@ const DashboardStudent: React.FC = () => {
       </div>
     );
   }
-
-  const userRole = localStorage.getItem('userRole');
 
   return (
     <div className="page-container animate-fade-in">
@@ -164,6 +270,56 @@ const DashboardStudent: React.FC = () => {
             </div>
           </div>
         ))}
+
+        {userRole === 'PARENT' && (
+          <section className="glass-panel" style={{ padding: '1.75rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: '1.3rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                <CircleDollarSign size={22} style={{ color: 'var(--primary)' }} /> Documentación y Pagos Conjuntos (Familia)
+              </h2>
+              <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)' }}>
+                Descarga la documentación de cobros unificada para todos tus hijos matriculados.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={handleDownloadFamilyStatement}
+                disabled={familyPayments.length === 0}
+                className="btn-primary"
+                style={{ opacity: familyPayments.length === 0 ? 0.55 : 1, cursor: familyPayments.length === 0 ? 'not-allowed' : 'pointer' }}
+              >
+                <FileText size={17} /> Descargar Extracto Conjunto
+              </button>
+
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap' }}>
+                <select
+                  value={familyMonthKey}
+                  onChange={(event) => setFamilyMonthKey(event.target.value)}
+                  disabled={familyMonthOptions.length === 0}
+                  aria-label="Mes de factura mensual conjunta"
+                  style={{ padding: '0.7rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: '#ffffff', color: 'var(--text-main)', fontWeight: 600 }}
+                >
+                  {familyMonthOptions.length === 0 ? (
+                    <option value="">Sin mensualidades pagadas</option>
+                  ) : familyMonthOptions.map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleDownloadFamilyInvoice}
+                  disabled={!familyMonthKey}
+                  className="btn-primary"
+                  style={{ opacity: !familyMonthKey ? 0.55 : 1, cursor: !familyMonthKey ? 'not-allowed' : 'pointer' }}
+                >
+                  <Receipt size={17} /> Descargar Factura Mensual Conjunta
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );

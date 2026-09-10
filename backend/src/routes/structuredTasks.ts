@@ -177,6 +177,40 @@ const gradeForm = (questions: any[], answers: Record<string, unknown>) => {
   return { score, total, grade: total ? (score / total) * 10 : 0 };
 };
 
+const getTargetStudentIds = (task: any, courseStudentIds: string[] = []) => {
+  if (task.assignmentType === StructuredTaskAssignmentType.INDIVIDUAL) {
+    const ids = new Set<string>();
+    if (task.assignedStudentId) ids.add(task.assignedStudentId);
+    if (Array.isArray(task.assignedStudents)) {
+      task.assignedStudents.forEach((item: any) => {
+        if (item.studentId) ids.add(item.studentId);
+      });
+    }
+    return Array.from(ids);
+  }
+  return courseStudentIds;
+};
+
+const hasStudentCompletedStep = (step: any, studentId: string) => {
+  const hasProgress = Array.isArray(step.progress) && step.progress.some((p: any) => p.studentId === studentId);
+  const hasSubmission = Array.isArray(step.assignment?.submissions) && step.assignment.submissions.some((s: any) => s.studentId === studentId);
+  return hasProgress || hasSubmission;
+};
+
+const buildTaskStats = (task: any, courseStudentIds: string[] = []) => {
+  const targetStudentIds = getTargetStudentIds(task, courseStudentIds);
+  const totalSteps = task.steps?.length || 0;
+  const completedStudentsCount = totalSteps === 0 ? 0 : targetStudentIds.filter((studentId) =>
+    task.steps.every((step: any) => hasStudentCompletedStep(step, studentId))
+  ).length;
+
+  return {
+    totalTargetStudents: targetStudentIds.length,
+    completedStudentsCount,
+    completionRate: targetStudentIds.length > 0 ? Math.round((completedStudentsCount / targetStudentIds.length) * 100) : 0
+  };
+};
+
 const resolveVisibleStudentId = async (req: AuthRequest, requestedStudentId?: string) => {
   if (req.user?.role === 'STUDENT') return req.user.id;
   if (req.user?.role !== 'PARENT') return null;
@@ -211,7 +245,19 @@ router.get('/teacher', authenticateToken, requireTeacher, async (req: AuthReques
       include: getTaskInclude(),
       orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }]
     });
-    res.json(tasks.map(serializeTask));
+    const courseIds = [...new Set(tasks.map((task) => task.courseId).filter(Boolean))] as string[];
+    const enrollments = courseIds.length > 0
+      ? await prisma.enrollment.findMany({ where: { courseId: { in: courseIds } }, select: { courseId: true, studentId: true } })
+      : [];
+    const studentsByCourse = new Map<string, string[]>();
+    enrollments.forEach((enrollment) => {
+      studentsByCourse.set(enrollment.courseId, [...(studentsByCourse.get(enrollment.courseId) || []), enrollment.studentId]);
+    });
+
+    res.json(tasks.map((task) => ({
+      ...serializeTask(task),
+      stats: buildTaskStats(task, task.courseId ? studentsByCourse.get(task.courseId) || [] : [])
+    })));
   } catch (error) {
     console.error('Error al obtener tareas estructuradas:', error);
     res.status(500).json({ error: 'Error al obtener tareas estructuradas.' });
@@ -269,33 +315,13 @@ router.get('/course/:courseId', authenticateToken, async (req: AuthRequest, res:
         orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }]
       });
 
-      const enrollmentsCount = await prisma.enrollment.count({ where: { courseId } });
+      const courseEnrollments = await prisma.enrollment.findMany({ where: { courseId }, select: { studentId: true } });
+      const courseStudentIds = courseEnrollments.map((enrollment) => enrollment.studentId);
 
       const tasksWithStats = tasks.map((task) => {
-        const totalSteps = task.steps.length;
-        const stepProgressByStudent = new Map<string, number>();
-        task.steps.forEach(step => {
-          step.progress.forEach(p => {
-            stepProgressByStudent.set(p.studentId, (stepProgressByStudent.get(p.studentId) || 0) + 1);
-          });
-        });
-
-        let completedStudentsCount = 0;
-        stepProgressByStudent.forEach((completedSteps) => {
-          if (completedSteps >= totalSteps) completedStudentsCount++;
-        });
-
-        const targetCount = task.assignmentType === 'INDIVIDUAL'
-          ? (task.assignedStudents.length || (task.assignedStudentId ? 1 : 0))
-          : enrollmentsCount;
-
         return {
           ...serializeTask(task),
-          stats: {
-            totalTargetStudents: targetCount,
-            completedStudentsCount,
-            completionRate: targetCount > 0 ? Math.round((completedStudentsCount / targetCount) * 100) : 0
-          }
+          stats: buildTaskStats(task, courseStudentIds)
         };
       });
 
@@ -580,8 +606,8 @@ router.post('/:id/duplicate', authenticateToken, requireTeacher, async (req: Aut
     const taskId = req.params.id as string;
     const { title, courseId, assignmentType, assignedStudentIds, dueDate, isTemplate } = req.body;
 
-    const sourceTask = await prisma.structuredTask.findUnique({
-      where: { id: taskId },
+    const sourceTask = await prisma.structuredTask.findFirst({
+      where: { id: taskId, OR: [{ teacherId: req.user!.id }, { course: { teacherId: req.user!.id } }] },
       include: { steps: { orderBy: { order: 'asc' } } }
     });
 
@@ -634,10 +660,16 @@ router.post('/:id/duplicate', authenticateToken, requireTeacher, async (req: Aut
 router.post('/:id/save-as-template', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
   try {
     const taskId = req.params.id as string;
-    const { title } = req.body;
+    const { title } = req.body || {};
 
-    const sourceTask = await prisma.structuredTask.findUnique({
-      where: { id: taskId },
+    const sourceTask = await prisma.structuredTask.findFirst({
+      where: {
+        id: taskId,
+        OR: [
+          { teacherId: req.user!.id },
+          { course: { teacherId: req.user!.id } }
+        ]
+      },
       include: { steps: { orderBy: { order: 'asc' } } }
     });
 
@@ -652,6 +684,8 @@ router.post('/:id/save-as-template', authenticateToken, requireTeacher, async (r
         title: templateTitle,
         description: sourceTask.description,
         dueDate: null,
+        publishAt: null,
+        term: sourceTask.term,
         isTemplate: true,
         category: sourceTask.category,
         courseId: null,
@@ -662,7 +696,8 @@ router.post('/:id/save-as-template', authenticateToken, requireTeacher, async (r
           create: sourceTask.steps.map((step) => ({
             order: step.order,
             title: step.title,
-            materialId: step.materialId
+            materialId: step.materialId,
+            requiresSubmission: step.requiresSubmission
           }))
         }
       },

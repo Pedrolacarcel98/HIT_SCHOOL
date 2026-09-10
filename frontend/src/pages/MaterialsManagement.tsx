@@ -14,7 +14,6 @@ import {
   Copy,
   Trash2,
   X,
-  Send,
   ListChecks,
   CheckSquare,
   ClipboardCheck,
@@ -55,7 +54,14 @@ interface StructuredTask {
   assignedStudentIds?: string[];
   assignedStudentNames?: string[];
   isSequential: boolean;
+  isTemplate?: boolean;
+  dueDate?: string | null;
   publishAt?: string | null;
+  stats?: {
+    totalTargetStudents: number;
+    completedStudentsCount: number;
+    completionRate: number;
+  };
   steps: StructuredTaskStep[];
 }
 
@@ -64,12 +70,6 @@ interface StructuredTaskStep {
   order: number;
   title: string;
   materialId: string | null;
-}
-
-interface Student {
-  id: string;
-  email: string;
-  profile?: { firstName: string; lastName: string };
 }
 
 interface EnrolledStudent {
@@ -114,13 +114,6 @@ const MaterialsManagement: React.FC = () => {
   const [editingStandardMaterial, setEditingStandardMaterial] = useState<Material | null>(null);
   const [viewingMaterial, setViewingMaterial] = useState<Material | null>(null);
   const [deletingMaterial, setDeletingMaterial] = useState<Material | null>(null);
-  const [assigningMaterial, setAssigningMaterial] = useState<Material | null>(null);
-  const [students, setStudents] = useState<Student[]>([]);
-  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
-  const [currentAccessIds, setCurrentAccessIds] = useState<string[]>([]);
-  const [assignmentDeadline, setAssignmentDeadline] = useState('');
-  const [assignmentPublishAt, setAssignmentPublishAt] = useState('');
-  const [assignmentLoading, setAssignmentLoading] = useState(false);
 
   // Formulario nuevo recurso estándar
   const [resTitle, setResTitle] = useState('');
@@ -136,10 +129,6 @@ const MaterialsManagement: React.FC = () => {
     fetchCourses();
     fetchAllStudents();
   }, [typeFilter, levelFilter, categoryFilter]);
-
-  useEffect(() => {
-    fetchStudents();
-  }, []);
 
   const fetchMaterials = async () => {
     try {
@@ -196,17 +185,6 @@ const MaterialsManagement: React.FC = () => {
       if (res.ok) setAllStudents(await res.json());
     } catch (err) {
       console.error('Error fetching students', err);
-    }
-  };
-
-  const fetchStudents = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-      const res = await fetch(`${apiUrl}/api/students`, { headers: { 'Authorization': `Bearer ${token}` } });
-      if (res.ok) setStudents(await res.json());
-    } catch (err) {
-      console.error(err);
     }
   };
 
@@ -324,6 +302,20 @@ const MaterialsManagement: React.FC = () => {
     setIsStructuredTaskModalOpen(true);
   };
 
+  const useTemplateForIndividualTask = (template: StructuredTask) => {
+    setEditingStructuredTask(null);
+    setStructuredTaskTitle(template.title.replace(/^\[Plantilla\]\s*/i, ''));
+    setStructuredTaskSteps(template.steps.map((step, index) => ({ ...step, order: index + 1 })));
+    setStructuredTaskCourseId('');
+    setStructuredTaskAssignmentType('INDIVIDUAL');
+    setStructuredTaskIsSequential(template.isSequential || false);
+    setStructuredTaskPublishAt('');
+    setAssignedStudentIds([]);
+    setStudentSearch('');
+    setIsStudentPickerOpen(false);
+    setIsStructuredTaskModalOpen(true);
+  };
+
   const updateStructuredTaskStep = (index: number, updates: Partial<StructuredTaskStep>) => {
     setStructuredTaskSteps((steps) => steps.map((step, stepIndex) => stepIndex === index ? { ...step, ...updates } : step));
   };
@@ -368,6 +360,61 @@ const MaterialsManagement: React.FC = () => {
     const matchesCategory = materialCategoryFilter === 'ALL' || material.type === materialCategoryFilter;
     return matchesSearch && matchesCategory;
   });
+  const individualStructuredTasks = structuredTasks.filter((task) => task.assignmentType === 'INDIVIDUAL' && !task.isTemplate);
+  const structuredTaskTemplates = structuredTasks.filter((task) => task.isTemplate);
+
+  const duplicateStructuredTask = async (task: StructuredTask) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${apiUrl}/api/structured-tasks/${task.id}/duplicate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          title: `[Copia] ${task.title}`,
+          assignmentType: 'INDIVIDUAL',
+          assignedStudentIds: task.assignedStudentIds?.length ? task.assignedStudentIds : (task.assignedStudentId ? [task.assignedStudentId] : []),
+          isTemplate: false
+        })
+      });
+      if (!res.ok) throw new Error('No se pudo duplicar la tarea.');
+      await fetchStructuredTasks();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'No se pudo duplicar la tarea.');
+    }
+  };
+
+  const saveStructuredTaskAsTemplate = async (task: StructuredTask) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${apiUrl}/api/structured-tasks/${task.id}/save-as-template`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ title: `[Plantilla] ${task.title}` })
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'No se pudo guardar como plantilla.');
+      }
+      await fetchStructuredTasks();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'No se pudo guardar como plantilla.');
+    }
+  };
+
+  const deleteStructuredTask = async (task: StructuredTask) => {
+    if (!window.confirm(`¿Eliminar “${task.title}”?`)) return;
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${apiUrl}/api/structured-tasks/${task.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('No se pudo borrar la tarea.');
+      await fetchStructuredTasks();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'No se pudo borrar la tarea.');
+    }
+  };
 
   const openMaterialPicker = (stepIndex: number) => {
     setMaterialPickerStepIndex(stepIndex);
@@ -400,59 +447,6 @@ const MaterialsManagement: React.FC = () => {
       }
     } catch (err) {
       console.error(err);
-    }
-  };
-
-  const openAssignmentModal = async (material: Material) => {
-    setAssigningMaterial(material);
-    setSelectedStudentIds([]);
-    setCurrentAccessIds([]);
-    setStudentSearch('');
-    setAssignmentDeadline('');
-    setAssignmentPublishAt('');
-    const token = localStorage.getItem('token');
-    const res = await fetch(`${apiUrl}/api/materials/${material.id}/assignments`, { headers: { Authorization: `Bearer ${token}` } });
-    if (res.ok) {
-      const access = await res.json() as { student: { id: string } }[];
-      const ids = access.map(item => item.student.id);
-      setCurrentAccessIds(ids);
-      setSelectedStudentIds(ids);
-    }
-  };
-
-  const handleAssignMaterial = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!assigningMaterial || selectedStudentIds.length === 0) return;
-
-    try {
-      setAssignmentLoading(true);
-      const token = localStorage.getItem('token');
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-      const res = await fetch(`${apiUrl}/api/materials/${assigningMaterial.id}/assignments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ studentIds: selectedStudentIds, deadline: assignmentDeadline || null, publishAt: assignmentPublishAt ? new Date(assignmentPublishAt).toISOString() : null })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        window.alert(data.error || 'No se pudo asignar el material');
-        return;
-      }
-      setAssigningMaterial(null);
-      window.alert('Material asignado correctamente');
-    } catch (err) {
-      window.alert('Error de conexión al asignar el material');
-    } finally {
-      setAssignmentLoading(false);
-    }
-  };
-
-  const revokeAccess = async (studentId: string) => {
-    if (!assigningMaterial) return;
-    const res = await fetch(`${apiUrl}/api/materials/${assigningMaterial.id}/assignments/${studentId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
-    if (res.ok) {
-      setCurrentAccessIds(ids => ids.filter(id => id !== studentId));
-      setSelectedStudentIds(ids => ids.filter(id => id !== studentId));
     }
   };
 
@@ -575,9 +569,9 @@ const MaterialsManagement: React.FC = () => {
         {[
           { id: 'ALL', label: 'Todos los Recursos', icon: <FolderArchive size={16} /> },
           { id: 'DOCUMENT', label: 'Documentos', icon: <FileText size={16} /> },
-          { id: 'IMAGE', label: 'Fotos e Infografías', icon: <Image size={16} /> },
+          { id: 'IMAGE', label: 'Fotos', icon: <Image size={16} /> },
           { id: 'VIDEO', label: 'Vídeos', icon: <Video size={16} /> },
-          { id: 'AUDIO', label: 'Audios (Listenings)', icon: <Headphones size={16} /> },
+          { id: 'AUDIO', label: 'Audios', icon: <Headphones size={16} /> },
           { id: 'FORM', label: 'Exámenes y Formularios', icon: <HelpCircle size={16} /> },
           { id: 'STRUCTURED', label: 'Tareas Estructuradas', icon: <ListChecks size={16} /> }
         ].map(tab => (
@@ -726,13 +720,6 @@ const MaterialsManagement: React.FC = () => {
                     >
                       <Play size={15} /> {m.type === 'FORM' ? 'Abrir Examen' : 'Ver / Reproducir'}
                     </button>
-                    <button
-                      onClick={() => openAssignmentModal(m)}
-                      title="Compartir con alumnos"
-                      style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.8rem', border: '1px solid var(--primary-border)', borderRadius: '8px', background: 'var(--primary-light)', color: 'var(--primary-text)', fontWeight: 600, cursor: 'pointer', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
-                    >
-                      <Send size={15} /> Compartir / Asignar
-                    </button>
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', justifyContent: 'center', flexShrink: 0 }}>
@@ -778,13 +765,34 @@ const MaterialsManagement: React.FC = () => {
             </div>
           </header>
 
-          {structuredTasks.length === 0 ? (
+          {individualStructuredTasks.length === 0 ? (
             <div style={{ padding: '2rem', border: '1px dashed var(--primary-border)', borderRadius: '8px', background: 'var(--primary-subtle)', color: 'var(--text-muted)', textAlign: 'center' }}>
-              Aún no hay tareas estructuradas.
+              Aún no hay tareas estructuradas asignadas individualmente.
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
-              {structuredTasks.map((task) => (
+              {structuredTaskTemplates.length > 0 && (
+                <details className="glass-panel" style={{ padding: '1rem 1.15rem', border: '1px solid var(--primary-border)' }}>
+                  <summary style={{ cursor: 'pointer', color: 'var(--text-main)', fontWeight: 700 }}>
+                    Plantillas guardadas ({structuredTaskTemplates.length})
+                  </summary>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', marginTop: '0.9rem' }}>
+                    {structuredTaskTemplates.map((template) => (
+                      <div key={template.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', padding: '0.75rem 0.9rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface)' }}>
+                        <div>
+                          <strong style={{ color: 'var(--text-main)', fontSize: '0.92rem' }}>{template.title}</strong>
+                          <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.78rem' }}>{template.steps.length} {template.steps.length === 1 ? 'paso' : 'pasos'}</span>
+                        </div>
+                        <button type="button" onClick={() => useTemplateForIndividualTask(template)} className="btn-secondary" style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem' }}>
+                          <Copy size={14} /> Usar plantilla
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+
+              {individualStructuredTasks.map((task) => (
                 <article key={task.id} style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--primary-border)', borderRadius: '8px', boxShadow: 'var(--shadow-sm)', padding: '1.25rem' }}>
                   <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', minWidth: 0 }}>
@@ -793,8 +801,10 @@ const MaterialsManagement: React.FC = () => {
                         <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.05rem' }}>{task.title}</h3>
                         <div style={{ display: 'flex', gap: '0.45rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
                           <span style={{ display: 'inline-flex', padding: '0.18rem 0.5rem', borderRadius: '12px', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.72rem', fontWeight: 700 }}>Pasos Numerados</span>
+                          {task.stats && <span style={{ display: 'inline-flex', padding: '0.18rem 0.5rem', borderRadius: '12px', background: task.stats.completionRate >= 100 ? '#ecfdf5' : '#fef3c7', color: task.stats.completionRate >= 100 ? '#047857' : '#92400e', fontSize: '0.72rem', fontWeight: 700 }}>{task.stats.completionRate >= 100 ? 'Completada' : 'Entregas'}: {task.stats.completedStudentsCount} de {task.stats.totalTargetStudents} ({task.stats.completionRate}%)</span>}
                           {task.isSequential && <span style={{ display: 'inline-flex', padding: '0.18rem 0.5rem', borderRadius: '12px', background: '#fef3c7', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}>Paso a paso</span>}
                           {task.publishAt && new Date(task.publishAt) > new Date() && <span style={{ display: 'inline-flex', padding: '0.18rem 0.5rem', borderRadius: '12px', background: '#eef2ff', color: '#3730a3', fontSize: '0.72rem', fontWeight: 700 }}>Programada: {new Date(task.publishAt).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}</span>}
+                          {task.dueDate && <span style={{ display: 'inline-flex', padding: '0.18rem 0.5rem', borderRadius: '12px', background: '#fef3c7', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}>Fecha límite: {new Date(task.dueDate).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}</span>}
                           <span title={task.assignedStudentNames?.join(', ')} style={{ display: 'inline-flex', padding: '0.18rem 0.5rem', borderRadius: '12px', background: task.assignmentType === 'INDIVIDUAL' ? '#eef2ff' : '#ecfdf5', color: task.assignmentType === 'INDIVIDUAL' ? '#3730a3' : '#047857', fontSize: '0.72rem', fontWeight: 700 }}>
                             {task.assignmentType === 'INDIVIDUAL' ? `Asignado a: ${formatAssignedStudents(task)}` : 'Toda la clase'}
                           </span>
@@ -802,9 +812,20 @@ const MaterialsManagement: React.FC = () => {
                         </div>
                       </div>
                     </div>
-                    <button type="button" onClick={() => openStructuredTaskModal(task)} className="btn-secondary" style={{ padding: '0.4rem 0.7rem', fontSize: '0.8rem' }}>
-                      <Pencil size={14} /> Modificar
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                      <button type="button" onClick={() => duplicateStructuredTask(task)} className="btn-secondary" style={{ padding: '0.4rem 0.7rem', fontSize: '0.8rem' }}>
+                        <Copy size={14} /> Duplicar
+                      </button>
+                      <button type="button" onClick={() => saveStructuredTaskAsTemplate(task)} className="btn-secondary" style={{ padding: '0.4rem 0.7rem', fontSize: '0.8rem' }}>
+                        <CheckSquare size={14} /> Guardar Plantilla
+                      </button>
+                      <button type="button" onClick={() => openStructuredTaskModal(task)} className="btn-secondary" style={{ padding: '0.4rem 0.7rem', fontSize: '0.8rem' }}>
+                        <Pencil size={14} /> Modificar
+                      </button>
+                      <button type="button" onClick={() => deleteStructuredTask(task)} className="btn-secondary" style={{ padding: '0.4rem 0.7rem', fontSize: '0.8rem', color: '#b91c1c' }}>
+                        <Trash2 size={14} /> Borrar
+                      </button>
+                    </div>
                   </header>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
                     {task.steps.map((step) => {
@@ -1110,64 +1131,6 @@ const MaterialsManagement: React.FC = () => {
                 />
               )}
             </div>
-          </div>
-        </div>
-      )}
-
-      {assigningMaterial && (
-        <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 75, padding: '1rem' }}>
-          <div className="glass-panel modal-card" style={{ width: '100%', maxWidth: '560px', maxHeight: '90vh', overflowY: 'auto', padding: '2rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '1.5rem' }}>
-              <div>
-                <span style={{ color: 'var(--primary)', fontSize: '0.75rem', fontWeight: 700 }}>COMPARTIR MATERIAL</span>
-                <h3 style={{ margin: '0.3rem 0 0', color: 'var(--text)' }}>Asignar Material: {assigningMaterial.title}</h3>
-              </div>
-              <button onClick={() => setAssigningMaterial(null)} aria-label="Cerrar" className="modal-close"><X size={20} /></button>
-            </div>
-
-            <form onSubmit={handleAssignMaterial} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              <div style={{ padding: '0.9rem', border: '1px solid var(--primary-border)', borderRadius: '8px', background: 'var(--primary-subtle)' }}>
-                <strong style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text)' }}>Alumnos con acceso actual</strong>
-                {currentAccessIds.length === 0 ? <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Ningún alumno tiene acceso todavía.</span> : currentAccessIds.map(studentId => {
-                  const student = students.find(candidate => candidate.id === studentId);
-                  if (!student) return null;
-                  return <div key={student.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', padding: '0.35rem 0' }}><span style={{ color: 'var(--text)', fontSize: '0.88rem' }}>{student.profile?.firstName} {student.profile?.lastName} <small style={{ color: 'var(--text-muted)' }}>({student.email})</small></span><button type="button" onClick={() => revokeAccess(student.id)} style={{ border: 'none', background: 'transparent', color: '#9e2a2b', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}>Revocar</button></div>;
-                })}
-              </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Alumnos destinatarios</label>
-                <input type="search" value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} placeholder="Buscar alumno por nombre o email..." style={{ width: '100%', padding: '0.7rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }} />
-                <div style={{ marginTop: '0.6rem', maxHeight: '190px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '8px' }}>
-                  {students.filter((student) => `${student.profile?.firstName || ''} ${student.profile?.lastName || ''} ${student.email}`.toLowerCase().includes(studentSearch.toLowerCase())).map((student) => {
-                    const selected = selectedStudentIds.includes(student.id);
-                    return (
-                      <label key={student.id} style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', padding: '0.7rem 0.8rem', borderBottom: '1px solid var(--border)', cursor: 'pointer', background: selected ? 'var(--primary-light)' : 'transparent' }}>
-                        <input type="checkbox" checked={selected} onChange={() => selected && currentAccessIds.includes(student.id) ? revokeAccess(student.id) : setSelectedStudentIds((ids) => selected ? ids.filter((id) => id !== student.id) : [...ids, student.id])} />
-                        <span style={{ color: 'var(--text)', fontSize: '0.9rem' }}>{student.profile?.firstName} {student.profile?.lastName} <small style={{ color: 'var(--text-muted)' }}>({student.email})</small></span>
-                      </label>
-                    );
-                  })}
-                  {students.length === 0 && <p style={{ padding: '1rem', margin: 0, color: 'var(--text-muted)', fontSize: '0.85rem' }}>No hay alumnos matriculados.</p>}
-                </div>
-                <span style={{ display: 'block', marginTop: '0.4rem', color: 'var(--text-muted)', fontSize: '0.78rem' }}>{selectedStudentIds.length} alumno(s) seleccionado(s)</span>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Fecha de entrega (opcional)</label>
-                <input type="date" value={assignmentDeadline} onChange={(event) => setAssignmentDeadline(event.target.value)} min={new Date().toISOString().split('T')[0]} style={{ width: '100%', padding: '0.7rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }} />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Publicar el (opcional)</label>
-                <input type="datetime-local" value={assignmentPublishAt} onChange={(event) => setAssignmentPublishAt(event.target.value)} min={new Date().toISOString().slice(0, 16)} style={{ width: '100%', padding: '0.7rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }} />
-                <small style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-muted)', fontSize: '0.75rem' }}>Vacío: visible inmediatamente para el alumnado.</small>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-                <button type="button" onClick={() => setAssigningMaterial(null)} style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--text)', padding: '0.7rem 1.1rem', borderRadius: '8px', cursor: 'pointer' }}>Cancelar</button>
-                <button type="submit" disabled={assignmentLoading || selectedStudentIds.length === 0} className="btn-primary" style={{ padding: '0.7rem 1.1rem', opacity: assignmentLoading || selectedStudentIds.length === 0 ? 0.55 : 1 }}>{assignmentLoading ? 'Enviando...' : 'Enviar Material'}</button>
-              </div>
-            </form>
           </div>
         </div>
       )}

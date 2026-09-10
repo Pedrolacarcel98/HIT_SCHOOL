@@ -57,6 +57,7 @@ interface Student {
     schoolYear?: string | null;
     allergies?: string | null;
     imageAuthorization?: boolean | null;
+    imageAuthorizationScope?: string | null;
     observations?: string | null;
   };
   parent?: {
@@ -79,11 +80,27 @@ interface Student {
     id: string;
     monthlyFee: number;
     billingPeriod?: 'MONTHLY' | 'QUARTERLY';
+    startDate?: string;
     endDate?: string | null;
   }[];
 }
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const IMAGE_AUTHORIZATION_OPTIONS = [
+  'No',
+  'Sí, Para envío personal y familias del grupo de clase',
+  'Sí, Para envío personal, familias del grupo de clase y redes sociales'
+] as const;
+
+type ImageAuthorizationOption = typeof IMAGE_AUTHORIZATION_OPTIONS[number];
+
+const getImageAuthorizationValue = (profile?: Student['profile']): ImageAuthorizationOption => {
+  if (profile?.imageAuthorizationScope && IMAGE_AUTHORIZATION_OPTIONS.includes(profile.imageAuthorizationScope as ImageAuthorizationOption)) {
+    return profile.imageAuthorizationScope as ImageAuthorizationOption;
+  }
+  if (profile?.imageAuthorization === true) return 'Sí, Para envío personal y familias del grupo de clase';
+  return 'No';
+};
 
 const StudentsManagement: React.FC = () => {
   const navigate = useNavigate();
@@ -106,6 +123,10 @@ const StudentsManagement: React.FC = () => {
   const [newPhone, setNewPhone] = useState('');
   const [newBirthDate, setNewBirthDate] = useState('');
   const [newAddress, setNewAddress] = useState('');
+  const [newCursoEscolar, setNewCursoEscolar] = useState('');
+  const [newAlergias, setNewAlergias] = useState('');
+  const [newAutorizacionImagen, setNewAutorizacionImagen] = useState<ImageAuthorizationOption>('No');
+  const [newObservaciones, setNewObservaciones] = useState('');
   const [newModality, setNewModality] = useState<'PRESENCIAL' | 'ONLINE' | 'HIBRIDO'>('PRESENCIAL');
 
   // Gestión de Tutor en Crear
@@ -127,6 +148,10 @@ const StudentsManagement: React.FC = () => {
   const [editPhone, setEditPhone] = useState('');
   const [editBirthDate, setEditBirthDate] = useState('');
   const [editAddress, setEditAddress] = useState('');
+  const [editCursoEscolar, setEditCursoEscolar] = useState('');
+  const [editAlergias, setEditAlergias] = useState('');
+  const [editAutorizacionImagen, setEditAutorizacionImagen] = useState<ImageAuthorizationOption>('No');
+  const [editObservaciones, setEditObservaciones] = useState('');
   const [editParentId, setEditParentId] = useState('');
   const [editModality, setEditModality] = useState<'PRESENCIAL' | 'ONLINE' | 'HIBRIDO'>('PRESENCIAL');
   const [editBillingPeriod, setEditBillingPeriod] = useState<'MONTHLY' | 'QUARTERLY'>('MONTHLY');
@@ -231,6 +256,11 @@ const StudentsManagement: React.FC = () => {
           phone: newPhone.trim() || null,
           birthDate: newBirthDate ? newBirthDate : null,
           address: newAddress.trim() || null,
+          schoolYear: newCursoEscolar.trim() || null,
+          allergies: newAlergias.trim() || null,
+          imageAuthorization: newAutorizacionImagen !== 'No',
+          imageAuthorizationScope: newAutorizacionImagen,
+          observations: newObservaciones.trim() || null,
           modality: newModality,
           parentId: finalParentId,
           parentData: parentPayload
@@ -262,6 +292,10 @@ const StudentsManagement: React.FC = () => {
     setNewPhone('');
     setNewBirthDate('');
     setNewAddress('');
+    setNewCursoEscolar('');
+    setNewAlergias('');
+    setNewAutorizacionImagen('No');
+    setNewObservaciones('');
     setNewModality('PRESENCIAL');
     setHasParent(false);
     setSelectedParentId('');
@@ -273,6 +307,9 @@ const StudentsManagement: React.FC = () => {
   };
 
   const handleStartEdit = (student: Student) => {
+    const activeEnrollment = student.academyEnrollments
+      ?.filter((enrollment) => !enrollment.endDate)
+      .sort((a, b) => (new Date(b.startDate || 0).getTime()) - (new Date(a.startDate || 0).getTime()))[0];
     setEditingStudent(student);
     setEditFirstName(student.profile?.firstName || '');
     setEditLastName(student.profile?.lastName || '');
@@ -281,9 +318,12 @@ const StudentsManagement: React.FC = () => {
     setEditPhone(student.profile?.phone || '');
     setEditBirthDate(student.profile?.birthDate ? student.profile.birthDate.split('T')[0] : '');
     setEditAddress(student.profile?.address || '');
+    setEditCursoEscolar(student.profile?.schoolYear || '');
+    setEditAlergias(student.profile?.allergies || '');
+    setEditAutorizacionImagen(getImageAuthorizationValue(student.profile));
+    setEditObservaciones(student.profile?.observations || '');
     setEditParentId(student.parentId || '');
     setEditModality(student.modality || 'PRESENCIAL');
-    const activeEnrollment = student.academyEnrollments?.find((enrollment) => !enrollment.endDate);
     setEditBillingPeriod(activeEnrollment?.billingPeriod || 'MONTHLY');
     setEditBillingAmount(activeEnrollment ? String(activeEnrollment.monthlyFee) : '');
   };
@@ -291,6 +331,8 @@ const StudentsManagement: React.FC = () => {
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingStudent) return;
+    const hasActiveEnrollment = editingStudent.academyEnrollments?.some((enrollment) => !enrollment.endDate) || false;
+    const normalizedBillingAmount = editBillingAmount.trim() ? Number(editBillingAmount) : undefined;
 
     try {
       const token = localStorage.getItem('token');
@@ -308,10 +350,15 @@ const StudentsManagement: React.FC = () => {
           phone: editPhone.trim() || null,
           birthDate: editBirthDate ? editBirthDate : null,
           address: editAddress.trim() || null,
+          schoolYear: editCursoEscolar.trim() || null,
+          allergies: editAlergias.trim() || null,
+          imageAuthorization: editAutorizacionImagen !== 'No',
+          imageAuthorizationScope: editAutorizacionImagen,
+          observations: editObservaciones.trim() || null,
           parentId: editParentId || null,
           modality: editModality,
-          billingPeriod: editBillingAmount ? editBillingPeriod : undefined,
-          billingAmount: editBillingAmount ? Number(editBillingAmount) : undefined
+          billingPeriod: hasActiveEnrollment ? editBillingPeriod : undefined,
+          billingAmount: hasActiveEnrollment ? normalizedBillingAmount : undefined
         })
       });
 
@@ -400,7 +447,7 @@ const StudentsManagement: React.FC = () => {
       'MOVIL': valueOrDash(student.profile?.phone || student.parent?.profile?.phone),
       'GRUPO': student.enrollments?.map((enrollment) => enrollment.course.title).join(', ') || '-',
       'ALERGIAS': valueOrDash(student.profile?.allergies),
-      'AUTORIZACIÓN IMAGEN': student.profile?.imageAuthorization === true ? 'Sí' : student.profile?.imageAuthorization === false ? 'No' : '-',
+      'AUTORIZACIÓN IMAGEN': student.profile?.imageAuthorizationScope || (student.profile?.imageAuthorization === true ? 'Sí' : student.profile?.imageAuthorization === false ? 'No' : '-'),
       'OBSERVACIONES': valueOrDash(student.profile?.observations)
     }));
 
@@ -730,7 +777,7 @@ const StudentsManagement: React.FC = () => {
           zIndex: 80,
           padding: '1rem'
         }}>
-          <div className="glass-panel modal-card" style={{ width: '100%', maxWidth: '580px', maxHeight: '90vh', overflowY: 'auto', padding: '2rem' }}>
+          <div className="glass-panel modal-card modal-card--wide" style={{ width: '100%', maxWidth: '900px', maxHeight: '90vh', overflowY: 'auto', padding: '2rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '1.2rem' }}>
@@ -781,12 +828,34 @@ const StudentsManagement: React.FC = () => {
                   {viewingStudent.modality}
                 </strong>
               </div>
+
+              <div style={{ padding: '0.85rem 1rem', background: 'var(--surface-alt)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', textTransform: 'uppercase' }}>Curso Escolar</span>
+                <strong style={{ fontSize: '0.95rem', color: viewingStudent.profile?.schoolYear ? 'var(--text-main)' : 'var(--text-light)' }}>{viewingStudent.profile?.schoolYear || 'Sin registrar'}</strong>
+              </div>
+
+              <div style={{ padding: '0.85rem 1rem', background: 'var(--surface-alt)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', textTransform: 'uppercase' }}>Alergias</span>
+                <strong style={{ fontSize: '0.95rem', color: viewingStudent.profile?.allergies ? 'var(--text-main)' : 'var(--text-light)' }}>{viewingStudent.profile?.allergies || 'Sin registrar'}</strong>
+              </div>
+
+              <div style={{ padding: '0.85rem 1rem', background: 'var(--surface-alt)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', textTransform: 'uppercase' }}>Autorización de Imagen</span>
+                <strong style={{ fontSize: '0.95rem', color: getImageAuthorizationValue(viewingStudent.profile) !== 'No' ? 'var(--text-main)' : 'var(--text-light)' }}>{getImageAuthorizationValue(viewingStudent.profile)}</strong>
+              </div>
             </div>
 
             <div style={{ marginTop: '1rem', padding: '0.85rem 1rem', background: 'var(--surface-alt)', borderRadius: '8px', border: '1px solid var(--border)' }}>
               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', textTransform: 'uppercase' }}>Dirección Completa</span>
               <p style={{ margin: '0.25rem 0 0', color: 'var(--text-main)', fontSize: '0.9rem' }}>
                 {viewingStudent.profile?.address || 'Sin dirección registrada'}
+              </p>
+            </div>
+
+            <div style={{ marginTop: '1rem', padding: '0.85rem 1rem', background: 'var(--surface-alt)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', textTransform: 'uppercase' }}>Observaciones</span>
+              <p style={{ margin: '0.25rem 0 0', color: viewingStudent.profile?.observations ? 'var(--text-main)' : 'var(--text-light)', fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>
+                {viewingStudent.profile?.observations || 'Sin registrar'}
               </p>
             </div>
 
@@ -858,7 +927,7 @@ const StudentsManagement: React.FC = () => {
           zIndex: 80,
           padding: '1rem'
         }}>
-          <div className="glass-panel modal-card" style={{ width: '100%', maxWidth: '620px', maxHeight: '92vh', overflowY: 'auto', padding: '2rem' }}>
+          <div className="glass-panel modal-card modal-card--wide" style={{ width: '100%', maxWidth: '900px', maxHeight: '92vh', overflowY: 'auto', padding: '2rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
               <h3 style={{ margin: 0, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.3rem' }}>
                 <UserPlus style={{ color: 'var(--primary)' }} /> Alta de Nuevo Alumno
@@ -965,6 +1034,51 @@ const StudentsManagement: React.FC = () => {
                     <option value="HIBRIDO">Híbrido</option>
                   </select>
                 </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                <div style={{ flex: '1 1 180px' }}>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Curso Escolar</label>
+                  <input
+                    type="text"
+                    value={newCursoEscolar}
+                    onChange={(e) => setNewCursoEscolar(e.target.value)}
+                    placeholder="5º Primaria"
+                    style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
+                  />
+                </div>
+                <div style={{ flex: '1 1 180px' }}>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Alergias</label>
+                  <input
+                    type="text"
+                    value={newAlergias}
+                    onChange={(e) => setNewAlergias(e.target.value)}
+                    placeholder="No / Polen / Lactosa"
+                    style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Autorización Imagen</label>
+                <select
+                  value={newAutorizacionImagen}
+                  onChange={(e) => setNewAutorizacionImagen(e.target.value as ImageAuthorizationOption)}
+                  style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
+                >
+                  {IMAGE_AUTHORIZATION_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Observaciones</label>
+                <textarea
+                  value={newObservaciones}
+                  onChange={(e) => setNewObservaciones(e.target.value)}
+                  rows={3}
+                  placeholder="Observaciones relevantes sobre el alumno..."
+                  style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', resize: 'vertical' }}
+                />
               </div>
 
               {/* Sección Familiar / Tutor */}
@@ -1103,7 +1217,7 @@ const StudentsManagement: React.FC = () => {
           zIndex: 80,
           padding: '1rem'
         }}>
-          <div className="glass-panel modal-card" style={{ width: '100%', maxWidth: '580px', maxHeight: '92vh', overflowY: 'auto', padding: '2rem' }}>
+          <div className="glass-panel modal-card modal-card--wide" style={{ width: '100%', maxWidth: '900px', maxHeight: '92vh', overflowY: 'auto', padding: '2rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
               <h3 style={{ margin: 0, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Edit2 style={{ color: 'var(--primary)' }} /> Editar Ficha del Alumno
@@ -1223,6 +1337,51 @@ const StudentsManagement: React.FC = () => {
                     <option value="HIBRIDO">Híbrido</option>
                   </select>
                 </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                <div style={{ flex: '1 1 180px' }}>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Curso Escolar</label>
+                  <input
+                    type="text"
+                    value={editCursoEscolar}
+                    onChange={(e) => setEditCursoEscolar(e.target.value)}
+                    placeholder="5º Primaria"
+                    style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
+                  />
+                </div>
+                <div style={{ flex: '1 1 180px' }}>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Alergias</label>
+                  <input
+                    type="text"
+                    value={editAlergias}
+                    onChange={(e) => setEditAlergias(e.target.value)}
+                    placeholder="No / Polen / Lactosa"
+                    style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Autorización Imagen</label>
+                <select
+                  value={editAutorizacionImagen}
+                  onChange={(e) => setEditAutorizacionImagen(e.target.value as ImageAuthorizationOption)}
+                  style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
+                >
+                  {IMAGE_AUTHORIZATION_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Observaciones</label>
+                <textarea
+                  value={editObservaciones}
+                  onChange={(e) => setEditObservaciones(e.target.value)}
+                  rows={3}
+                  placeholder="Observaciones relevantes sobre el alumno..."
+                  style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', resize: 'vertical' }}
+                />
               </div>
 
               {editingStudent.academyEnrollments?.some((enrollment) => !enrollment.endDate) && (

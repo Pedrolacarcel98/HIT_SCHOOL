@@ -25,6 +25,12 @@ export const getDueDateForEnrollmentMonth = (
 
 const addMonths = (date: Date, offset: number) => new Date(date.getFullYear(), date.getMonth() + offset, 1, 12, 0, 0, 0);
 
+const isCurrentOrFutureMonth = (month: number, year: number, referenceDate = new Date()) => {
+  const target = normalizeMonthDate(year, month).getTime();
+  const current = normalizeMonthDate(referenceDate.getFullYear(), referenceDate.getMonth() + 1).getTime();
+  return target >= current;
+};
+
 export const getVisibleMonthTargets = (count = DEFAULT_VISIBLE_MONTH_COUNT, referenceDate = new Date()): MonthTarget[] => {
   return Array.from({ length: count }, (_, index) => {
     const date = addMonths(new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1, 12, 0, 0, 0), -index);
@@ -154,11 +160,12 @@ export const ensureStudentPaymentScheduleById = async (prisma: PrismaClient, stu
         });
       } else if (existingPayment.enrollmentId === enrollment.id && !existingPayment.isPaid) {
         const existingTime = existingPayment.dueDate ? new Date(existingPayment.dueDate).getTime() : 0;
-        if (existingPayment.amount !== enrollment.monthlyFee || existingTime !== dueDate.getTime()) {
+        const shouldUpdateAmount = isCurrentOrFutureMonth(month, year) && existingPayment.amount !== enrollment.monthlyFee;
+        if (shouldUpdateAmount || existingTime !== dueDate.getTime()) {
           await prisma.paymentStatus.update({
             where: { id: existingPayment.id },
             data: {
-              amount: enrollment.monthlyFee,
+              amount: shouldUpdateAmount ? enrollment.monthlyFee : existingPayment.amount,
               dueDate,
               status: PaymentState.PENDING
             }

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CalendarDays, CheckCircle2, ChevronDown, ChevronUp, Clock3, FileText, Search, X, ExternalLink, Send, Link, PenTool, Check } from 'lucide-react';
+import { CalendarDays, CheckCircle2, ChevronDown, ChevronUp, Clock3, Download, FileText, Search, X, ExternalLink, Send, Link, PenTool, Check } from 'lucide-react';
 import DocumentViewer from './DocumentViewer';
 import FormPlayer from './FormPlayer';
 import ExamReviewModal from './ExamReviewModal';
@@ -44,10 +44,14 @@ interface StructuredTask {
   category?: string;
   assignmentType: 'CLASS' | 'INDIVIDUAL';
   isSequential: boolean;
+  dueDate?: string | null;
+  publishAt?: string | null;
   steps: Array<{
     id: string;
     order: number;
     title: string;
+    requiresSubmission?: boolean;
+    isEvaluable?: boolean;
     isCompleted?: boolean;
     submission?: any;
     material?: { id: string; title: string; type: string; url?: string | null; description?: string; level?: string; category?: string; formData?: any } | null;
@@ -103,6 +107,10 @@ const parseSubmissionContent = (content?: string | null): ParsedSubmissionData =
   };
 };
 
+const formatDateTime = (value?: string | null) => value
+  ? new Date(value).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })
+  : '';
+
 const parseSavedExam = (content?: string | null): ParsedExamData | null => {
   if (!content) return null;
   try {
@@ -131,6 +139,18 @@ const getResourceOpenUrl = (material: { type: string; url?: string | null }) => 
   if (!driveFileId) return rawUrl;
   if (material.type === 'IMAGE') return `https://lh3.googleusercontent.com/d/${driveFileId}=w1600`;
   return `https://drive.google.com/file/d/${driveFileId}/preview`;
+};
+
+const getResourceDownloadUrl = (material: { type: string; url?: string | null }) => {
+  const rawUrl = material.url || '';
+  const googleDocumentId = rawUrl.match(/docs\.google\.com\/document\/d\/([^/?]+)/)?.[1];
+  if (material.type === 'DOCUMENT' && googleDocumentId) {
+    return `https://docs.google.com/document/d/${googleDocumentId}/export?format=pdf`;
+  }
+  const driveFileId = rawUrl.match(/drive\.google\.com\/file\/d\/([^/?]+)/)?.[1]
+    || rawUrl.match(/[?&]id=([^&/?]+)/)?.[1];
+  if (driveFileId) return `https://drive.google.com/uc?export=download&id=${driveFileId}`;
+  return rawUrl;
 };
 
 const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
@@ -286,11 +306,15 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
 
   const handleTick = (step: any, task: StructuredTask) => {
     if (step.isCompleted) return;
-    
-    if (step.material?.type === 'VIDEO' || !step.material) {
-      submitDirectly(step.id);
-    } else {
+
+    if (step.material || step.isEvaluable) {
       openActionModal(step, task);
+      return;
+    }
+
+    if (!step.isEvaluable) {
+      submitDirectly(step.id);
+      return;
     }
   };
 
@@ -346,11 +370,11 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
       
       const isStructured = Boolean(viewingMaterial.structuredStepId);
       const url = isStructured 
-        ? `${apiUrl}/api/structured-tasks/steps/${viewingMaterial.structuredStepId}/complete`
+        ? `${apiUrl}/api/structured-tasks/steps/${viewingMaterial.structuredStepId}/submit-delivery`
         : `${apiUrl}/api/assignments/${viewingMaterial.id}/submit`;
       
       const body = isStructured
-        ? { submissionContent: finalContent }
+        ? { content: finalContent, link: finalLink || undefined, attachment: attachmentFile || undefined }
         : { content: attachmentFile ? finalContent : payload, link: finalLink || undefined, attachment: attachmentFile || undefined };
 
       const res = await fetch(url, {
@@ -543,28 +567,51 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
             );
           })}
               </div>
-              {group.structuredTasks.map((task) => (
+              {group.structuredTasks.map((task) => {
+                const completedCount = task.steps.filter((step) => step.isCompleted).length;
+                const progress = task.steps.length ? Math.round((completedCount / task.steps.length) * 100) : 0;
+                return (
                 <article key={task.id} className="glass-panel" style={{ marginTop: '1rem', padding: '1rem 1.15rem', border: '1px solid var(--primary-border)' }}>
                   <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
-                    <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1rem' }}>{task.title}</h3>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <div>
+                      <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1rem' }}>{task.title}</h3>
+                      <span style={{ display: 'block', marginTop: '0.25rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>{completedCount} de {task.steps.length} pasos completados - {progress}%</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                      {task.publishAt && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.55rem', borderRadius: '12px', background: '#eef2ff', border: '1px solid #c7d2fe', color: '#3730a3', fontSize: '0.72rem', fontWeight: 700 }}><Clock3 size={13} /> Programada: {formatDateTime(task.publishAt)}</span>}
+                      {task.dueDate && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.55rem', borderRadius: '12px', background: '#fef3c7', border: '1px solid #fde68a', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}><CalendarDays size={13} /> Entrega: {formatDateTime(task.dueDate)}</span>}
                       {task.isSequential && <span style={{ padding: '0.2rem 0.55rem', borderRadius: '12px', background: '#fef3c7', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}>Paso a paso</span>}
                       <span style={{ padding: '0.2rem 0.55rem', borderRadius: '12px', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.72rem', fontWeight: 700 }}>{task.steps.length} pasos</span>
                     </div>
                   </header>
+                  <div style={{ width: '100%', height: '8px', borderRadius: '999px', overflow: 'hidden', background: 'var(--surface-alt)', border: '1px solid var(--border)', marginBottom: '0.75rem' }}>
+                    <div style={{ width: `${progress}%`, height: '100%', background: 'var(--primary)', transition: 'width 0.2s ease' }} />
+                  </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
                     {task.steps.map((step) => (
                       <div key={step.id} style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.75rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)' }}>
-                        <input type="checkbox" checked={Boolean(step.isCompleted)} disabled style={{ width: '20px', height: '20px', accentColor: 'var(--primary)' }} />
+                        <input
+                          type="checkbox"
+                          checked={Boolean(step.isCompleted)}
+                          disabled={Boolean(step.isCompleted)}
+                          onChange={(event) => {
+                            if (event.target.checked) handleTick(step, task);
+                          }}
+                          style={{ width: '20px', height: '20px', cursor: step.isCompleted ? 'default' : 'pointer', accentColor: 'var(--primary)' }}
+                        />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <strong style={{ fontSize: '0.9rem', color: step.isCompleted ? 'var(--text-muted)' : 'var(--text-main)', textDecoration: step.isCompleted ? 'line-through' : 'none' }}>{step.order}. {step.title}</strong>
-                          {step.material && <button type="button" onClick={() => openStructuredResource(step, task)} disabled={!step.material.url && step.material.type !== 'FORM'} style={{ display: 'inline-flex', marginTop: '0.45rem', padding: '0.35rem 0.65rem', borderRadius: '10px', border: '1px solid var(--primary-border)', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>[ {step.material.type} ] {step.material.title}</button>}
+                          {step.material && <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                            <button type="button" onClick={() => openStructuredResource(step, task)} disabled={!step.material.url && step.material.type !== 'FORM'} style={{ display: 'inline-flex', marginTop: '0.45rem', padding: '0.35rem 0.65rem', borderRadius: '10px', border: '1px solid var(--primary-border)', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>[ {step.material.type} ] {step.material.title}</button>
+                            {step.material.type === 'DOCUMENT' && step.material.url && <a href={getResourceDownloadUrl(step.material)} download title="Descargar documento en PDF" aria-label={`Descargar ${step.material.title} en PDF`} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginTop: '0.45rem', padding: '0.35rem', borderRadius: '8px', border: '1px solid var(--primary-border)', background: 'var(--surface)', color: 'var(--primary-text)' }}><Download size={15} /></a>}
+                          </div>}
                         </div>
                       </div>
                     ))}
                   </div>
                 </article>
-              ))}</>
+              );
+              })}</>
               )}
               </div>
               </>}
@@ -580,15 +627,26 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
             <FileText size={20} style={{ color: 'var(--primary)' }} /> Tareas Estructuradas
           </h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-            {uncategorizedStructuredTasks.map((task) => (
+            {uncategorizedStructuredTasks.map((task) => {
+              const completedCount = task.steps.filter((step) => step.isCompleted).length;
+              const progress = task.steps.length ? Math.round((completedCount / task.steps.length) * 100) : 0;
+              return (
               <article key={task.id} className="glass-panel" style={{ padding: '1rem 1.15rem', border: '1px solid var(--primary-border)' }}>
                 <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
-                  <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1rem' }}>{task.title}</h3>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <div>
+                    <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1rem' }}>{task.title}</h3>
+                    <span style={{ display: 'block', marginTop: '0.25rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>{completedCount} de {task.steps.length} pasos completados - {progress}%</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    {task.publishAt && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.55rem', borderRadius: '12px', background: '#eef2ff', border: '1px solid #c7d2fe', color: '#3730a3', fontSize: '0.72rem', fontWeight: 700 }}><Clock3 size={13} /> Programada: {formatDateTime(task.publishAt)}</span>}
+                    {task.dueDate && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.55rem', borderRadius: '12px', background: '#fef3c7', border: '1px solid #fde68a', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}><CalendarDays size={13} /> Entrega: {formatDateTime(task.dueDate)}</span>}
                     {task.isSequential && <span style={{ padding: '0.2rem 0.55rem', borderRadius: '12px', background: '#fef3c7', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}>Paso a paso</span>}
                     <span style={{ padding: '0.2rem 0.55rem', borderRadius: '12px', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.72rem', fontWeight: 700 }}>{task.steps.length} pasos</span>
                   </div>
                 </header>
+                <div style={{ width: '100%', height: '8px', borderRadius: '999px', overflow: 'hidden', background: 'var(--surface-alt)', border: '1px solid var(--border)', marginBottom: '0.75rem' }}>
+                  <div style={{ width: `${progress}%`, height: '100%', background: 'var(--primary)', transition: 'width 0.2s ease' }} />
+                </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
                   {(() => {
                     let firstIncompleteFound = false;
@@ -627,6 +685,7 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                                 >
                                   [ {step.material.type} ] {step.material.title}
                                 </button>
+                                {step.material.type === 'DOCUMENT' && step.material.url && <a href={getResourceDownloadUrl(step.material)} download title="Descargar documento en PDF" aria-label={`Descargar ${step.material.title} en PDF`} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0.35rem', borderRadius: '8px', border: '1px solid var(--primary-border)', background: 'var(--surface)', color: 'var(--primary-text)' }}><Download size={15} /></a>}
                                 
                               </div>
                             )}
@@ -637,7 +696,8 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                   })()}
                 </div>
               </article>
-            ))}
+            );
+            })}
           </div>
         </section>
       )}

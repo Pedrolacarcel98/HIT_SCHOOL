@@ -264,9 +264,9 @@ const TaskDeliveryReviewModal: React.FC<TaskDeliveryReviewModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="glass-panel modal-card"
+        className="glass-panel modal-card modal-card--review"
         style={{
-          width: 'min(100%, 820px)',
+          width: 'min(100%, 960px)',
           maxHeight: '92vh',
           overflowY: 'auto',
           padding: '1.75rem 2rem',

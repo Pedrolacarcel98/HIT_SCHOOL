@@ -49,6 +49,7 @@ export interface TaskItem {
   title: string;
   description?: string | null;
   dueDate?: string | null;
+  publishAt?: string | null;
   category?: string;
   isSequential?: boolean;
   isTemplate?: boolean;
@@ -114,7 +115,10 @@ const TaskCard: React.FC<TaskCardProps> = ({
   const totalSteps = task.steps?.length || 0;
   const completedSteps = task.steps?.filter((s) => s.isCompleted).length || 0;
   const progressPercent = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
-  const isAllCompleted = totalSteps > 0 && completedSteps >= totalSteps;
+  const teacherCompletionRate = task.stats?.completionRate;
+  const isAllCompleted = mode === 'TEACHER' && typeof teacherCompletionRate === 'number'
+    ? teacherCompletionRate >= 100
+    : totalSteps > 0 && completedSteps >= totalSteps;
 
   const formatDueDate = (due?: string | null) => {
     if (!due) return null;
@@ -128,6 +132,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
   };
 
   const dueInfo = formatDueDate(task.dueDate);
+  const publishInfo = formatDueDate(task.publishAt);
 
   return (
     <div
@@ -191,6 +196,25 @@ const TaskCard: React.FC<TaskCardProps> = ({
               </span>
             )}
 
+            {publishInfo && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.3rem',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  padding: '0.15rem 0.55rem',
+                  borderRadius: '10px',
+                  background: '#eef2ff',
+                  color: '#3730a3',
+                  border: '1px solid #c7d2fe'
+                }}
+              >
+                <CalendarDays size={13} /> Programada: {publishInfo.text}
+              </span>
+            )}
+
             {dueInfo && (
               <span
                 style={{
@@ -202,7 +226,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   color: dueInfo.isOverdue ? '#b91c1c' : 'var(--text-muted)'
                 }}
               >
-                <CalendarDays size={13} /> {dueInfo.text} {dueInfo.isOverdue && '(Vencida)'}
+                <CalendarDays size={13} /> Fecha límite: {dueInfo.text} {dueInfo.isOverdue && '(Vencida)'}
               </span>
             )}
           </div>
@@ -254,7 +278,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   color: task.stats.completionRate >= 100 ? '#047857' : '#334155'
                 }}
               >
-                <Users size={14} /> Entregas: {task.stats.completedStudentsCount} de {task.stats.totalTargetStudents} ({task.stats.completionRate}%)
+                <Users size={14} /> {task.stats.completionRate >= 100 ? 'Completada' : 'Entregas'}: {task.stats.completedStudentsCount} de {task.stats.totalTargetStudents} ({task.stats.completionRate}%)
               </span>
             </div>
           )}

@@ -369,6 +369,11 @@ const StudentGradesTab: React.FC<{ courseId: string; courseTitle?: string }> = (
                             Plazo: {new Date(task.dueDate).toLocaleDateString('es-ES')}
                           </span>
                         )}
+                        {task.isCompleted && task.dueDate && (
+                          <span style={{ fontSize: '0.75rem', color: task.isLate ? '#92400e' : '#166534', fontWeight: 700, padding: '0.15rem 0.45rem', borderRadius: '10px', background: task.isLate ? '#fef3c7' : '#ecfdf5', border: `1px solid ${task.isLate ? '#fde68a' : '#bbf7d0'}` }}>
+                            {task.isLate ? 'Fuera de plazo' : 'Dentro de plazo'}
+                          </span>
+                        )}
                       </div>
                       <strong style={{ fontSize: '1rem', color: 'var(--text-main)', display: 'block' }}>
                         {task.title}

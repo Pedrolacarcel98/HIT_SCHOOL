@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, StructuredTaskAssignmentType } from '@prisma/client';
 import { authenticateToken, requireTeacher } from '../middleware/auth';
 
 const router = Router();
@@ -155,6 +155,41 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => 
         if (!sub) {
           pendingTasksCount++;
           upcomingTasks.push({ id: t.id, title: t.title, course: t.course?.title || 'General', deadline: t.dueDate });
+        }
+      }
+
+      const structuredTasks = await prisma.structuredTask.findMany({
+        where: {
+          isTemplate: false,
+          AND: [{ OR: [{ publishAt: null }, { publishAt: { lte: new Date() } }] }],
+          OR: [
+            { assignmentType: StructuredTaskAssignmentType.CLASS, courseId: { in: courseIds } },
+            { assignmentType: StructuredTaskAssignmentType.INDIVIDUAL, assignedStudentId: student.id },
+            { assignmentType: StructuredTaskAssignmentType.INDIVIDUAL, assignedStudents: { some: { studentId: student.id } } }
+          ]
+        },
+        include: {
+          course: { select: { title: true } },
+          steps: {
+            include: {
+              progress: { where: { studentId: student.id }, select: { id: true } },
+              assignment: {
+                include: {
+                  submissions: { where: { studentId: student.id }, select: { id: true } }
+                }
+              }
+            }
+          }
+        }
+      });
+
+      for (const task of structuredTasks) {
+        const isCompleted = task.steps.length > 0 && task.steps.every((step) =>
+          step.progress.length > 0 || Boolean(step.assignment?.submissions[0])
+        );
+        if (!isCompleted) {
+          pendingTasksCount++;
+          upcomingTasks.push({ id: task.id, title: task.title, course: task.course?.title || 'Tarea individual', deadline: task.dueDate });
         }
       }
 

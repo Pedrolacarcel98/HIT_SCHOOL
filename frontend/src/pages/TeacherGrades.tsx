@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ChevronRight,
   Clock3,
+  Download,
   Edit3,
   ExternalLink,
   FileText,
@@ -819,7 +820,7 @@ const TeacherGrades: React.FC = () => {
               {/* Expediente Académico Detallado del Alumno Seleccionado */}
               {selectedStudentForDossier && (
                 createPortal(
-                <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: '260px', zIndex: 50, minHeight: '100vh', overflowY: 'auto', background: '#f8fafc', padding: '2rem' }}>
+                <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: '260px', zIndex: 50, minHeight: '100vh', overflowY: 'auto', background: '#f3e8ff', padding: '2rem' }}>
                   <div className="animate-fade-in" style={{ maxWidth: '1024px', margin: '0 auto', padding: '2rem', background: '#fff', border: '1px solid rgba(226, 232, 240, 0.8)', borderRadius: '16px', boxShadow: 'var(--shadow-sm)' }}>
                     <button
                       type="button"
@@ -1076,10 +1077,18 @@ const TeacherGrades: React.FC = () => {
                                         href={submissionDetails.attachment.dataUrl}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        download={submissionDetails.attachment.name}
                                         style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}
                                       >
                                         <ExternalLink size={14} /> {submissionDetails.attachment.name}
+                                      </a>
+                                      <a
+                                        href={submissionDetails.attachment.dataUrl}
+                                        download={submissionDetails.attachment.name}
+                                        title="Descargar archivo adjunto"
+                                        aria-label={`Descargar ${submissionDetails.attachment.name}`}
+                                        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0.3rem', borderRadius: '6px', color: 'var(--primary)', border: '1px solid var(--primary-border)', background: 'var(--surface)', textDecoration: 'none' }}
+                                      >
+                                        <Download size={15} />
                                       </a>
                                     </div>
                                   </div>

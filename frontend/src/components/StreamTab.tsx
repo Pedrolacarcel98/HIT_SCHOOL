@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Download, ImagePlus, MessageSquare, Send, Trash2, Video, X } from 'lucide-react';
+import { Download, ImagePlus, Link, MessageSquare, Send, Trash2, Video, X } from 'lucide-react';
+import { getPostMediaDownloadUrl, getPostMediaUrl } from '../utils/postMedia';
 
 const StreamTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const [posts, setPosts] = useState<any[]>([]);
   const [newPost, setNewPost] = useState('');
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
+  const [mediaUrl, setMediaUrl] = useState('');
+  const [mediaUrlType, setMediaUrlType] = useState<'image' | 'video'>('image');
   const [isPublishing, setIsPublishing] = useState(false);
   const [postError, setPostError] = useState('');
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
@@ -29,7 +32,7 @@ const StreamTab: React.FC<{ courseId: string }> = ({ courseId }) => {
 
   const handlePost = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPost.trim() && !mediaFile) return;
+    if (!newPost.trim() && !mediaFile && !mediaUrl.trim()) return;
 
     try {
       setIsPublishing(true);
@@ -39,6 +42,10 @@ const StreamTab: React.FC<{ courseId: string }> = ({ courseId }) => {
       const formData = new FormData();
       formData.append('content', newPost.trim());
       if (mediaFile) formData.append('media', mediaFile);
+      if (mediaUrl.trim()) {
+        formData.append('mediaUrl', mediaUrl.trim());
+        formData.append('mediaType', mediaUrlType);
+      }
       const res = await fetch(`${apiUrl}/api/courses/${courseId}/posts`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
@@ -49,6 +56,8 @@ const StreamTab: React.FC<{ courseId: string }> = ({ courseId }) => {
         setNewPost('');
         setMediaFile(null);
         setMediaPreview(null);
+        setMediaUrl('');
+        setMediaUrlType('image');
         fetchPosts();
       } else {
         const errorData = await res.json().catch(() => ({}));
@@ -137,6 +146,21 @@ const StreamTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                 </button>
               </div>
             )}
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', marginTop: '0.75rem' }}>
+              <Link size={17} style={{ color: 'var(--primary)' }} />
+              <input
+                type="url"
+                value={mediaUrl}
+                onChange={(event) => setMediaUrl(event.target.value)}
+                placeholder="URL de imagen o vídeo de Google Drive"
+                aria-label="URL de imagen o vídeo de Google Drive"
+                style={{ flex: '1 1 260px', minWidth: 0, padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
+              />
+              <select value={mediaUrlType} onChange={(event) => setMediaUrlType(event.target.value as 'image' | 'video')} aria-label="Tipo de recurso de Google Drive" style={{ padding: '0.6rem 0.65rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}>
+                <option value="image">Imagen</option>
+                <option value="video">Vídeo</option>
+              </select>
+            </div>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
             <label title="Adjuntar imagen o vídeo" aria-label="Adjuntar imagen o vídeo" style={{ width: '42px', height: '42px', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)', color: 'var(--primary)', display: 'grid', placeItems: 'center', cursor: 'pointer' }}>
@@ -190,7 +214,7 @@ const StreamTab: React.FC<{ courseId: string }> = ({ courseId }) => {
             </div>
             {post.content && <p style={{ margin: post.mediaUrl ? '0 0 1rem' : 0, color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>{post.content}</p>}
             {post.mediaUrl && (() => {
-              const mediaUrl = post.mediaUrl.startsWith('http') ? post.mediaUrl : `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${post.mediaUrl}`;
+              const mediaUrl = post.mediaUrl.startsWith('http') ? getPostMediaUrl(post.mediaUrl, post.mediaType) : `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${post.mediaUrl}`;
               const isVideo = post.mediaType?.startsWith('video/');
               return (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.75rem' }}>
@@ -203,7 +227,7 @@ const StreamTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                     <img src={mediaUrl} alt={post.mediaName || 'Imagen compartida en el tablón'} style={{ display: 'block', width: '100%', maxWidth: '720px', maxHeight: '560px', objectFit: 'contain', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)' }} />
                   )}
                   <a
-                    href={mediaUrl}
+                    href={post.mediaUrl.startsWith('http') ? getPostMediaDownloadUrl(post.mediaUrl) : mediaUrl}
                     download={post.mediaName || undefined}
                     title={`Descargar ${isVideo ? 'vídeo' : 'imagen'}`}
                     aria-label={`Descargar ${isVideo ? 'vídeo' : 'imagen'}`}

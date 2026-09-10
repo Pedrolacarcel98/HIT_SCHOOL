@@ -6,7 +6,7 @@
 :root {
   /* Paleta Verde Pastel / Salvia Suave */
   --primary-hue: 152;
-  --primary: #4e9b75;
+  --primary: #059669;
   --primary-hover: #418664;
   --primary-active: #367053;
   --primary-light: #eaf4ef;
@@ -28,7 +28,7 @@
   --text-light: #93a29b;
   
   /* Bordes y Esquinas */
-  --border: #e1e7e2;             /* Borde suave en tono blanco crudo */
+  --border: #e2e8f0;             /* Borde suave en tono blanco crudo */
   --border-light: #ecf1ed;
   --radius: 14px;
   --radius-sm: 8px;
@@ -75,6 +75,20 @@ body {
   box-shadow: var(--shadow-lg);
 }
 
+.student-themed-content .glass-panel {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
+}
+
+.teacher-themed-content .glass-panel {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
+}
+
 .modal-backdrop {
   position: fixed !important;
   inset: 0 !important;
@@ -103,6 +117,10 @@ body {
 
 .modal-card--wide {
   max-width: 900px !important;
+}
+
+.modal-card--review {
+  max-width: 960px !important;
 }
 
 .modal-card--player {

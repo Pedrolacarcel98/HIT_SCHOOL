@@ -68,9 +68,11 @@ A continuación se detallan los 11 requerimientos acordados en la última reuni�
 - [ ] Meta tags para Safari/iOS (`apple-mobile-web-app-capable`, `apple-mobile-web-app-status-bar-style`, `apple-touch-icon`).
 - [ ] Banner / Botón accesible en la interfaz para instalar como acceso directo en escritorio (Chrome/Edge) o móvil (Android/iOS).
 
-### 0.7 Soporte Multimedia Local en el Tablón de Anuncios (`Stream`) `[x]`
+### 0.7 Soporte Multimedia Local y Google Drive en el Tablón de Anuncios (`Stream`) `[x]`
 - [x] Posibilidad de adjuntar imágenes y vídeos desde el almacenamiento local del dispositivo al publicar un anuncio en el aula.
 - [x] Almacenamiento en el servidor mediante endpoint multipart y directorio `uploads/posts`.
+- [x] Posibilidad de publicar una URL de Google Drive indicando si contiene una imagen o un vídeo.
+- [x] Conversión de enlaces de Drive a URLs compatibles con visualización y reproducción en el navegador.
 - [x] Visor integrado en el tablón para reproducir vídeo, mostrar imágenes y descargar archivos desde profesor, alumno y tutor.
 
 ### 0.8 Visibilidad de Chat Multi-Profesor / Supervisión Centralizada `[x]`
@@ -188,6 +190,7 @@ A continuación se detallan los 11 requerimientos acordados en la última reuni�
 ### 2.2 Material y Tareas
 - [x] Visualización de clases matriculadas y acceso al aula virtual.
 - [x] Tablón de anuncios de la clase con comunicados del profesor.
+- [x] Visualización de imágenes y vídeos publicados desde archivo local o URL de Google Drive.
 - [x] Trabajo de clase organizado por destrezas (*Reading, Listening, Writing, Grammar, etc.*).
 - [x] Componente unificado `TaskCard` en Mis Clases y en Aula Virtual con barra de porcentaje y badges de entrega.
 - [x] Realización de exámenes interactivos con audio y autocorrección sin cierre prematuro del pop-up de resultados.

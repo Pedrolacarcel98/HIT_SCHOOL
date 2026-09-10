@@ -163,7 +163,7 @@ router.put('/:id/evaluation', authenticateToken, requireTeacher, async (req: Aut
 
 // Ruta protegida: crear alumno (con soporte de ficha extendida y vinculación familiar)
 router.post('/', authenticateToken, requireTeacher, async (req, res) => {
-  const { email, firstName, lastName, dni, phone, birthDate, address, schoolYear, allergies, imageAuthorization, observations, parentId, parentData, modality } = req.body;
+  const { email, firstName, lastName, dni, phone, birthDate, address, schoolYear, allergies, imageAuthorization, imageAuthorizationScope, observations, parentId, parentData, modality } = req.body;
 
   if (!email || !firstName || !lastName) {
     return res.status(400).json({ error: 'Faltan campos requeridos (email, nombre y apellidos del alumno)' });
@@ -233,6 +233,7 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
             schoolYear: schoolYear?.trim() || null,
             allergies: allergies?.trim() || null,
             imageAuthorization: typeof imageAuthorization === 'boolean' ? imageAuthorization : null,
+            imageAuthorizationScope: imageAuthorizationScope?.trim() || null,
             observations: observations?.trim() || null
           }
         }
@@ -324,6 +325,7 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
             schoolYear: true,
             allergies: true,
             imageAuthorization: true,
+            imageAuthorizationScope: true,
             observations: true
           }
         },
@@ -351,7 +353,7 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
             }
           }
         },
-        academyEnrollments: true,
+        academyEnrollments: { orderBy: { startDate: 'desc' } },
         paymentStatuses: {
           select: {
             month: true,
@@ -375,7 +377,7 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
 // Ruta para actualizar un alumno
 router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
   const studentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const { firstName, lastName, email, dni, phone, birthDate, address, schoolYear, allergies, imageAuthorization, observations, parentId, modality, billingPeriod, billingAmount } = req.body;
+  const { firstName, lastName, email, dni, phone, birthDate, address, schoolYear, allergies, imageAuthorization, imageAuthorizationScope, observations, parentId, modality, billingPeriod, billingAmount } = req.body;
 
   if (!firstName || !lastName || !email) {
     return res.status(400).json({ error: 'Nombre, apellidos y email son obligatorios' });
@@ -409,6 +411,7 @@ router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
               schoolYear: schoolYear?.trim() || null,
               allergies: allergies?.trim() || null,
               imageAuthorization: typeof imageAuthorization === 'boolean' ? imageAuthorization : null,
+              imageAuthorizationScope: imageAuthorizationScope?.trim() || null,
               observations: observations?.trim() || null
             },
             update: {
@@ -421,6 +424,7 @@ router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
               schoolYear: schoolYear !== undefined ? (schoolYear?.trim() || null) : undefined,
               allergies: allergies !== undefined ? (allergies?.trim() || null) : undefined,
               imageAuthorization: typeof imageAuthorization === 'boolean' ? imageAuthorization : undefined,
+              imageAuthorizationScope: imageAuthorizationScope !== undefined ? (imageAuthorizationScope?.trim() || null) : undefined,
               observations: observations !== undefined ? (observations?.trim() || null) : undefined
             }
           }
@@ -436,19 +440,42 @@ router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
 
     if (billingPeriod !== undefined || billingAmount !== undefined) {
       const activeEnrollment = await prisma.academyEnrollment.findFirst({ where: { studentId, endDate: null }, orderBy: { startDate: 'desc' } });
-      if (activeEnrollment) {
-        await prisma.$transaction([
-          prisma.academyEnrollment.update({
-            where: { id: activeEnrollment.id },
-            data: {
-              billingPeriod: billingPeriod || activeEnrollment.billingPeriod,
-              monthlyFee: billingAmount !== undefined ? Number(billingAmount) : activeEnrollment.monthlyFee
-            }
-          }),
-          prisma.paymentStatus.deleteMany({ where: { enrollmentId: activeEnrollment.id, isPaid: false } })
-        ]);
-        await ensureStudentPaymentScheduleById(prisma, studentId);
+      if (!activeEnrollment) {
+        return res.status(400).json({ error: 'No hay una matrícula activa donde actualizar el importe.' });
       }
+
+      const now = new Date();
+      const currentMonth = now.getMonth() + 1;
+      const currentYear = now.getFullYear();
+      const newBillingAmount = billingAmount !== undefined ? Number(billingAmount) : activeEnrollment.monthlyFee;
+
+      await prisma.$transaction([
+        prisma.academyEnrollment.update({
+          where: { id: activeEnrollment.id },
+          data: {
+            billingPeriod: billingPeriod || activeEnrollment.billingPeriod,
+            monthlyFee: newBillingAmount
+          }
+        }),
+        prisma.paymentStatus.updateMany({
+          where: {
+            studentId,
+            isPaid: false,
+            OR: [
+              { enrollmentId: activeEnrollment.id },
+              { enrollmentId: null }
+            ],
+            AND: [{
+              OR: [
+                { year: { gt: currentYear } },
+                { year: currentYear, month: { gte: currentMonth } }
+              ]
+            }]
+          },
+          data: { amount: newBillingAmount, enrollmentId: activeEnrollment.id }
+        })
+      ]);
+      await ensureStudentPaymentScheduleById(prisma, studentId);
     }
 
     res.json({

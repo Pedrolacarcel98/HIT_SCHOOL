@@ -37,6 +37,15 @@ const StudentLayout: React.FC = () => {
     navigate('/');
   };
 
+  const getMainBackground = () => {
+    if (location.pathname === '/student' || location.pathname === '/student/dashboard') return '#fef3c7';
+    if (location.pathname === '/student/courses' || location.pathname.startsWith('/student/course/')) return '#e0f2fe';
+    if (location.pathname === '/student/payments') return '#ffe4e6';
+    if (location.pathname === '/student/grades') return '#f3e8ff';
+    if (location.pathname === '/student/chat') return '#d1fae5';
+    return '#f1f5f9';
+  };
+
   const navItems = [
     { label: 'Inicio', path: '/student', icon: <Home size={20} /> },
     { label: 'Mis Clases', path: '/student/courses', icon: <BookOpen size={20} /> },
@@ -52,7 +61,7 @@ const StudentLayout: React.FC = () => {
   );
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--background)', flexDirection: 'column' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: '#ffffff', flexDirection: 'column' }}>
       {/* Barra Superior Móvil */}
       <header
         style={{
@@ -60,8 +69,8 @@ const StudentLayout: React.FC = () => {
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '0.75rem 1.25rem',
-          background: 'var(--surface)',
-          borderBottom: '1px solid var(--border)',
+          background: '#ffffff',
+          borderBottom: '1px solid #e2e8f0',
           position: 'sticky',
           top: 0,
           zIndex: 30,
@@ -107,8 +116,8 @@ const StudentLayout: React.FC = () => {
           className={`sidebar-nav-container ${isMobileMenuOpen ? 'drawer-open' : ''}`}
           style={{
             width: '260px',
-            background: 'var(--surface)',
-            borderRight: '1px solid var(--border)',
+            background: '#ffffff',
+            borderRight: '1px solid #e2e8f0',
             display: 'flex',
             flexDirection: 'column',
             position: 'sticky',
@@ -118,7 +127,7 @@ const StudentLayout: React.FC = () => {
             transition: 'transform 0.3s ease',
           }}
         >
-          <div style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <img src="/logo.webp" alt="HitSchool" style={{ width: '36px', height: '36px', borderRadius: '8px' }} />
               <div>
@@ -165,7 +174,7 @@ const StudentLayout: React.FC = () => {
                     padding: '0.75rem 1rem',
                     borderRadius: '8px',
                     border: 'none',
-                    background: isActive ? 'var(--primary)' : 'transparent',
+                    background: isActive ? '#059669' : 'transparent',
                     color: isActive ? '#ffffff' : 'var(--text-main)',
                     cursor: 'pointer',
                     fontWeight: isActive ? '600' : '500',
@@ -176,7 +185,7 @@ const StudentLayout: React.FC = () => {
                   }}
                   onMouseEnter={(e) => {
                     if (!isActive) {
-                      e.currentTarget.style.background = 'var(--surface-alt)';
+                      e.currentTarget.style.background = '#f8fafc';
                     }
                   }}
                   onMouseLeave={(e) => {
@@ -192,7 +201,7 @@ const StudentLayout: React.FC = () => {
             })}
           </nav>
 
-          <div style={{ padding: '1rem', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div style={{ padding: '1rem', borderTop: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem' }}>
               <div
                 style={{
@@ -314,7 +323,7 @@ const StudentLayout: React.FC = () => {
           </div>
         </aside>
 
-        <main style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
+        <main className="student-themed-content" style={{ flex: 1, minWidth: 0, minHeight: '100vh', overflowY: 'auto', background: getMainBackground(), transition: 'background-color 0.2s ease' }}>
           <Outlet />
         </main>
       </div>

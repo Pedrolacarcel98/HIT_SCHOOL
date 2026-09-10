@@ -42,6 +42,18 @@ const TeacherLayout: React.FC = () => {
     navigate('/');
   };
 
+  const getMainBackground = () => {
+    if (location.pathname === '/teacher') return '#fef3c7';
+    if (location.pathname === '/teacher/courses' || location.pathname.startsWith('/teacher/course/')) return '#e0f2fe';
+    if (location.pathname === '/teacher/grades') return '#f3e8ff';
+    if (location.pathname === '/teacher/materials') return '#d1fae5';
+    if (location.pathname === '/teacher/students') return '#ffe4e6';
+    if (location.pathname === '/teacher/enrollments') return '#ffedd5';
+    if (location.pathname === '/teacher/payments') return '#fce7f3';
+    if (location.pathname === '/teacher/chat') return '#ccfbf1';
+    return '#f1f5f9';
+  };
+
   const navItems = [
     { label: 'Inicio', path: '/teacher', icon: <Home size={20} /> },
     { label: 'Mis Clases', path: '/teacher/courses', icon: <BookOpen size={20} /> },
@@ -54,7 +66,7 @@ const TeacherLayout: React.FC = () => {
   ];
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--background)', flexDirection: 'column' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: '#ffffff', flexDirection: 'column' }}>
       {/* Barra Superior Móvil */}
       <header
         style={{
@@ -62,8 +74,8 @@ const TeacherLayout: React.FC = () => {
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '0.75rem 1.25rem',
-          background: 'var(--surface)',
-          borderBottom: '1px solid var(--border)',
+          background: '#ffffff',
+          borderBottom: '1px solid #e2e8f0',
           position: 'sticky',
           top: 0,
           zIndex: 30,
@@ -110,8 +122,8 @@ const TeacherLayout: React.FC = () => {
           className={`sidebar-nav-container ${isMobileMenuOpen ? 'drawer-open' : ''}`}
           style={{
             width: '260px',
-            background: 'var(--surface)',
-            borderRight: '1px solid var(--border)',
+            background: '#ffffff',
+            borderRight: '1px solid #e2e8f0',
             display: 'flex',
             flexDirection: 'column',
             position: 'sticky',
@@ -122,7 +134,7 @@ const TeacherLayout: React.FC = () => {
           }}
         >
           {/* Logo / Header (Desktop) */}
-          <div style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <img src="/logo.webp" alt="HitSchool" style={{ width: '36px', height: '36px', borderRadius: '8px' }} />
               <div>
@@ -170,7 +182,7 @@ const TeacherLayout: React.FC = () => {
                     padding: '0.75rem 1rem',
                     borderRadius: '8px',
                     border: 'none',
-                    background: isActive ? 'var(--primary)' : 'transparent',
+                    background: isActive ? '#059669' : 'transparent',
                     color: isActive ? '#ffffff' : 'var(--text)',
                     cursor: 'pointer',
                     fontWeight: isActive ? '600' : '500',
@@ -180,7 +192,7 @@ const TeacherLayout: React.FC = () => {
                     minHeight: '44px'
                   }}
                   onMouseEnter={(e) => {
-                    if (!isActive) e.currentTarget.style.background = 'var(--surface-alt)';
+                    if (!isActive) e.currentTarget.style.background = '#f8fafc';
                   }}
                   onMouseLeave={(e) => {
                     if (!isActive) e.currentTarget.style.background = 'transparent';
@@ -194,7 +206,7 @@ const TeacherLayout: React.FC = () => {
           </nav>
 
           {/* Sección de Usuario & Salir */}
-          <div style={{ padding: '1rem', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div style={{ padding: '1rem', borderTop: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem' }}>
               <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <GraduationCap size={18} />
@@ -267,7 +279,7 @@ const TeacherLayout: React.FC = () => {
         </aside>
 
         {/* Contenido de la Página */}
-        <main style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
+        <main className="teacher-themed-content" style={{ flex: 1, minWidth: 0, minHeight: '100vh', overflowY: 'auto', background: getMainBackground(), transition: 'background-color 0.2s ease' }}>
           <Outlet />
         </main>
       </div>

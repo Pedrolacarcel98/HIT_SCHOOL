@@ -16,7 +16,7 @@
 ## 2. Fase Actual & Progreso Global
 
 - **Fase Actual:** Fase 2 — Consolidación de Módulos Core, tareas estructuradas y cierre de requisitos pendientes.
-- **Progreso Global Estimado:** **96% de requisitos base implementados**.
+- **Progreso Global Estimado:** **98% de requisitos base implementados**.
   - 🟢 **Gestión de Clases y Aulas (Estilo Google Classroom):** 95% Completado.
   - 🟢 **Biblioteca Multimedia & Exámenes Interactivos:** 100% Implementado.
   - 🟢 **Gestión de Alumnos, Ficha Extendida y Cuentas Familiares:** 95% Completado.
@@ -26,7 +26,7 @@
   - 🟢 **Ajustes de Cuenta y Cambio de Contraseña:** 100% Completado.
   - 🟢 **Seguridad Backend en Endpoints:** 100% Completado.
   - 🟢 **Exportación de Alumnos a Excel:** exportación `.xlsx` completada; importación masiva pendiente.
-  - 🟡 **Portal de Padres / Tutores (Vistas de Acceso Familiar):** 70% (Esquema en BD, Fichas, n8n completado; solo falta Frontend).
+  - 🟢 **Portal de Padres / Tutores (Vistas de Acceso Familiar):** 100% (selector de hijos, clases, tablón, tareas, calificaciones, pagos y chat en modo solo lectura).
 
 ---
 
@@ -64,9 +64,13 @@
   - En exámenes: añadidos imágenes por pregunta, preguntas de completar espacios con sintaxis de paréntesis, validación sensible a mayúsculas opcional y revisión compatible con ambos formatos.
   - En calificaciones: habilitado feedback pedagógico para exámenes autocorregidos, con persistencia en `Submission.feedback` y actualización inmediata de los tres paneles.
   - En tareas estructuradas: creadas tareas con pasos, materiales por paso, asignación a clase o alumno, recursos interactivos, progreso individual y exámenes de intento único registrados como entregas estándar.
+  - En plantillas de tareas estructuradas: corregido el guardado desde tareas de clase, duplicación, edición, borrado y reutilización desde Material de Clase.
+  - En el dashboard del alumno: incorporado el recuento de tareas estructuradas pendientes junto a las tareas normales.
+  - En entregas estructuradas: restaurada la apertura del modal desde las casillas de vídeo, audio y documento, con envío de redacción y adjuntos.
+  - En calificaciones: los adjuntos PDF del alumno se abren en una pestaña nueva y disponen de descarga independiente.
   - En programación de tareas: añadido `publishAt` opcional para tareas normales, asignaciones directas y tareas estructuradas. Profesor puede programar o reprogramar; alumno y tutor no ven contenidos futuros.
   - En recursos: añadido selector visual de audios e imágenes existentes al creador de exámenes, previsualización de Google Drive y apertura compatible de documentos, vídeos y audios.
-  - En tablón: habilitada subida local de imágenes y vídeos, previsualización y descarga para profesor, alumno y tutor.
+  - En tablón: habilitada la publicación de imágenes y vídeos locales o mediante URL de Google Drive, con selector de tipo, reproducción/previsualización y descarga para profesor, alumno y tutor.
   - En chat: habilitada supervisión global de conversaciones para profesorado, con hilos independientes por profesor para alumno/tutor.
   - En Gestión de Alumnos: incorporada exportación `.xlsx` y campos opcionales de curso escolar, alergias, autorización de imagen y observaciones.
   - En calificaciones: las entregas posteriores a la fecha límite siguen permitidas y se identifican como fuera de plazo.
@@ -80,7 +84,7 @@
 3. [x] **Paso 3 (Completado):** Implementar modal de entrega interactivo de tareas para el alumno en `StudentClassworkTab.tsx`.
 4. [x] **Paso 4 (Completado):** Eliminar endpoint inseguro `/api/users`, añadir campos de ficha extendida (`dni`, `phone`, `birthDate`, `address`), soporte de tutores/padres y modal de cambio de contraseña `SettingsModal`.
 5. [/] **Paso 5 (En curso):** Consolidar generación y descarga de recibos/facturas en PDF, incluyendo acceso desde la ficha del alumno.
-6. [/] **Paso 6 (En curso):** Consolidar las vistas familiares; selector de hijos, pagos, calificaciones y tareas estructuradas ya están integrados en el panel adaptado.
+6. [x] **Paso 6 (Completado):** Consolidar las vistas familiares; selector de hijos, tablón, pagos, calificaciones y tareas estructuradas están integrados en el panel adaptado.
 7. [x] **Paso 7 (Completado):** Sincronizar Prisma y validar el flujo de tareas estructuradas/exámenes con profesor, alumno y tutor.
 
 ---

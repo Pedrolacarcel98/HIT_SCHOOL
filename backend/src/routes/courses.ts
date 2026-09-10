@@ -241,7 +241,20 @@ router.get('/:id/posts', authenticateToken, verifyCourseAccess, async (req: Auth
 
 router.post('/:id/posts', authenticateToken, requireTeacher, verifyCourseAccess, postUpload.single('media'), async (req: AuthRequest, res: Response) => {
   const content = typeof req.body.content === 'string' ? req.body.content.trim() : '';
-  if (!content && !req.file) return res.status(400).json({ error: 'Escribe un mensaje o adjunta una imagen o vídeo.' });
+  const linkedMediaUrl = typeof req.body.mediaUrl === 'string' ? req.body.mediaUrl.trim() : '';
+  const linkedMediaType = typeof req.body.mediaType === 'string' ? req.body.mediaType : '';
+  if (linkedMediaUrl) {
+    try {
+      const parsedUrl = new URL(linkedMediaUrl);
+      if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('invalid protocol');
+    } catch {
+      return res.status(400).json({ error: 'La URL del recurso multimedia no es válida.' });
+    }
+  }
+  if (linkedMediaUrl && !['image', 'video'].includes(linkedMediaType)) {
+    return res.status(400).json({ error: 'Indica si la URL de Drive contiene una imagen o un vídeo.' });
+  }
+  if (!content && !req.file && !linkedMediaUrl) return res.status(400).json({ error: 'Escribe un mensaje o adjunta una imagen o vídeo.' });
 
   try {
     const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -249,9 +262,9 @@ router.post('/:id/posts', authenticateToken, requireTeacher, verifyCourseAccess,
       data: {
         content,
         courseId,
-        mediaUrl: req.file ? `/uploads/posts/${req.file.filename}` : null,
-        mediaType: req.file?.mimetype || null,
-        mediaName: req.file?.originalname || null
+        mediaUrl: req.file ? `/uploads/posts/${req.file.filename}` : (linkedMediaUrl || null),
+        mediaType: req.file?.mimetype || (linkedMediaUrl ? `${linkedMediaType}/*` : null),
+        mediaName: req.file?.originalname || (linkedMediaUrl ? `Recurso de Google Drive (${linkedMediaType})` : null)
       }
     });
     res.status(201).json(post);

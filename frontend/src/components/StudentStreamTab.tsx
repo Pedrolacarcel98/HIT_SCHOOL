@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Download, MessageSquare, ShieldCheck } from 'lucide-react';
 import { useParent } from '../context/ParentContext';
+import { getPostMediaDownloadUrl, getPostMediaUrl } from '../utils/postMedia';
 
 type Post = {
   id: string;
@@ -23,12 +24,12 @@ const StudentStreamTab: React.FC<{ courseId: string }> = ({ courseId }) => {
       try {
         const token = localStorage.getItem('token');
         const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-        const res = await fetch(`${apiUrl}/api/courses/${courseId}/posts`, {
+        const postsRes = await fetch(`${apiUrl}/api/courses/${courseId}/posts`, {
           headers: { Authorization: `Bearer ${token}` }
         });
 
-        if (res.ok) {
-          const data = await res.json();
+        if (postsRes.ok) {
+          const data = await postsRes.json();
           setPosts(data);
         }
       } catch (err) {
@@ -94,7 +95,7 @@ const StudentStreamTab: React.FC<{ courseId: string }> = ({ courseId }) => {
             </div>
             {post.content && <p style={{ margin: post.mediaUrl ? '0 0 1rem' : 0, color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>{post.content}</p>}
             {post.mediaUrl && (() => {
-              const mediaUrl = post.mediaUrl.startsWith('http') ? post.mediaUrl : `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${post.mediaUrl}`;
+              const mediaUrl = post.mediaUrl.startsWith('http') ? getPostMediaUrl(post.mediaUrl, post.mediaType) : `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${post.mediaUrl}`;
               const isVideo = post.mediaType?.startsWith('video/');
               return (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.75rem' }}>
@@ -107,7 +108,7 @@ const StudentStreamTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                     <img src={mediaUrl} alt={post.mediaName || 'Imagen compartida en el tablón'} style={{ display: 'block', width: '100%', maxWidth: '720px', maxHeight: '560px', objectFit: 'contain', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)' }} />
                   )}
                   <a
-                    href={mediaUrl}
+                    href={post.mediaUrl.startsWith('http') ? getPostMediaDownloadUrl(post.mediaUrl) : mediaUrl}
                     download={post.mediaName || undefined}
                     title={`Descargar ${isVideo ? 'vídeo' : 'imagen'}`}
                     aria-label={`Descargar ${isVideo ? 'vídeo' : 'imagen'}`}
