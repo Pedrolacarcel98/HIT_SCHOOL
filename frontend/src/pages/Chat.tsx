@@ -57,7 +57,7 @@ const getInitials = (name: string) =>
     .slice(0, 2)
     .toUpperCase() || '?';
 
-const getDisplayName = (contact?: { name: string; role: string } | null, viewerRole?: string | null) => {
+const getDisplayName = (contact?: { name: string; role: string } | null, _viewerRole?: string | null) => {
   if (!contact) return 'Usuario';
   return contact.name;
 };

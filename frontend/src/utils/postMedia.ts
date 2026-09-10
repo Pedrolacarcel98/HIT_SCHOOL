@@ -1,4 +1,4 @@
-export const getPostMediaUrl = (rawUrl: string, mediaType?: string | null) => {
+export const getPostMediaUrl = (rawUrl: string, _mediaType?: string | null) => {
   const driveFileId = rawUrl.match(/drive\.google\.com\/file\/d\/([^/?]+)/)?.[1]
     || rawUrl.match(/[?&]id=([^&/?]+)/)?.[1];
 

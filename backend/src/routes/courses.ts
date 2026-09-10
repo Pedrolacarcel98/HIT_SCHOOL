@@ -13,13 +13,13 @@ fs.mkdirSync(postUploadsDirectory, { recursive: true });
 const postUpload = multer({
   storage: multer.diskStorage({
     destination: postUploadsDirectory,
-    filename: (_req, file, callback) => {
+    filename: (_req: any, file: any, callback: any) => {
       const extension = path.extname(file.originalname);
       callback(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${extension}`);
     }
   }),
   limits: { fileSize: 50 * 1024 * 1024 },
-  fileFilter: (_req, file, callback) => {
+  fileFilter: (_req: any, file: any, callback: any) => {
     callback(null, file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/'));
   }
 });
@@ -239,7 +239,7 @@ router.get('/:id/posts', authenticateToken, verifyCourseAccess, async (req: Auth
   }
 });
 
-router.post('/:id/posts', authenticateToken, requireTeacher, verifyCourseAccess, postUpload.single('media'), async (req: AuthRequest, res: Response) => {
+router.post('/:id/posts', authenticateToken, requireTeacher, verifyCourseAccess, postUpload.single('media'), async (req: AuthRequest & { file?: any }, res: Response) => {
   const content = typeof req.body.content === 'string' ? req.body.content.trim() : '';
   const linkedMediaUrl = typeof req.body.mediaUrl === 'string' ? req.body.mediaUrl.trim() : '';
   const linkedMediaType = typeof req.body.mediaType === 'string' ? req.body.mediaType : '';
