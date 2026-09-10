@@ -47,17 +47,17 @@ const StudentLayout: React.FC = () => {
   };
 
   const navItems = [
-    { label: 'Inicio', path: '/student', icon: <Home size={20} /> },
-    { label: 'Mis Clases', path: '/student/courses', icon: <BookOpen size={20} /> },
+    { label: 'Inicio', path: '/student', icon: <Home size={20} />, iconColor: '#d99a00' },
+    { label: 'Mis Clases', path: '/student/courses', icon: <BookOpen size={20} />, iconColor: '#1682b3' },
   ];
 
   if (userRole === 'PARENT' || (userRole === 'STUDENT' && localStorage.getItem('hasParent') !== 'true')) {
-    navItems.push({ label: 'Mis Pagos', path: '/student/payments', icon: <CircleDollarSign size={20} /> });
+    navItems.push({ label: 'Mis Pagos', path: '/student/payments', icon: <CircleDollarSign size={20} />, iconColor: '#d14f72' });
   }
 
   navItems.push(
-    { label: 'Calificaciones', path: '/student/grades', icon: <Award size={20} /> },
-    { label: 'Chat con Profesor', path: '/student/chat', icon: <MessageCircle size={20} /> }
+    { label: 'Calificaciones', path: '/student/grades', icon: <Award size={20} />, iconColor: '#7950b8' },
+    { label: 'Chat con Profesor', path: '/student/chat', icon: <MessageCircle size={20} />, iconColor: '#12966b' }
   );
 
   return (
@@ -194,7 +194,9 @@ const StudentLayout: React.FC = () => {
                     }
                   }}
                 >
-                  {item.icon}
+                  <span style={{ display: 'inline-flex', color: isActive ? '#ffffff' : item.iconColor }}>
+                    {React.cloneElement(item.icon, { strokeWidth: 2.5 })}
+                  </span>
                   {item.label}
                 </button>
               );

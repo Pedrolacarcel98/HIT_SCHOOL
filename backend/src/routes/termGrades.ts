@@ -24,31 +24,12 @@ export const calculateTermOverallGrade = (
     };
   }
 
-  // Para alumnos presenciales: 50% exámenes (media de middle y final) + 50% tareas prácticas
-  let examAvg: number | null = null;
-  if (cleanMiddle !== null && cleanFinal !== null) {
-    examAvg = (cleanMiddle + cleanFinal) / 2;
-  } else if (cleanMiddle !== null) {
-    examAvg = cleanMiddle;
-  } else if (cleanFinal !== null) {
-    examAvg = cleanFinal;
-  }
-
-  if (examAvg !== null && cleanTasksAvg !== null) {
-    const overall = (examAvg * 0.5) + (cleanTasksAvg * 0.5);
+  // Presencial: 35% Mid Term + 35% Final Term + 30% tareas prácticas.
+  if (cleanMiddle !== null || cleanFinal !== null || cleanTasksAvg !== null) {
+    const overall = (cleanMiddle ?? 0) * 0.35 + (cleanFinal ?? 0) * 0.35 + (cleanTasksAvg ?? 0) * 0.30;
     return {
       tasksAverage: cleanTasksAvg,
       overallGrade: Number(overall.toFixed(2))
-    };
-  } else if (examAvg !== null) {
-    return {
-      tasksAverage: cleanTasksAvg,
-      overallGrade: Number(examAvg.toFixed(2))
-    };
-  } else if (cleanTasksAvg !== null) {
-    return {
-      tasksAverage: cleanTasksAvg,
-      overallGrade: Number(cleanTasksAvg.toFixed(2))
     };
   }
 
@@ -58,11 +39,58 @@ export const calculateTermOverallGrade = (
   };
 };
 
-const hasEvaluableStructuredStep = (task: { steps: Array<{ requiresSubmission?: boolean; material?: { type?: string } | null }> }) => {
-  return task.steps.some((step) => {
+const skillKeys = ['grammar', 'reading', 'writing', 'listening', 'speaking'] as const;
+type SkillKey = typeof skillKeys[number];
+
+const getSkillKey = (category?: string | null): SkillKey | null => {
+  switch (category) {
+    case 'GRAMMAR_VOCABULARY': return 'grammar';
+    case 'READING': return 'reading';
+    case 'WRITING': return 'writing';
+    case 'LISTENING': return 'listening';
+    case 'SPEAKING': return 'speaking';
+    default: return null;
+  }
+};
+
+const averageScores = (scores: number[]) => scores.length > 0
+  ? Number((scores.reduce((sum, score) => sum + score, 0) / scores.length).toFixed(2))
+  : null;
+
+const calculateOnlineSkills = (scoresBySkill: Partial<Record<SkillKey, number[]>>) => {
+  const values = skillKeys.map((key) => averageScores(scoresBySkill[key] || [])).filter((value): value is number => value !== null);
+  return {
+    grammar: averageScores(scoresBySkill.grammar || []),
+    reading: averageScores(scoresBySkill.reading || []),
+    writing: averageScores(scoresBySkill.writing || []),
+    listening: averageScores(scoresBySkill.listening || []),
+    speaking: averageScores(scoresBySkill.speaking || []),
+    overallGrade: averageScores(values)
+  };
+};
+
+const hasEvaluableStructuredStep = (task: {
+  steps: Array<{
+    requiresSubmission?: boolean;
+    material?: { type?: string } | null;
+    assignment?: { submissions?: Array<{ content?: string | null; grade?: number | null }> } | null;
+  }>;
+  deliveries?: Array<{ grade?: number | null }>;
+}) => {
+  const hasNormalEvaluableStep = task.steps.some((step) => {
     const isPassiveMedia = Boolean(step.material && ['VIDEO', 'AUDIO', 'IMAGE'].includes(step.material.type || ''));
     return !isPassiveMedia && Boolean(step.requiresSubmission || step.material?.type === 'FORM');
   });
+
+  const hasStudentContent = task.steps.some((step) =>
+    step.assignment?.submissions?.some((submission) =>
+      (typeof submission.content === 'string' && submission.content.trim().length > 0) ||
+      (typeof submission.grade === 'number' && !Number.isNaN(submission.grade))
+    )
+  );
+  const hasTaskGrade = task.deliveries?.some((delivery) => typeof delivery.grade === 'number' && !Number.isNaN(delivery.grade)) || false;
+
+  return hasNormalEvaluableStep || hasStudentContent || hasTaskGrade;
 };
 
 // 1. Obtener matriz trimestral de calificaciones para un curso (Profesor)
@@ -138,6 +166,7 @@ router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: A
 
       // Calcular la media de tareas del trimestre para este estudiante
       const studentTasksScores: number[] = [];
+      const scoresBySkill: Partial<Record<SkillKey, number[]>> = {};
       const studentTasksBreakdown = evaluableTasks.map((task) => {
         // Buscar delivery de la tarea
         const delivery = task.deliveries.find((d) => d.studentId === student.id);
@@ -163,6 +192,11 @@ router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: A
             content: submission?.content || null
           };
         });
+        const relevantSteps = stepsDetail.filter((step) =>
+          step.isEvaluable ||
+          (typeof step.content === 'string' && step.content.trim().length > 0) ||
+          (typeof step.grade === 'number' && !Number.isNaN(step.grade))
+        );
 
         // Calcular nota de la tarea
         let taskGrade: number | null = null;
@@ -170,8 +204,8 @@ router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: A
           taskGrade = delivery.grade;
         } else {
           // Media automática de pasos evaluables calificados
-          const evaluableGraded = stepsDetail.filter(
-            (s) => s.isEvaluable && typeof s.grade === 'number' && !isNaN(s.grade)
+          const evaluableGraded = relevantSteps.filter(
+            (s) => typeof s.grade === 'number' && !isNaN(s.grade)
           );
           if (evaluableGraded.length > 0) {
             const sum = evaluableGraded.reduce((acc, curr) => acc + (curr.grade || 0), 0);
@@ -181,10 +215,12 @@ router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: A
 
         if (taskGrade !== null) {
           studentTasksScores.push(taskGrade);
+          const skill = getSkillKey(task.category);
+          if (skill) scoresBySkill[skill] = [...(scoresBySkill[skill] || []), taskGrade];
         }
 
-        const allStepsCompleted = stepsDetail.every((s) => s.isCompleted);
-        const completedAtDates = stepsDetail
+        const allStepsCompleted = relevantSteps.length > 0 && relevantSteps.every((s) => s.isCompleted);
+        const completedAtDates = relevantSteps
           .map((s) => s.completedAt ? new Date(s.completedAt) : null)
           .filter((date): date is Date => date instanceof Date && !Number.isNaN(date.getTime()));
         const completedAt = allStepsCompleted && completedAtDates.length > 0
@@ -197,7 +233,7 @@ router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: A
           taskTitle: task.title,
           category: task.category,
           dueDate: task.dueDate,
-          steps: stepsDetail,
+          steps: relevantSteps,
           taskGrade,
           taskFeedback: delivery?.feedback || null,
           isCompleted: allStepsCompleted,
@@ -211,6 +247,7 @@ router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: A
         ? Number((studentTasksScores.reduce((a, b) => a + b, 0) / studentTasksScores.length).toFixed(2))
         : null;
 
+      const onlineSkills = student.modality === 'ONLINE' ? calculateOnlineSkills(scoresBySkill) : null;
       const { overallGrade } = calculateTermOverallGrade(
         student.modality,
         existingRecord?.middleExamGrade,
@@ -226,12 +263,12 @@ router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: A
         middleExamGrade: existingRecord?.middleExamGrade ?? null,
         finalExamGrade: existingRecord?.finalExamGrade ?? null,
         tasksAverage,
-        overallGrade,
-        grammar: existingRecord?.grammar ?? null,
-        reading: existingRecord?.reading ?? null,
-        writing: existingRecord?.writing ?? null,
-        listening: existingRecord?.listening ?? null,
-        speaking: existingRecord?.speaking ?? null,
+        overallGrade: onlineSkills?.overallGrade ?? overallGrade,
+        grammar: onlineSkills?.grammar ?? existingRecord?.grammar ?? null,
+        reading: onlineSkills?.reading ?? existingRecord?.reading ?? null,
+        writing: onlineSkills?.writing ?? existingRecord?.writing ?? null,
+        listening: onlineSkills?.listening ?? existingRecord?.listening ?? null,
+        speaking: onlineSkills?.speaking ?? existingRecord?.speaking ?? null,
         observations: existingRecord?.observations ?? '',
         tasksCount: evaluableTasks.length,
         completedTasksCount: studentTasksBreakdown.filter((t) => t.isCompleted).length,
@@ -471,6 +508,7 @@ router.get('/student/:studentId', authenticateToken, async (req: AuthRequest, re
       const existingTermGrade = termGrades.find((tg) => tg.term === t);
 
       const taskScores: number[] = [];
+      const scoresBySkill: Partial<Record<SkillKey, number[]>> = {};
       const tasksFormatted = termTasks.map((task) => {
         const delivery = task.deliveries[0];
         const stepsFormatted = task.steps.map((step) => {
@@ -493,12 +531,17 @@ router.get('/student/:studentId', authenticateToken, async (req: AuthRequest, re
             content: sub?.content || null
           };
         });
+        const relevantSteps = stepsFormatted.filter((step) =>
+          step.isEvaluable ||
+          (typeof step.content === 'string' && step.content.trim().length > 0) ||
+          (typeof step.grade === 'number' && !Number.isNaN(step.grade))
+        );
 
         let finalTaskGrade: number | null = null;
         if (delivery?.grade !== null && delivery?.grade !== undefined) {
           finalTaskGrade = delivery.grade;
         } else {
-          const graded = stepsFormatted.filter((s) => s.isEvaluable && typeof s.grade === 'number');
+          const graded = relevantSteps.filter((s) => typeof s.grade === 'number');
           if (graded.length > 0) {
             const sum = graded.reduce((acc, curr) => acc + (curr.grade || 0), 0);
             finalTaskGrade = Number((sum / graded.length).toFixed(2));
@@ -507,10 +550,12 @@ router.get('/student/:studentId', authenticateToken, async (req: AuthRequest, re
 
         if (finalTaskGrade !== null) {
           taskScores.push(finalTaskGrade);
+          const skill = getSkillKey(task.category);
+          if (skill) scoresBySkill[skill] = [...(scoresBySkill[skill] || []), finalTaskGrade];
         }
 
-        const allStepsCompleted = stepsFormatted.every((s) => s.isCompleted);
-        const completedAtDates = stepsFormatted
+        const allStepsCompleted = relevantSteps.length > 0 && relevantSteps.every((s) => s.isCompleted);
+        const completedAtDates = relevantSteps
           .map((s) => s.completedAt ? new Date(s.completedAt) : null)
           .filter((date): date is Date => date instanceof Date && !Number.isNaN(date.getTime()));
         const completedAt = allStepsCompleted && completedAtDates.length > 0
@@ -523,7 +568,7 @@ router.get('/student/:studentId', authenticateToken, async (req: AuthRequest, re
           title: task.title,
           category: task.category,
           dueDate: task.dueDate,
-          steps: stepsFormatted,
+          steps: relevantSteps,
           taskGrade: finalTaskGrade,
           taskFeedback: delivery?.feedback || null,
           isCompleted: allStepsCompleted,
@@ -536,6 +581,7 @@ router.get('/student/:studentId', authenticateToken, async (req: AuthRequest, re
         ? Number((taskScores.reduce((a, b) => a + b, 0) / taskScores.length).toFixed(2))
         : null;
 
+      const onlineSkills = student.modality === 'ONLINE' ? calculateOnlineSkills(scoresBySkill) : null;
       const { overallGrade } = calculateTermOverallGrade(
         student.modality,
         existingTermGrade?.middleExamGrade,
@@ -549,12 +595,12 @@ router.get('/student/:studentId', authenticateToken, async (req: AuthRequest, re
         middleExamGrade: existingTermGrade?.middleExamGrade ?? null,
         finalExamGrade: existingTermGrade?.finalExamGrade ?? null,
         tasksAverage,
-        overallGrade,
-        grammar: existingTermGrade?.grammar ?? null,
-        reading: existingTermGrade?.reading ?? null,
-        writing: existingTermGrade?.writing ?? null,
-        listening: existingTermGrade?.listening ?? null,
-        speaking: existingTermGrade?.speaking ?? null,
+        overallGrade: onlineSkills?.overallGrade ?? overallGrade,
+        grammar: onlineSkills?.grammar ?? existingTermGrade?.grammar ?? null,
+        reading: onlineSkills?.reading ?? existingTermGrade?.reading ?? null,
+        writing: onlineSkills?.writing ?? existingTermGrade?.writing ?? null,
+        listening: onlineSkills?.listening ?? existingTermGrade?.listening ?? null,
+        speaking: onlineSkills?.speaking ?? existingTermGrade?.speaking ?? null,
         observations: existingTermGrade?.observations ?? null,
         tasks: tasksFormatted
       };

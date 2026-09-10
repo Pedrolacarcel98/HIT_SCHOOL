@@ -131,13 +131,15 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
 
 // Crear un nuevo curso (solo profesores)
 router.post('/', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
-  const { title } = req.body;
+  const { title, modality = 'PRESENCIAL' } = req.body;
   if (!title) return res.status(400).json({ error: 'El título es obligatorio' });
+  if (!['PRESENCIAL', 'ONLINE', 'HIBRIDO'].includes(modality)) return res.status(400).json({ error: 'La modalidad no es válida' });
 
   try {
     const course = await prisma.course.create({
       data: {
         title,
+        modality,
         teacherId: req.user!.id
       }
     });
@@ -150,12 +152,14 @@ router.post('/', authenticateToken, requireTeacher, async (req: AuthRequest, res
 router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
   const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const title = typeof req.body.title === 'string' ? req.body.title.trim() : '';
+  const modality = req.body.modality;
   if (!title) return res.status(400).json({ error: 'El título es obligatorio' });
+  if (modality !== undefined && !['PRESENCIAL', 'ONLINE', 'HIBRIDO'].includes(modality)) return res.status(400).json({ error: 'La modalidad no es válida' });
 
   try {
     const course = await prisma.course.updateMany({
       where: { id: courseId, teacherId: req.user!.id },
-      data: { title }
+      data: { title, ...(modality !== undefined ? { modality } : {}) }
     });
     if (course.count === 0) return res.status(404).json({ error: 'Clase no encontrada' });
     res.json({ message: 'Clase actualizada correctamente' });

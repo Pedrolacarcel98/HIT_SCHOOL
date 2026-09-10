@@ -261,14 +261,22 @@ const EnrollmentsManagement: React.FC = () => {
                 filteredStudents.map((s) => {
                   const activeEnrollment = s.academyEnrollments?.find(e => !e.endDate);
                   const hasUnpaid = s.paymentStatuses?.some(p => !p.isPaid);
+                  const initials = `${s.profile?.firstName?.[0] || ''}${s.profile?.lastName?.[0] || ''}`.toUpperCase() || 'AL';
 
                   return (
                     <tr key={s.id} style={{ borderBottom: '1px solid var(--border)', transition: 'background 0.2s ease' }}>
                       <td style={{ padding: '1rem 1.25rem' }}>
-                        <div style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '0.95rem' }}>
-                          {s.profile?.firstName} {s.profile?.lastName}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.85rem', flexShrink: 0 }}>
+                            {initials}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '0.95rem' }}>
+                              {s.profile?.firstName} {s.profile?.lastName}
+                            </div>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{s.email}</div>
+                          </div>
                         </div>
-                        <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{s.email}</div>
                       </td>
 
                       <td style={{ padding: '1rem 1.25rem' }}>

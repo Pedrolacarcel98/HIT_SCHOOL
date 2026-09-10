@@ -104,8 +104,8 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res) => {
         role: true,
         status: true,
         createdAt: true,
-        profile: { select: { firstName: true, lastName: true, dni: true } },
-        parent: { select: { profile: { select: { dni: true, firstName: true, lastName: true } } } },
+        profile: { select: { firstName: true, lastName: true, dni: true, address: true } },
+        parent: { select: { profile: { select: { dni: true, firstName: true, lastName: true, address: true } } } },
         academyEnrollments: true
       }
     });
@@ -192,8 +192,8 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
         status: true,
         modality: true,
         createdAt: true,
-        profile: { select: { firstName: true, lastName: true, dni: true } },
-        parent: { select: { profile: { select: { dni: true, firstName: true, lastName: true } } } },
+        profile: { select: { firstName: true, lastName: true, dni: true, address: true } },
+        parent: { select: { profile: { select: { dni: true, firstName: true, lastName: true, address: true } } } },
         academyEnrollments: { orderBy: { startDate: 'asc' } },
         paymentStatuses: {
           select: {

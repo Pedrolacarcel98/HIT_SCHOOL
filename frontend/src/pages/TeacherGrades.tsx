@@ -25,6 +25,7 @@ import type { ReviewQuestion } from '../components/ExamReviewModal';
 interface StudentData {
   id: string;
   email: string;
+  modality?: 'PRESENCIAL' | 'ONLINE' | 'HIBRIDO';
   profile?: {
     firstName: string;
     lastName: string;
@@ -43,7 +44,16 @@ interface FinalEvaluationData {
   listening?: number | null;
   speaking?: number | null;
   overallGrade?: number | null;
+  middleExamGrade?: number | null;
+  finalExamGrade?: number | null;
+  tasksAverage?: number | null;
   observations?: string | null;
+}
+
+interface TermEvaluationData extends FinalEvaluationData {
+  term: number;
+  tasksAverage?: number | null;
+  tasks?: Array<{ taskId: string; title: string; taskGrade: number | null; isCompleted: boolean }>;
 }
 
 interface CourseData {
@@ -180,6 +190,8 @@ const TeacherGrades: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudentForDossier, setSelectedStudentForDossier] = useState<StudentWithMeta | null>(null);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+  const [selectedTerm, setSelectedTerm] = useState(1);
+  const [termEvaluation, setTermEvaluation] = useState<TermEvaluationData | null>(null);
 
   // Modales
   const [evaluatingSubmission, setEvaluatingSubmission] = useState<{
@@ -198,9 +210,11 @@ const TeacherGrades: React.FC = () => {
   const [reviewingExam, setReviewingExam] = useState<{ subId: string; title: string; questions?: ReviewQuestion[]; answers: Record<string, any>; score: number | null; total?: number | null; feedback: string | null } | null>(null);
 
   // Evaluación Final por Competencias
-  const [currentEvaluation, setCurrentEvaluation] = useState<FinalEvaluationData | null>(null);
+  const [currentEvaluation, setCurrentEvaluation] = useState<TermEvaluationData | null>(null);
   const [isEvaluationModalOpen, setIsEvaluationModalOpen] = useState(false);
   const [evaluationForm, setEvaluationForm] = useState({
+    middleExamGrade: '',
+    finalExamGrade: '',
     grammar: '',
     reading: '',
     writing: '',
@@ -211,18 +225,30 @@ const TeacherGrades: React.FC = () => {
   });
   const [isSavingEvaluation, setIsSavingEvaluation] = useState(false);
 
+  const displayedTermOverall = selectedStudentForDossier && selectedStudentForDossier.modality !== 'ONLINE' && termEvaluation
+    ? Number(((termEvaluation.middleExamGrade || 0) * 0.35 + (termEvaluation.finalExamGrade || 0) * 0.35 + (termEvaluation.tasksAverage || 0) * 0.3).toFixed(2))
+    : termEvaluation?.overallGrade;
+
   useEffect(() => {
     if (selectedStudentForDossier) {
       const fetchEvaluation = async () => {
         try {
           const token = localStorage.getItem('token');
-          const res = await fetch(`${apiUrl}/api/students/${selectedStudentForDossier.id}/evaluation`, {
+          const courseId = selectedClassId || selectedStudentForDossier.enrolledCourses[0]?.id;
+          if (!courseId) {
+            setCurrentEvaluation(null);
+            return;
+          }
+          const res = await fetch(`${apiUrl}/api/term-grades/student/${selectedStudentForDossier.id}?courseId=${courseId}`, {
             headers: { Authorization: `Bearer ${token}` }
           });
           if (res.ok) {
             const data = await res.json();
-            setCurrentEvaluation(data);
+            const selectedTermData = data.terms?.[selectedTerm] || null;
+            setTermEvaluation(selectedTermData);
+            setCurrentEvaluation(selectedTermData);
           } else {
+            setTermEvaluation(null);
             setCurrentEvaluation(null);
           }
         } catch (err) {
@@ -233,11 +259,13 @@ const TeacherGrades: React.FC = () => {
     } else {
       setCurrentEvaluation(null);
     }
-  }, [selectedStudentForDossier?.id]);
+  }, [selectedStudentForDossier?.id, selectedClassId, selectedTerm]);
 
   const openEvaluationModal = () => {
     if (currentEvaluation) {
       setEvaluationForm({
+        middleExamGrade: currentEvaluation.middleExamGrade !== null && currentEvaluation.middleExamGrade !== undefined ? String(currentEvaluation.middleExamGrade) : '',
+        finalExamGrade: currentEvaluation.finalExamGrade !== null && currentEvaluation.finalExamGrade !== undefined ? String(currentEvaluation.finalExamGrade) : '',
         grammar: currentEvaluation.grammar !== null && currentEvaluation.grammar !== undefined ? String(currentEvaluation.grammar) : '',
         reading: currentEvaluation.reading !== null && currentEvaluation.reading !== undefined ? String(currentEvaluation.reading) : '',
         writing: currentEvaluation.writing !== null && currentEvaluation.writing !== undefined ? String(currentEvaluation.writing) : '',
@@ -248,6 +276,8 @@ const TeacherGrades: React.FC = () => {
       });
     } else {
       setEvaluationForm({
+        middleExamGrade: '',
+        finalExamGrade: '',
         grammar: '',
         reading: '',
         writing: '',
@@ -266,17 +296,24 @@ const TeacherGrades: React.FC = () => {
     try {
       setIsSavingEvaluation(true);
       const token = localStorage.getItem('token');
-      const res = await fetch(`${apiUrl}/api/students/${selectedStudentForDossier.id}/evaluation`, {
+      const courseId = selectedClassId || selectedStudentForDossier.enrolledCourses[0]?.id;
+      if (!courseId) return;
+      const res = await fetch(`${apiUrl}/api/term-grades/course/${courseId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify(evaluationForm)
+        body: JSON.stringify({
+          studentId: selectedStudentForDossier.id,
+          term: selectedTerm,
+          ...evaluationForm
+        })
       });
       if (res.ok) {
         const updated = await res.json();
         setCurrentEvaluation(updated);
+        setTermEvaluation(updated);
         setIsEvaluationModalOpen(false);
       }
     } catch (err) {
@@ -333,7 +370,9 @@ const TeacherGrades: React.FC = () => {
   // Extraer todas las entregas aplanadas
   const allSubmissionsFlat = useMemo(() => {
     return assignments.flatMap(assignment =>
-      assignment.submissions.map(sub => ({
+      assignment.submissions
+        .filter(sub => (typeof sub.content === 'string' && sub.content.trim().length > 0) || (typeof sub.grade === 'number' && !Number.isNaN(sub.grade)))
+        .map(sub => ({
         ...sub,
         assignmentTitle: assignment.title,
         assignmentCategory: assignment.category || 'GRAMMAR_VOCABULARY',
@@ -346,7 +385,7 @@ const TeacherGrades: React.FC = () => {
         materialFormData: assignment.material?.formData || null,
         studentName: sub.student?.profile ? `${sub.student.profile.firstName} ${sub.student.profile.lastName}`.trim() : (sub.student?.email || 'Alumno'),
         studentEmail: sub.student?.email || ''
-      }))
+        }))
     ).sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
   }, [assignments]);
 
@@ -368,10 +407,7 @@ const TeacherGrades: React.FC = () => {
         ? (gradedSubs.reduce((acc, curr) => acc + (curr.grade || 0), 0) / gradedSubs.length).toFixed(1)
         : null;
 
-      // Inferencia de Modalidad (Online si tiene asignaciones directas o clase online, Presencial por defecto)
-      const hasDirectAssignments = assignments.some(a => a.studentId === student.id);
-      const isOnline = hasDirectAssignments || enrolledCourses.some(c => c.title.toLowerCase().includes('online') || c.title.toLowerCase().includes('particular') || c.title.toLowerCase().includes('individual'));
-      const modality: 'PRESENCIAL' | 'ONLINE' = isOnline ? 'ONLINE' : 'PRESENCIAL';
+      const modality: 'PRESENCIAL' | 'ONLINE' = student.modality === 'ONLINE' ? 'ONLINE' : 'PRESENCIAL';
 
       return {
         ...student,
@@ -432,6 +468,40 @@ const TeacherGrades: React.FC = () => {
       return matchesSearch && matchesModality;
     });
   }, [coursesWithMeta, searchTerm, modalityFilter]);
+
+  const selectedClassForDossier = useMemo(
+    () => coursesWithMeta.find(course => course.id === selectedClassId) || null,
+    [coursesWithMeta, selectedClassId]
+  );
+
+  const selectedClassStudents = useMemo(
+    () => selectedClassForDossier?.students?.flatMap(courseStudent => {
+      const student = studentsWithMeta.find(candidate => candidate.id === courseStudent.id);
+      return student ? [student] : [];
+    }) || [],
+    [selectedClassForDossier, studentsWithMeta]
+  );
+
+  const openClassDossier = (course: typeof coursesWithMeta[number]) => {
+    const firstStudent = course.students?.flatMap(courseStudent => {
+      const student = studentsWithMeta.find(candidate => candidate.id === courseStudent.id);
+      return student ? [student] : [];
+    })[0];
+
+    setSelectedClassId(course.id);
+    setSelectedStudentForDossier(firstStudent ? {
+      ...firstStudent,
+      submissions: firstStudent.submissions.filter(submission => submission.courseId === course.id)
+    } : null);
+  };
+
+  const selectClassStudent = (student: StudentWithMeta) => {
+    if (!selectedClassForDossier) return;
+    setSelectedStudentForDossier({
+      ...student,
+      submissions: student.submissions.filter(submission => submission.courseId === selectedClassForDossier.id)
+    });
+  };
 
   // Abrir Modal de Calificación
   const openGradingModal = (sub: {
@@ -686,7 +756,7 @@ const TeacherGrades: React.FC = () => {
       {/* =========================================================================
           VISTA 1: VISTA GENERAL POR ALUMNOS
          ========================================================================= */}
-      {viewMode === 'STUDENTS' && (
+      {(viewMode === 'STUDENTS' || selectedClassId !== null) && (
         <>
           {loading ? (
             <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
@@ -820,27 +890,51 @@ const TeacherGrades: React.FC = () => {
               {/* Expediente Académico Detallado del Alumno Seleccionado */}
               {selectedStudentForDossier && (
                 createPortal(
-                <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: '260px', zIndex: 50, minHeight: '100vh', overflowY: 'auto', background: '#f3e8ff', padding: '2rem' }}>
-                  <div className="animate-fade-in" style={{ maxWidth: '1024px', margin: '0 auto', padding: '2rem', background: '#fff', border: '1px solid rgba(226, 232, 240, 0.8)', borderRadius: '16px', boxShadow: 'var(--shadow-sm)' }}>
+                <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: '260px', zIndex: 50, minHeight: '100vh', overflowY: 'auto', background: '#f3e8ff', padding: '2rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: '1.25rem' }}>
+                  {selectedClassForDossier && (
+                    <aside className="glass-panel" style={{ width: '300px', flexShrink: 0, padding: 0, overflow: 'hidden', position: 'sticky', top: 0, alignSelf: 'stretch', height: 'auto' }}>
+                      <div style={{ padding: '1rem', borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)' }}>
+                        <span style={{ display: 'block', color: 'var(--primary)', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase' }}>Clase</span>
+                        <strong style={{ display: 'block', marginTop: '0.2rem', color: 'var(--text-main)' }}>{selectedClassForDossier.title}</strong>
+                        <span style={{ display: 'block', marginTop: '0.25rem', color: 'var(--text-muted)', fontSize: '0.78rem' }}>{selectedClassStudents.length} alumnos</span>
+                      </div>
+                      <div style={{ maxHeight: 'calc(100vh - 190px)', overflowY: 'auto' }}>
+                        {selectedClassStudents.map(student => {
+                          const isClassStudentSelected = selectedStudentForDossier.id === student.id;
+                          return (
+                            <button key={student.id} type="button" onClick={() => selectClassStudent(student)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.8rem 0.9rem', border: 'none', borderBottom: '1px solid var(--border)', borderLeft: isClassStudentSelected ? '4px solid var(--primary)' : '4px solid transparent', background: isClassStudentSelected ? 'var(--primary-subtle)' : 'var(--surface)', color: 'var(--text-main)', textAlign: 'left', cursor: 'pointer' }}>
+                              <span style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--primary)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.75rem', fontWeight: 700 }}>{student.fullName.slice(0, 2).toUpperCase()}</span>
+                              <span style={{ minWidth: 0 }}><strong style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.84rem' }}>{student.fullName}</strong><small style={{ display: 'block', marginTop: '0.15rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{student.email}</small></span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </aside>
+                  )}
+                  <div className="animate-fade-in" style={{ flex: selectedClassForDossier ? '0 1 880px' : '0 1 1200px', minWidth: 0, width: selectedClassForDossier ? 'min(880px, 100%)' : 'min(1200px, 100%)', maxWidth: selectedClassForDossier ? '880px' : '1200px', height: 'fit-content', padding: '2rem', background: '#fff', border: '1px solid rgba(226, 232, 240, 0.8)', borderRadius: '16px', boxShadow: 'var(--shadow-sm)' }}>
                     <button
                       type="button"
-                      onClick={() => setSelectedStudentForDossier(null)}
+                      onClick={() => { setSelectedStudentForDossier(null); setSelectedClassId(null); }}
                       className="btn-secondary"
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', marginBottom: '1.5rem' }}
+                      aria-label="Volver a Calificaciones"
+                      title="Volver a Calificaciones"
+                      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', padding: 0, marginBottom: '1.5rem' }}
                     >
-                      <ArrowLeft size={17} /> Volver a Calificaciones
+                      <ArrowLeft size={19} />
                     </button>
                   {/* Encabezado del Expediente */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--border)', paddingBottom: '1rem', marginBottom: '1.25rem' }}>
                     <div>
                       <span style={{ display: 'inline-flex', padding: '0.25rem 0.55rem', borderRadius: '999px', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        EXPEDIENTE ACADÉMICO DEL ALUMNO
+                        {selectedClassForDossier ? `EXPEDIENTE ACADÉMICO · ${selectedClassForDossier.title}` : 'EXPEDIENTE ACADÉMICO DEL ALUMNO'}
                       </span>
                       <h1 style={{ margin: '0.35rem 0 0', fontSize: '1.75rem', color: 'var(--text-main)' }}>
                         {selectedStudentForDossier.fullName}
                       </h1>
                       <p style={{ margin: '0.15rem 0 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                        {selectedStudentForDossier.email} · {selectedStudentForDossier.modality === 'ONLINE' ? '💻 Modalidad Online' : '🏫 Modalidad Presencial'}
+                        {selectedStudentForDossier.email} · <span style={{ display: 'inline-flex', alignItems: 'center', padding: '0.15rem 0.5rem', borderRadius: '999px', background: '#f3e8ff', color: '#7e22ce', border: '1px solid #d8b4fe', fontWeight: 700, fontSize: '0.76rem' }}>
+                          {selectedStudentForDossier.modality === 'ONLINE' ? 'Modalidad Online' : 'Modalidad Presencial'}
+                        </span>
                       </p>
                     </div>
 
@@ -877,51 +971,93 @@ const TeacherGrades: React.FC = () => {
                       </button>
                     </div>
 
+                    <div style={{ display: 'inline-flex', alignItems: 'center', background: 'var(--surface)', borderRadius: '10px', padding: '4px', border: '1px solid var(--border)', marginBottom: '1rem' }}>
+                      {[1, 2, 3].map((termNumber) => (
+                        <button
+                          key={termNumber}
+                          type="button"
+                          onClick={() => setSelectedTerm(termNumber)}
+                          style={{ padding: '0.45rem 0.85rem', borderRadius: '7px', border: 'none', background: selectedTerm === termNumber ? 'var(--primary)' : 'transparent', color: selectedTerm === termNumber ? '#fff' : 'var(--text-main)', fontWeight: selectedTerm === termNumber ? 700 : 500, cursor: 'pointer', fontSize: '0.82rem' }}
+                        >
+                          {termNumber}º Trimestre
+                        </button>
+                      ))}
+                    </div>
+
                     {currentEvaluation ? (
                       <div>
+                        {selectedStudentForDossier.modality !== 'ONLINE' && (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '0.65rem', marginBottom: '0.85rem' }}>
+                            {[
+                              ['MIDDLE TERM', currentEvaluation.middleExamGrade, 'Examen parcial (35%)'],
+                              ['FINAL TERM', currentEvaluation.finalExamGrade, 'Examen final (35%)'],
+                              ['MEDIA TAREAS', currentEvaluation.tasksAverage, 'Prácticas (30%)'],
+                              ['CALIFICACIÓN TRIMESTRAL', displayedTermOverall, 'Nota ponderada']
+                            ].map(([label, value, subtitle]) => (
+                              <div key={label} style={{ padding: '0.65rem', background: label === 'CALIFICACIÓN TRIMESTRAL' ? 'var(--primary-light)' : 'var(--surface)', borderRadius: '8px', border: `1px solid ${label === 'CALIFICACIÓN TRIMESTRAL' ? 'var(--primary-border)' : 'var(--border)'}`, textAlign: 'center' }}>
+                                <span style={{ fontSize: '0.68rem', color: label === 'CALIFICACIÓN TRIMESTRAL' ? 'var(--primary-text)' : 'var(--text-muted)', display: 'block', fontWeight: 700 }}>{label}</span>
+                                <strong style={{ fontSize: '1.05rem', color: label === 'CALIFICACIÓN TRIMESTRAL' ? 'var(--primary-text)' : 'var(--text-main)', display: 'block', marginTop: '0.2rem' }}>{typeof value === 'number' ? `${value.toFixed(1)} / 10` : '- / 10'}</strong>
+                                <small style={{ display: 'block', marginTop: '0.15rem', color: 'var(--text-muted)', fontSize: '0.65rem' }}>{subtitle}</small>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {selectedStudentForDossier.modality === 'ONLINE' && (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: '0.65rem', marginBottom: '0.85rem' }}>
+                            {[['GRAMMAR', currentEvaluation.grammar], ['READING', currentEvaluation.reading], ['WRITING', currentEvaluation.writing], ['LISTENING', currentEvaluation.listening], ['SPEAKING', currentEvaluation.speaking], ['NOTA GLOBAL', currentEvaluation.overallGrade]].map(([label, value]) => (
+                              <div key={label} style={{ padding: '0.65rem', background: label === 'NOTA GLOBAL' ? 'var(--primary-light)' : 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
+                                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'block', fontWeight: 700 }}>{label}</span>
+                                <strong style={{ fontSize: '1.05rem', color: 'var(--primary)', display: 'block', marginTop: '0.2rem' }}>{typeof value === 'number' ? `${value.toFixed(1)} / 10` : '- / 10'}</strong>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {selectedStudentForDossier.modality === 'ONLINE' && false && (
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: '0.65rem', marginBottom: '0.85rem' }}>
                           <div style={{ padding: '0.65rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
                             <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>GRAMMAR</span>
                             <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>
-                              {currentEvaluation.grammar !== null && currentEvaluation.grammar !== undefined ? `${currentEvaluation.grammar} / 10` : '-'}
+                              {currentEvaluation?.grammar !== null && currentEvaluation?.grammar !== undefined ? `${currentEvaluation?.grammar} / 10` : '-'}
                             </strong>
                           </div>
 
                           <div style={{ padding: '0.65rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
                             <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>READING</span>
                             <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>
-                              {currentEvaluation.reading !== null && currentEvaluation.reading !== undefined ? `${currentEvaluation.reading} / 10` : '-'}
+                              {currentEvaluation?.reading !== null && currentEvaluation?.reading !== undefined ? `${currentEvaluation?.reading} / 10` : '-'}
                             </strong>
                           </div>
 
                           <div style={{ padding: '0.65rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
                             <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>WRITING</span>
                             <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>
-                              {currentEvaluation.writing !== null && currentEvaluation.writing !== undefined ? `${currentEvaluation.writing} / 10` : '-'}
+                              {currentEvaluation?.writing !== null && currentEvaluation?.writing !== undefined ? `${currentEvaluation?.writing} / 10` : '-'}
                             </strong>
                           </div>
 
                           <div style={{ padding: '0.65rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
                             <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>LISTENING</span>
                             <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>
-                              {currentEvaluation.listening !== null && currentEvaluation.listening !== undefined ? `${currentEvaluation.listening} / 10` : '-'}
+                              {currentEvaluation?.listening !== null && currentEvaluation?.listening !== undefined ? `${currentEvaluation?.listening} / 10` : '-'}
                             </strong>
                           </div>
 
                           <div style={{ padding: '0.65rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
                             <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>SPEAKING</span>
                             <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>
-                              {currentEvaluation.speaking !== null && currentEvaluation.speaking !== undefined ? `${currentEvaluation.speaking} / 10` : '-'}
+                              {currentEvaluation?.speaking !== null && currentEvaluation?.speaking !== undefined ? `${currentEvaluation?.speaking} / 10` : '-'}
                             </strong>
                           </div>
 
                           <div style={{ padding: '0.65rem', background: 'var(--primary-light)', borderRadius: '8px', border: '1px solid var(--primary-border)', textAlign: 'center' }}>
                             <span style={{ fontSize: '0.72rem', color: 'var(--primary-text)', display: 'block', fontWeight: 700 }}>NOTA GLOBAL</span>
                             <strong style={{ fontSize: '1.1rem', color: 'var(--primary-text)' }}>
-                              {currentEvaluation.overallGrade !== null && currentEvaluation.overallGrade !== undefined ? `${currentEvaluation.overallGrade} / 10` : '-'}
+                              {currentEvaluation?.overallGrade !== null && currentEvaluation?.overallGrade !== undefined ? `${currentEvaluation?.overallGrade} / 10` : '-'}
                             </strong>
                           </div>
-                        </div>
+                        </div>)}
 
                         {currentEvaluation.observations && (
                           <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--text-main)', fontStyle: 'italic', background: 'var(--surface)', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
@@ -938,7 +1074,7 @@ const TeacherGrades: React.FC = () => {
 
                   {/* Listado de Entregas del Alumno */}
                   <h4 style={{ margin: '0 0 0.85rem', fontSize: '1rem', color: 'var(--text-main)' }}>
-                    Historial de Tareas y Exámenes ({selectedStudentForDossier.submissions.length})
+                    Historial de Tareas y Exámenes ({selectedStudentForDossier.submissions.filter(sub => !termEvaluation?.tasks?.length || termEvaluation.tasks.some(task => sub.assignmentTitle.toLowerCase().includes(task.title.toLowerCase()) || task.title.toLowerCase().includes(sub.assignmentTitle.toLowerCase()))).length})
                   </h4>
 
                   {selectedStudentForDossier.submissions.length === 0 ? (
@@ -947,7 +1083,7 @@ const TeacherGrades: React.FC = () => {
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                      {selectedStudentForDossier.submissions.map(sub => {
+                      {selectedStudentForDossier.submissions.filter(sub => !termEvaluation?.tasks?.length || termEvaluation.tasks.some(task => sub.assignmentTitle.toLowerCase().includes(task.title.toLowerCase()) || task.title.toLowerCase().includes(sub.assignmentTitle.toLowerCase()))).map(sub => {
                         const examData = parseSavedExam(sub.content);
                         const isExam = sub.materialType === 'FORM' || Boolean(examData);
                         const hasGrade = sub.grade !== null && sub.grade !== undefined;
@@ -1191,7 +1327,7 @@ const TeacherGrades: React.FC = () => {
                   <div key={course.id} className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
                     {/* Header de la Tarjeta de Clase */}
                     <div
-                      onClick={() => setSelectedClassId(isExpanded ? null : course.id)}
+                      onClick={() => openClassDossier(course)}
                       style={{
                         padding: '1.25rem 1.75rem',
                         background: isExpanded ? 'var(--surface-alt)' : 'var(--surface)',
@@ -1621,7 +1757,17 @@ const TeacherGrades: React.FC = () => {
             </div>
 
             <form onSubmit={handleSaveEvaluation} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              {selectedStudentForDossier.modality !== 'ONLINE' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  {([['middleExamGrade', 'MIDDLE TERM (35%)'], ['finalExamGrade', 'FINAL TERM (35%)']] as const).map(([field, label]) => (
+                    <label key={field} style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                      {label}
+                      <input type="number" step="0.1" min="0" max="10" value={evaluationForm[field]} onChange={e => setEvaluationForm({ ...evaluationForm, [field]: e.target.value })} placeholder="0 - 10" style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', outline: 'none' }} />
+                    </label>
+                  ))}
+                </div>
+              )}
+              {selectedStudentForDossier.modality === 'ONLINE' && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.3rem' }}>
                     Grammar
@@ -1701,9 +1847,9 @@ const TeacherGrades: React.FC = () => {
                     style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', outline: 'none' }}
                   />
                 </div>
-              </div>
+              </div>}
 
-              <div>
+              {selectedStudentForDossier.modality === 'ONLINE' ? <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
                   <label style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--primary)' }}>
                     Nota Global
@@ -1740,7 +1886,15 @@ const TeacherGrades: React.FC = () => {
                   placeholder="Ej. 8.5"
                   style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--primary-border)', background: 'var(--primary-light)', fontWeight: 700, color: 'var(--primary-text)', outline: 'none' }}
                 />
-              </div>
+              </div> : (
+                <div style={{ padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid var(--primary-border)', background: 'var(--primary-light)' }}>
+                  <span style={{ display: 'block', fontSize: '0.78rem', color: 'var(--primary-text)', fontWeight: 700 }}>MEDIA DE TAREAS (30%)</span>
+                  <strong style={{ display: 'block', marginTop: '0.2rem', fontSize: '1.15rem', color: 'var(--primary-text)' }}>
+                    {typeof currentEvaluation?.tasksAverage === 'number' ? `${currentEvaluation.tasksAverage.toFixed(1)} / 10` : '- / 10'}
+                  </strong>
+                  <small style={{ display: 'block', marginTop: '0.15rem', color: 'var(--primary-text)' }}>Calculada automáticamente a partir de las tareas del trimestre</small>
+                </div>
+              )}
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.3rem' }}>

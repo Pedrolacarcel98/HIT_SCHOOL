@@ -5,14 +5,17 @@ import { BookOpen, GraduationCap, Laptop, MoreVertical, Pencil, Plus, Trash2, X 
 interface Course {
   id: string;
   title: string;
+  modality?: 'PRESENCIAL' | 'ONLINE' | 'HIBRIDO';
 }
 
 const TeacherCourses: React.FC = () => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [newCourseTitle, setNewCourseTitle] = useState('');
+  const [newCourseModality, setNewCourseModality] = useState<'PRESENCIAL' | 'ONLINE' | 'HIBRIDO'>('PRESENCIAL');
   const [isCreating, setIsCreating] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [courseTitle, setCourseTitle] = useState('');
+  const [courseModality, setCourseModality] = useState<'PRESENCIAL' | 'ONLINE' | 'HIBRIDO'>('PRESENCIAL');
   const [deletingCourse, setDeletingCourse] = useState<Course | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [courseError, setCourseError] = useState('');
@@ -52,11 +55,12 @@ const TeacherCourses: React.FC = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ title: newCourseTitle.trim() })
+        body: JSON.stringify({ title: newCourseTitle.trim(), modality: newCourseModality })
       });
       
       if (res.ok) {
         setNewCourseTitle('');
+        setNewCourseModality('PRESENCIAL');
         setIsCreating(false);
         fetchCourses();
       }
@@ -73,7 +77,7 @@ const TeacherCourses: React.FC = () => {
     const res = await fetch(`${apiUrl}/api/courses/${editingCourse.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ title: courseTitle.trim() })
+      body: JSON.stringify({ title: courseTitle.trim(), modality: courseModality })
     });
     if (res.ok) {
       setEditingCourse(null);
@@ -100,10 +104,9 @@ const TeacherCourses: React.FC = () => {
   };
 
   const filteredCourses = courses.filter(c => {
-    const isOnline = c.title.toLowerCase().includes('online') || c.title.toLowerCase().includes('particular') || c.title.toLowerCase().includes('individual');
-    const modality = isOnline ? 'ONLINE' : 'PRESENCIAL';
+    const modality = c.modality || 'PRESENCIAL';
     if (modalityFilter === 'PRESENCIAL') return modality === 'PRESENCIAL';
-    if (modalityFilter === 'ONLINE') return modality === 'ONLINE';
+    if (modalityFilter === 'ONLINE') return modality === 'ONLINE' || modality === 'HIBRIDO';
     return true;
   });
 
@@ -166,6 +169,11 @@ const TeacherCourses: React.FC = () => {
               style={{ flex: '1 1 240px', minWidth: 0, padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', outline: 'none' }}
               autoFocus
             />
+            <select value={newCourseModality} onChange={(e) => setNewCourseModality(e.target.value as 'PRESENCIAL' | 'ONLINE' | 'HIBRIDO')} style={{ flex: '0 1 150px', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}>
+              <option value="PRESENCIAL">Presencial</option>
+              <option value="ONLINE">Online</option>
+              <option value="HIBRIDO">Híbrido</option>
+            </select>
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
               <button type="submit" className="btn-primary">Guardar</button>
               <button type="button" onClick={() => setIsCreating(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.5rem 0.75rem' }}>Cancelar</button>
@@ -176,7 +184,8 @@ const TeacherCourses: React.FC = () => {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '1.25rem' }}>
         {filteredCourses.map(course => {
-          const isOnline = course.title.toLowerCase().includes('online') || course.title.toLowerCase().includes('particular') || course.title.toLowerCase().includes('individual');
+          const modality = course.modality || 'PRESENCIAL';
+          const isOnline = modality === 'ONLINE' || modality === 'HIBRIDO';
 
           return (
             <div 
@@ -213,17 +222,17 @@ const TeacherCourses: React.FC = () => {
                     fontWeight: 700,
                     padding: '1px 7px',
                     borderRadius: '10px',
-                    background: isOnline ? '#eef2ff' : '#f0fdf4',
-                    color: isOnline ? '#4338ca' : '#15803d',
-                    border: `1px solid ${isOnline ? '#c7d2fe' : '#bbf7d0'}`
+                    background: isOnline ? '#e0f2fe' : '#f3e8ff',
+                    color: isOnline ? '#0369a1' : '#7e22ce',
+                    border: `1px solid ${isOnline ? '#bae6fd' : '#d8b4fe'}`
                   }}>
-                    {isOnline ? 'Online' : 'Presencial'}
+                    {modality === 'HIBRIDO' ? 'Híbrido' : isOnline ? 'Online' : 'Presencial'}
                   </span>
                 </div>
                 <div style={{ marginLeft: 'auto', position: 'relative' }} onClick={(event) => event.stopPropagation()}>
                   <button title="Acciones de la clase" aria-label="Acciones de la clase" onClick={() => setOpenMenuId(openMenuId === course.id ? null : course.id)} style={iconButtonStyle}><MoreVertical size={20} /></button>
                   {openMenuId === course.id && <div style={{ position: 'absolute', right: 0, top: '2rem', zIndex: 10, width: '170px', padding: '0.35rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', boxShadow: 'var(--shadow-lg)' }}>
-                    <button onClick={() => { setEditingCourse(course); setCourseTitle(course.title); setOpenMenuId(null); }} style={menuButtonStyle}><Pencil size={15} /> Editar título</button>
+                    <button onClick={() => { setEditingCourse(course); setCourseTitle(course.title); setCourseModality(course.modality || 'PRESENCIAL'); setOpenMenuId(null); }} style={menuButtonStyle}><Pencil size={15} /> Editar título</button>
                     <button onClick={() => { setDeletingCourse(course); setOpenMenuId(null); }} style={{ ...menuButtonStyle, color: '#9e2a2b' }}><Trash2 size={15} /> Eliminar clase</button>
                   </div>}
                 </div>

@@ -23,6 +23,13 @@ services:
     environment:
       - DATABASE_URL=postgresql://root:rootpassword@db:5432/hitschool?schema=public
       - JWT_SECRET=supersecretjwtkey_change_in_production
+      - FRONTEND_URL=http://localhost:5173
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_SECURE=${SMTP_SECURE:-false}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM=${SMTP_FROM:-}
     depends_on:
       - db
     # Usamos volumes para hot-reloading en entorno de desarrollo local

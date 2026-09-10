@@ -21,7 +21,7 @@
   - 🟢 **Biblioteca Multimedia & Exámenes Interactivos:** 100% Implementado.
   - 🟢 **Gestión de Alumnos, Ficha Extendida y Cuentas Familiares:** 95% Completado.
   - 🟢 **Control Visual de Pagos y Mensualidades:** 95% Implementado.
-  - 🟢 **Calificaciones y Feedback del Profesor:** 100% Implementado.
+  - 🟢 **Calificaciones y Feedback del Profesor:** 100% Implementado, incluyendo motor trimestral 35/35/30 presencial y medias online por disciplina.
   - 🟢 **Tareas Estructuradas, Recursos y Progreso Individual:** 100% implementado y sincronizado con PostgreSQL.
   - 🟢 **Ajustes de Cuenta y Cambio de Contraseña:** 100% Completado.
   - 🟢 **Seguridad Backend en Endpoints:** 100% Completado.
@@ -74,6 +74,12 @@
   - En chat: habilitada supervisión global de conversaciones para profesorado, con hilos independientes por profesor para alumno/tutor.
   - En Gestión de Alumnos: incorporada exportación `.xlsx` y campos opcionales de curso escolar, alergias, autorización de imagen y observaciones.
   - En calificaciones: las entregas posteriores a la fecha límite siguen permitidas y se identifican como fuera de plazo.
+  - En calificaciones trimestrales: sincronizados los paneles de alumno y profesor mediante `TermGrade`, con selector de 1º, 2º y 3º trimestre.
+  - En modalidad presencial: aplicada la ponderación 35% `Middle Term` + 35% `Final Term` + 30% tareas prácticas.
+  - En modalidad online: calculadas automáticamente las medias de Grammar, Reading, Writing, Listening y Speaking; las disciplinas sin tareas calificadas se muestran como `-` y no afectan a la media global.
+  - En historiales trimestrales: excluidos recursos sin contenido evaluable y admitidas entregas reales de texto, enlaces, archivos o notas aunque procedan de vídeo, imagen o documento.
+  - En el expediente del profesor: añadido selector trimestral, historial filtrado por trimestre, edición de notas del trimestre activo y selector de alumnos por clase.
+  - Validaciones de esta iteración: TypeScript frontend/backend y `prisma validate` correctos. No se ejecutó `build`.
 
 ---
 
@@ -84,6 +90,7 @@
 3. [x] **Paso 3 (Completado):** Implementar modal de entrega interactivo de tareas para el alumno en `StudentClassworkTab.tsx`.
 4. [x] **Paso 4 (Completado):** Eliminar endpoint inseguro `/api/users`, añadir campos de ficha extendida (`dni`, `phone`, `birthDate`, `address`), soporte de tutores/padres y modal de cambio de contraseña `SettingsModal`.
 5. [/] **Paso 5 (En curso):** Consolidar generación y descarga de recibos/facturas en PDF, incluyendo acceso desde la ficha del alumno.
+8. [x] **Paso 8 (Completado):** Sincronizar el motor de calificaciones trimestrales entre panel de alumno y profesor, con medias por modalidad y filtrado de contenido evaluable.
 6. [x] **Paso 6 (Completado):** Consolidar las vistas familiares; selector de hijos, tablón, pagos, calificaciones y tareas estructuradas están integrados en el panel adaptado.
 7. [x] **Paso 7 (Completado):** Sincronizar Prisma y validar el flujo de tareas estructuradas/exámenes con profesor, alumno y tutor.
 

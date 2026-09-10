@@ -619,6 +619,7 @@ const StudentsManagement: React.FC = () => {
                 filteredStudents.map((s) => {
                   const initials = `${s.profile?.firstName?.[0] || ''}${s.profile?.lastName?.[0] || ''}`.toUpperCase() || 'AL';
                   const age = calculateAge(s.profile?.birthDate);
+                  const modality = s.modality || 'PRESENCIAL';
 
                   return (
                     <tr key={s.id} style={{ borderBottom: '1px solid var(--border)', transition: 'background 0.2s ease' }}>
@@ -654,6 +655,9 @@ const StudentsManagement: React.FC = () => {
                                 <Phone size={12} /> {s.profile.phone}
                               </div>
                             )}
+                            <span style={{ display: 'inline-flex', alignItems: 'center', marginTop: '0.3rem', padding: '0.15rem 0.5rem', borderRadius: '999px', background: modality === 'PRESENCIAL' ? '#f3e8ff' : '#e0f2fe', color: modality === 'PRESENCIAL' ? '#7e22ce' : '#0369a1', border: `1px solid ${modality === 'PRESENCIAL' ? '#d8b4fe' : '#bae6fd'}`, fontSize: '0.7rem', fontWeight: 700 }}>
+                              {modality === 'PRESENCIAL' ? 'Presencial' : modality === 'HIBRIDO' ? 'Híbrido' : 'Online'}
+                            </span>
                           </div>
                         </div>
                       </td>

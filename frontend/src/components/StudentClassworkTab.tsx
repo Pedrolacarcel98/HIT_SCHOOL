@@ -154,7 +154,7 @@ const getResourceDownloadUrl = (material: { type: string; url?: string | null })
 };
 
 const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
-  const [assignedMaterials, setAssignedMaterials] = useState<AssignedMaterial[]>([]);
+  const [assignedMaterials] = useState<AssignedMaterial[]>([]);
   const [structuredTasks, setStructuredTasks] = useState<StructuredTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -179,37 +179,6 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
       const token = localStorage.getItem('token');
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
       const studentParam = selectedStudentId ? `?studentId=${selectedStudentId}` : '';
-      const res = await fetch(`${apiUrl}/api/assignments/me${studentParam}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const assignments = await res.json();
-        // Filtrar solo los del curso actual
-        const courseAssignments = assignments.filter((a: any) => a.courseId === courseId);
-        
-        setAssignedMaterials(courseAssignments.map((assignment: any) => {
-          const sub = assignment.submissions && assignment.submissions.length > 0 ? assignment.submissions[0] : null;
-          return {
-            id: assignment.id,
-            title: assignment.title,
-            description: assignment.description || (assignment.material ? assignment.material.description || assignment.material.title : ''),
-            level: assignment.material ? (assignment.material.level || 'GENERAL') : 'GENERAL',
-            category: assignment.category || 'GRAMMAR_VOCABULARY',
-            teacher: assignment.teacher && assignment.teacher.profile ? `${assignment.teacher.profile.firstName} ${assignment.teacher.profile.lastName}`.trim() : 'Profesor',
-            assignedAt: new Date(assignment.createdAt || new Date()).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }),
-            deadline: assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : undefined,
-            rawDeadline: assignment.dueDate,
-            status: sub ? 'COMPLETED' : 'PENDING',
-            url: assignment.material ? assignment.material.url : '',
-            type: assignment.material ? assignment.material.type : (sub?.content?.includes('"answers"') ? 'FORM' : 'DOCUMENT'),
-            formData: assignment.material ? assignment.material.formData : null,
-            submissionContent: sub?.content,
-            submissionGrade: sub?.grade,
-            submissionFeedback: sub?.feedback,
-            submittedAt: sub?.submittedAt
-          };
-        }));
-      }
       const structuredTasksResponse = await fetch(`${apiUrl}/api/structured-tasks/course/${courseId}${studentParam}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -254,6 +223,7 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   };
 
   const openActionModal = (step: any, task: StructuredTask) => {
+    const submission = step.submission || null;
     setViewingMaterial({
       id: step.id,
       title: step.title,
@@ -266,10 +236,10 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
       url: step.material?.url || '',
       type: step.material?.type || 'DOCUMENT',
       formData: step.material?.formData,
-      submissionContent: step.submission?.content,
-      submissionGrade: step.submission?.grade,
-      submissionFeedback: step.submission?.feedback,
-      submittedAt: step.submission?.submittedAt,
+      submissionContent: submission?.content || null,
+      submissionGrade: submission?.grade ?? null,
+      submissionFeedback: submission?.feedback || null,
+      submittedAt: submission?.submittedAt || null,
       structuredStepId: step.id,
       structuredTaskId: task.id
     });
@@ -320,6 +290,10 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
 
   const openStructuredResource = (step: StructuredTask['steps'][number], task: StructuredTask) => {
     if (!step.material) return;
+    if (step.isCompleted || step.submission) {
+      openActionModal(step, task);
+      return;
+    }
     if (step.material.type === 'FORM') {
       openActionModal(step, task);
       return;
@@ -489,7 +463,7 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
 
       {loading ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: '4rem 2rem', color: 'var(--text-muted)' }}>Cargando tareas de la clase...</div>
-      ) : filteredMaterials.length === 0 ? (
+      ) : filteredMaterials.length === 0 && structuredTasks.length === 0 ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
           <FileText size={46} style={{ color: 'var(--primary)', opacity: 0.45, marginBottom: '1rem' }} />
           <h2 style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>No hay tareas para mostrar</h2>
@@ -602,9 +576,20 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <strong style={{ fontSize: '0.9rem', color: step.isCompleted ? 'var(--text-muted)' : 'var(--text-main)', textDecoration: step.isCompleted ? 'line-through' : 'none' }}>{step.order}. {step.title}</strong>
                           {step.material && <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-                            <button type="button" onClick={() => openStructuredResource(step, task)} disabled={!step.material.url && step.material.type !== 'FORM'} style={{ display: 'inline-flex', marginTop: '0.45rem', padding: '0.35rem 0.65rem', borderRadius: '10px', border: '1px solid var(--primary-border)', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>[ {step.material.type} ] {step.material.title}</button>
+                            <button type="button" onClick={() => openStructuredResource(step, task)} disabled={!step.material.url && step.material.type !== 'FORM'} style={{ display: 'inline-flex', marginTop: '0.45rem', padding: '0.35rem 0.65rem', borderRadius: '10px', border: '1px solid var(--primary-border)', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>{step.material.title}</button>
                             {step.material.type === 'DOCUMENT' && step.material.url && <a href={getResourceDownloadUrl(step.material)} download title="Descargar documento en PDF" aria-label={`Descargar ${step.material.title} en PDF`} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginTop: '0.45rem', padding: '0.35rem', borderRadius: '8px', border: '1px solid var(--primary-border)', background: 'var(--surface)', color: 'var(--primary-text)' }}><Download size={15} /></a>}
                           </div>}
+                          {step.submission?.content && (() => {
+                            const submission = parseSubmissionContent(step.submission.content);
+                            return (
+                              <div style={{ marginTop: '0.5rem', padding: '0.55rem 0.7rem', borderRadius: '7px', background: 'var(--surface)', border: '1px solid var(--primary-border)', fontSize: '0.78rem', color: 'var(--text-main)' }}>
+                                <strong style={{ display: 'block', color: 'var(--primary-text)', marginBottom: '0.2rem' }}>Tu entrega:</strong>
+                                {submission.text && <span style={{ display: 'block', whiteSpace: 'pre-wrap' }}>{submission.text}</span>}
+                                {submission.link && <a href={submission.link} target="_blank" rel="noopener noreferrer" style={{ display: 'block', color: 'var(--primary)', fontWeight: 700, textDecoration: 'none' }}>Abrir enlace entregado</a>}
+                                {submission.attachment?.name && <span style={{ display: 'block', color: 'var(--primary-text)', fontWeight: 600 }}>Archivo: {submission.attachment.name}</span>}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
                     ))}
@@ -683,7 +668,7 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                                   disabled={!step.material?.url && step.material?.type !== 'FORM'} 
                                   style={{ padding: '0.35rem 0.65rem', borderRadius: '10px', border: '1px solid var(--primary-border)', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.78rem', fontWeight: 700, cursor: (step.material?.url || step.material?.type === 'FORM') ? 'pointer' : 'default', opacity: (step.material?.url || step.material?.type === 'FORM') ? 1 : 0.6 }}
                                 >
-                                  [ {step.material.type} ] {step.material.title}
+                                  {step.material.title}
                                 </button>
                                 {step.material.type === 'DOCUMENT' && step.material.url && <a href={getResourceDownloadUrl(step.material)} download title="Descargar documento en PDF" aria-label={`Descargar ${step.material.title} en PDF`} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0.35rem', borderRadius: '8px', border: '1px solid var(--primary-border)', background: 'var(--surface)', color: 'var(--primary-text)' }}><Download size={15} /></a>}
                                 

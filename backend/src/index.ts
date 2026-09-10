@@ -9,6 +9,7 @@ const port = process.env.PORT || 3000;
 
 import authRoutes from './routes/auth';
 import studentRoutes from './routes/students';
+import teacherRoutes from './routes/teachers';
 import courseRoutes from './routes/courses';
 import materialRoutes from './routes/materials';
 import paymentRoutes from './routes/payments';
@@ -25,6 +26,7 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/students', studentRoutes);
+app.use('/api/teachers', teacherRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/materials', materialRoutes);
 app.use('/api/payments', paymentRoutes);

@@ -144,8 +144,8 @@ const StudentCourses: React.FC = () => {
   const navigate = useNavigate();
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
-  const [individualContent, setIndividualContent] = useState<IndividualContent[]>([]);
-  const [assignedMaterials, setAssignedMaterials] = useState<AssignedMaterial[]>([]);
+  const [individualContent] = useState<IndividualContent[]>([]);
+  const [assignedMaterials] = useState<AssignedMaterial[]>([]);
   const [structuredTasks, setStructuredTasks] = useState<StructuredTask[]>([]);
   const [viewingContent, setViewingContent] = useState<IndividualContent | null>(null);
   const [viewingMaterialAssignment, setViewingMaterialAssignment] = useState<AssignedMaterial | null>(null);
@@ -187,15 +187,6 @@ const StudentCourses: React.FC = () => {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) setCourses(await res.json());
-        const assignmentsResponse = await fetch(`${apiUrl}/api/assignments/me${studentParam}`, { headers: { Authorization: `Bearer ${token}` } });
-        if (assignmentsResponse.ok) {
-          const assignments = await assignmentsResponse.json();
-          setIndividualContent(assignments.filter((assignment: IndividualContent & { courseId?: string }) => !assignment.courseId));
-        }
-        const materialsResponse = await fetch(`${apiUrl}/api/materials/assigned-to-me${studentParam}`, { headers: { Authorization: `Bearer ${token}` } });
-        if (materialsResponse.ok) setAssignedMaterials(await materialsResponse.json());
-        const structuredTasksResponse = await fetch(`${apiUrl}/api/structured-tasks/me${studentParam}`, { headers: { Authorization: `Bearer ${token}` } });
-        if (structuredTasksResponse.ok) setStructuredTasks(await structuredTasksResponse.json());
       } catch (err) {
         console.error(err);
       } finally {
@@ -305,16 +296,6 @@ const StudentCourses: React.FC = () => {
         setDeliveryError(data.error || 'No se pudo entregar el recurso.');
         return;
       }
-      const studentParam = selectedStudentId ? `?studentId=${selectedStudentId}` : '';
-      const [assignmentsResponse, materialsResponse] = await Promise.all([
-        fetch(`${apiUrl}/api/assignments/me${studentParam}`, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }),
-        fetch(`${apiUrl}/api/materials/assigned-to-me${studentParam}`, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
-      ]);
-      if (assignmentsResponse.ok) {
-        const assignments = await assignmentsResponse.json();
-        setIndividualContent(assignments.filter((assignment: IndividualContent & { courseId?: string }) => !assignment.courseId));
-      }
-      if (materialsResponse.ok) setAssignedMaterials(await materialsResponse.json());
       setDeliveryTarget(null);
       resetDeliveryForm();
     } catch (error) {
@@ -497,7 +478,7 @@ const StudentCourses: React.FC = () => {
         </div>
       )}
 
-      {structuredTasks.length > 0 && (
+      {false && structuredTasks.length > 0 && (
         <section style={{ marginTop: '2.5rem' }}>
           <h2 style={{ margin: '0 0 1rem', fontSize: '1.35rem', display: 'flex', alignItems: 'center', gap: '0.6rem', color: 'var(--text-main)' }}>
             <ListChecks style={{ color: 'var(--primary)' }} /> Tareas Estructuradas
@@ -573,7 +554,7 @@ const StudentCourses: React.FC = () => {
         </section>
       )}
 
-      {individualContent.length > 0 && <section style={{ marginTop: '2rem' }}>
+      {false && individualContent.length > 0 && <section style={{ marginTop: '2rem' }}>
         <h2 style={{ marginBottom: '1rem', fontSize: '1.35rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}><FileText style={{ color: 'var(--primary)' }} /> Contenido asignado individualmente</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '1.25rem' }}>
           {individualContent.map(content => {
@@ -602,7 +583,7 @@ const StudentCourses: React.FC = () => {
           })}
         </div>
       </section>}
-      {assignedMaterials.length > 0 && <section style={{ marginTop: '2rem' }}>
+      {false && assignedMaterials.length > 0 && <section style={{ marginTop: '2rem' }}>
         <h2 style={{ marginBottom: '1rem', fontSize: '1.35rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}><FileText style={{ color: 'var(--primary)' }} /> Material asignado directamente</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '1.25rem' }}>
           {assignedMaterials.filter(assignment => !assignedMaterialIds.has(assignment.material.id)).map(assignment => {

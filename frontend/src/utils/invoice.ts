@@ -1,11 +1,17 @@
 import jsPDF from 'jspdf';
 
+const ACADEMY_NAME = 'Hit School Academia de idiomas';
+const ACADEMY_OWNER = 'Laura Gómez Ruiz';
+const ACADEMY_DNI = '30236969L';
+const ACADEMY_ADDRESS = 'Calle Concepcion Soto 36 Bajo, 41219 Las Pajanosas';
+
 export interface InvoiceData {
   invoiceNumber?: string;
   issueDate?: string;
   studentName: string;
   studentDni?: string | null;
   studentEmail?: string | null;
+  studentAddress?: string | null;
   month: number;
   year: number;
   monthLabel: string; // ej: "Julio 2026"
@@ -48,14 +54,14 @@ export const generateInvoicePDF = (data: InvoiceData) => {
   doc.setTextColor(greenCorporate[0], greenCorporate[1], greenCorporate[2]);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(22);
-  doc.text('HIT SCHOOL', 15, 18);
+  doc.text(ACADEMY_NAME, 15, 16);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(mutedText[0], mutedText[1], mutedText[2]);
-  doc.text('C. Concepción Soto 36, Las Pajanosas', 15, 25);
-  doc.text('NIF: B-93821045', 15, 30);
-  doc.text('Email: info@hitschool.es', 15, 35);
+  doc.text(`Titular: ${ACADEMY_OWNER}`, 15, 23);
+  doc.text(`DNI: ${ACADEMY_DNI}`, 15, 29);
+  doc.text(ACADEMY_ADDRESS, 15, 35);
 
   // A la derecha: "FACTURA", Nº de factura y Fecha de emisión
   doc.setTextColor(greenCorporate[0], greenCorporate[1], greenCorporate[2]);
@@ -102,6 +108,13 @@ export const generateInvoicePDF = (data: InvoiceData) => {
     doc.text('Email:', 115, 67);
     doc.setFont('helvetica', 'normal');
     doc.text(data.studentEmail, 130, 67);
+  }
+
+  if (data.studentAddress) {
+    doc.setFont('helvetica', 'bold');
+    doc.text('Dirección:', 20, 79);
+    doc.setFont('helvetica', 'normal');
+    doc.text(data.studentAddress, 42, 79);
   }
 
   // 5. Tabla de Contenido
@@ -164,7 +177,7 @@ export const generateInvoicePDF = (data: InvoiceData) => {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(mutedText[0], mutedText[1], mutedText[2]);
-  doc.text('HitSchool — Plataforma Educativa. C. Concepción Soto 36, Las Pajanosas.', 105, 281, { align: 'center' });
+  doc.text(`${ACADEMY_NAME}. ${ACADEMY_ADDRESS}.`, 105, 281, { align: 'center' });
 
   // Guardar archivo PDF
   doc.save(`${invoiceNumber}.pdf`);
@@ -176,6 +189,7 @@ export interface StatementData {
   studentName: string;
   studentDni?: string | null;
   studentEmail?: string | null;
+  studentAddress?: string | null;
   year?: number | string | null;
   payments: {
     monthLabel: string;
@@ -205,14 +219,14 @@ export const generateStatementPDF = (data: StatementData) => {
   doc.setTextColor(greenCorporate[0], greenCorporate[1], greenCorporate[2]);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(22);
-  doc.text('HIT SCHOOL', 15, 18);
+  doc.text(ACADEMY_NAME, 15, 16);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(mutedText[0], mutedText[1], mutedText[2]);
-  doc.text('C. Concepción Soto 36, Las Pajanosas', 15, 25);
-  doc.text('NIF: B-93821045', 15, 30);
-  doc.text('Email: info@hitschool.es', 15, 35);
+  doc.text(`Titular: ${ACADEMY_OWNER}`, 15, 23);
+  doc.text(`DNI: ${ACADEMY_DNI}`, 15, 29);
+  doc.text(ACADEMY_ADDRESS, 15, 35);
 
   // A la derecha: "EXTRACTO DE PAGOS", Ejercicio y Fecha de emisión
   doc.setTextColor(greenCorporate[0], greenCorporate[1], greenCorporate[2]);
@@ -270,6 +284,13 @@ export const generateStatementPDF = (data: StatementData) => {
     doc.text(data.studentEmail, 130, 65);
   }
 
+  if (data.studentAddress) {
+    doc.setFont('helvetica', 'bold');
+    doc.text('Dirección:', 20, 77);
+    doc.setFont('helvetica', 'normal');
+    doc.text(data.studentAddress, 42, 77);
+  }
+
   // 3. El extracto contiene exclusivamente mensualidades abonadas.
   const paidPayments = data.payments.filter((payment) => payment.isPaid);
   const totalPaid = paidPayments.reduce((acc, payment) => acc + (Number(payment.amount) || 0), 0);
@@ -322,7 +343,7 @@ export const generateStatementPDF = (data: StatementData) => {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(mutedText[0], mutedText[1], mutedText[2]);
-    doc.text('HitSchool — Plataforma Educativa. C. Concepción Soto 36, Las Pajanosas.', 15, 285);
+    doc.text(`${ACADEMY_NAME}. ${ACADEMY_ADDRESS}.`, 15, 285);
     doc.text(`Página ${i} de ${pageCount}`, 195, 285, { align: 'right' });
   }
 
@@ -361,13 +382,13 @@ const drawHitSchoolHeader = (doc: jsPDF, title: string, subtitle: string) => {
   doc.setTextColor(greenCorporate[0], greenCorporate[1], greenCorporate[2]);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(22);
-  doc.text('HIT SCHOOL', 15, 18);
+  doc.text(ACADEMY_NAME, 15, 16);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(mutedText[0], mutedText[1], mutedText[2]);
-  doc.text('C. Concepción Soto 36, Las Pajanosas', 15, 25);
-  doc.text('NIF: B-93821045', 15, 30);
-  doc.text('Email: info@hitschool.es', 15, 35);
+  doc.text(`Titular: ${ACADEMY_OWNER}`, 15, 23);
+  doc.text(`DNI: ${ACADEMY_DNI}`, 15, 29);
+  doc.text(ACADEMY_ADDRESS, 15, 35);
   doc.setTextColor(greenCorporate[0], greenCorporate[1], greenCorporate[2]);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(15);

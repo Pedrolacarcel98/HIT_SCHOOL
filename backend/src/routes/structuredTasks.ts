@@ -362,11 +362,9 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => 
     const tasks = await prisma.structuredTask.findMany({
       where: {
         isTemplate: false,
-        AND: [{ OR: [{ publishAt: null }, { publishAt: { lte: new Date() } }] }],
-        OR: [
-          { assignmentType: StructuredTaskAssignmentType.INDIVIDUAL, assignedStudentId: studentId },
-          { assignmentType: StructuredTaskAssignmentType.INDIVIDUAL, assignedStudents: { some: { studentId } } }
-        ]
+        courseId: { in: courseIds },
+        assignmentType: StructuredTaskAssignmentType.CLASS,
+        AND: [{ OR: [{ publishAt: null }, { publishAt: { lte: new Date() } }] }]
       } as any,
       include: getTaskInclude(studentId),
       orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }]

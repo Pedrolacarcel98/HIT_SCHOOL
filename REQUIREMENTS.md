@@ -12,7 +12,7 @@ A continuación se detallan los 11 requerimientos acordados en la última reuni�
 | # | Requisito del Cliente | Alcance Funcional Resumido | Estado |
 | :-: | :--- | :--- | :-: |
 | **1** | **Extractos de pago por años con total** | Filtro por ejercicio anual y cuadro de totales (Total Facturado, Total Abonado, Saldo Pendiente) en el PDF. | `[x] Completado` |
-| **2** | **Calificaciones trimestrales (Middle & Final Term)** | 2 notas trimestrales. Presencial: media entre Middle/Final y tareas. Online: media 100% automática de tareas y exámenes. | `[ ] Pendiente` |
+| **2** | **Calificaciones trimestrales (Middle & Final Term)** | 2 notas trimestrales. Presencial: 35% Middle + 35% Final + 30% tareas. Online: media automática por disciplinas, ignorando disciplinas sin tareas evaluables. | `[x] Completado` |
 | **3** | **Programación diferida de tareas** | Programar fecha/hora de publicación de tareas estilo Google Classroom (ocultas para el alumno hasta la fecha). | `[x] Completado` |
 | **4** | **Recursos del profesor mediante Google Drive** | El docente comparte recursos mediante enlaces individuales de Google Drive y el alumno puede descargar, completar y adjuntar documentos en su entrega. | `[x] Completado` |
 | **5** | **Previsualización de audio en creador de exámenes** | Reproductor visual inmediato al asociar una pista de audio opcional a una pregunta interactiva. | `[x] Completado` |
@@ -34,16 +34,17 @@ A continuación se detallan los 11 requerimientos acordados en la última reuni�
 - [x] Fila final `TOTAL` con el importe abonado, sin bloque adicional de resumen.
 - [x] Paginación dinámica multihélice (*Página X de Y*).
 
-### 0.2 Motor de Calificaciones Trimestrales (Middle Term y Final Term) `[ ]`
-- [ ] Definición de estructura académica por trimestres (1º, 2º y 3º trimestre) con dos hitos evaluativos principales:
+### 0.2 Motor de Calificaciones Trimestrales (Middle Term y Final Term) `[x]`
+- [x] Definición de estructura académica por trimestres (1º, 2º y 3º trimestre) con dos hitos evaluativos principales:
   - **Middle Term:** Calificación intermedia del trimestre.
   - **Final Term:** Calificación final del trimestre.
-- [ ] **Lógica para Alumnos Presenciales (Academia):**
-  - La nota final trimestral se calcula combinando las calificaciones formales de exámenes (*Middle* y *Final Term*) introducidas por el profesor y la nota media ponderada de las entregas y tareas prácticas.
-  - Ponderación configurable o media aritmética entre examen y trabajo continuo.
-- [ ] **Lógica para Alumnos Online / Individuales:**
-  - El cálculo de las calificaciones finales trimestrales debe ser **100% automático** a partir del promedio ponderado en tiempo real de todas las tareas, tests autocorregibles y redacciones entregadas en la plataforma durante ese periodo.
-- [ ] Interfaz de visualización para alumnos y padres con el desglose trimestral (*Middle*, *Final*, *Media Tareas* y *Calificación Definitiva*).
+- [x] **Lógica para Alumnos Presenciales (Academia):**
+  - La nota final trimestral se calcula como 35% *Middle Term* + 35% *Final Term* + 30% media de tareas prácticas.
+- [x] **Lógica para Alumnos Online / Individuales:**
+  - El cálculo de las calificaciones finales trimestrales es **100% automático** mediante la media de las tareas calificadas de Grammar, Reading, Writing, Listening y Speaking.
+  - Las disciplinas sin tareas calificadas se muestran como `-` y no participan en la media global.
+- [x] Interfaz de visualización para alumnos y padres con selector trimestral y desglose de métricas.
+- [x] Expediente del profesor con selector trimestral, historial filtrado y edición de notas del trimestre activo.
 
 ### 0.3 Programación de Tareas Diferidas (Estilo Google Classroom) `[x]`
 - [x] Soporte para campo `publishAt` (fecha y hora) en la creación y edición de tareas, materiales asignados y tareas estructuradas.

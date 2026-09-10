@@ -10,6 +10,7 @@ import StudentCourses from './pages/StudentCourses';
 import TeacherGrades from './pages/TeacherGrades';
 import StudentGrades from './pages/StudentGrades';
 import StudentsManagement from './pages/StudentsManagement';
+import TeachersManagement from './pages/TeachersManagement';
 import EnrollmentsManagement from './pages/EnrollmentsManagement';
 import MaterialsManagement from './pages/MaterialsManagement';
 import CourseView from './pages/CourseView';
@@ -33,6 +34,7 @@ function App() {
             <Route path="grades" element={<TeacherGrades />} />
             <Route path="materials" element={<MaterialsManagement />} />
             <Route path="students" element={<StudentsManagement />} />
+            <Route path="teachers" element={<TeachersManagement />} />
             <Route path="enrollments" element={<EnrollmentsManagement />} />
             <Route path="payments" element={<TeacherPayments />} />
             <Route path="chat" element={<Chat role="TEACHER" />} />

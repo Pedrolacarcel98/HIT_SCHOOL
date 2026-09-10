@@ -35,7 +35,16 @@ El proyecto ya incluye valores predeterminados para desarrollo local, pero aseg�
 DATABASE_URL="postgresql://root:rootpassword@db:5432/hitschool?schema=public"
 JWT_SECRET="supersecretjwtkey_change_in_production"
 PORT=3000
+FRONTEND_URL="http://localhost:5173"
+SMTP_HOST="smtp.example.com"
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER="usuario@example.com"
+SMTP_PASSWORD="contraseña-smtp"
+SMTP_FROM="HitSchool <usuario@example.com>"
 ```
+
+Las variables `SMTP_*` son necesarias para que el backend envíe directamente el correo de bienvenida de los profesores. Si se dejan vacías, el profesor se crea igualmente y el backend deja constancia en los logs de que el correo no pudo enviarse.
 
 ---
 
@@ -75,7 +84,7 @@ docker exec hit_school_backend npx prisma db seed
 > **Datos de Acceso Precargados:**
 > - 💼 **Profesor:** `profesor@hitschool.com` | Contraseña: `1234`
 > - 🎓 **Alumno:** `alumno@hitschool.com` | Contraseña: `1234`
-> - 🎓 **Tutor:** `marparut@hitschool.com` | Contraseña: `1234`
+> - 🎓 **Tutor:** `marpargut@hitschool.com` | Contraseña: `1234`
 
 ---
 

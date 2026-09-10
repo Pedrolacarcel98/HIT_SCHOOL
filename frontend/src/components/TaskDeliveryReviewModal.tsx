@@ -399,31 +399,12 @@ const TaskDeliveryReviewModal: React.FC<TaskDeliveryReviewModalProps> = ({
                         {step.isCompleted ? <CheckCircle2 size={14} /> : <Clock3 size={14} />}
                         {step.isCompleted ? 'Completado ✓' : 'Pendiente'}
                       </span>
-                    ) : (
-                      isExam && (
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.3rem',
-                            padding: '0.3rem 0.75rem',
-                            borderRadius: '12px',
-                            background: '#eff6ff',
-                            color: '#1d4ed8',
-                            border: '1px solid #bfdbfe',
-                            fontSize: '0.82rem',
-                            fontWeight: 700
-                          }}
-                        >
-                          Autocorregido: {step.grade !== null && step.grade !== undefined ? `${step.grade.toFixed(1)} / 10` : '—'}
-                        </span>
-                      )
-                    )}
+                    ) : null}
                   </div>
                 </div>
 
                 {/* CASO 1: Paso NO evaluable (Vídeo / Guía / Tips) */}
-                {!step.isEvaluable && (
+                {!step.isEvaluable && !step.content && (
                   <div style={{ marginTop: '0.4rem', padding: '0.45rem 0.75rem', background: '#f8fafc', borderRadius: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                     {step.isCompleted
                       ? '✓ El alumno ha visualizado y marcado este recurso como completado.'
@@ -494,7 +475,7 @@ const TaskDeliveryReviewModal: React.FC<TaskDeliveryReviewModalProps> = ({
                 )}
 
                 {/* CASO 3: Paso evaluable MANUAL (Documento PDF, Texto/Redacción, Enlace) */}
-                {step.isEvaluable && !isExam && (
+                {(step.isEvaluable || Boolean(step.content)) && !isExam && (
                   <div style={{ marginTop: '0.65rem', padding: '0.85rem 1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                     {/* Contenido entregado por el alumno */}
                     <div style={{ marginBottom: '0.75rem' }}>

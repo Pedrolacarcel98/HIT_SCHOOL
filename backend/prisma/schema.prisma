@@ -134,6 +134,7 @@ enum SkillCategory {
 model Course {
   id          String       @id @default(uuid())
   title       String
+  modality    Modality     @default(PRESENCIAL)
   teacherId   String
   teacher     User         @relation("TeacherCourses", fields: [teacherId], references: [id])
   enrollments Enrollment[]

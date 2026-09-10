@@ -73,8 +73,8 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
 
-    if (user.status === 'INACTIVE' && user.role !== 'ADMIN' && user.role !== 'TEACHER') {
-      return res.status(403).json({ error: 'Tu cuenta está inactiva. Contacta con la academia.' });
+    if (user.status === 'INACTIVE' && user.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Cuenta desactivada. Contacta con la administración.' });
     }
 
     const token = jwt.sign(

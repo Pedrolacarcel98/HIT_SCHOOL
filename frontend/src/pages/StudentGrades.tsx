@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
 import {
   Award,
   BookOpen,
@@ -7,56 +6,12 @@ import {
   Clock3,
   Download,
   ExternalLink,
-  FileText,
-  MessageSquare,
-  X
 } from 'lucide-react';
-import ExamReviewModal from '../components/ExamReviewModal';
 import TaskDeliveryReviewModal, { type TaskForReview } from '../components/TaskDeliveryReviewModal';
 import { generateReportCardPDF, type ReportCardData, type ReportCardTaskItem } from '../utils/reportCard';
 import { useParent } from '../context/ParentContext';
 
-interface Question {
-  id: string;
-  questionText: string;
-  type: 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'SHORT_ANSWER';
-  options?: string[];
-  correctAnswer: string | number;
-  points?: number;
-}
-
-interface AssignmentGrade {
-  id: string;
-  title: string;
-  course?: { title: string } | null;
-  material?: { type: string; url?: string | null; formData?: { questions?: Question[] } | null } | null;
-  submissions?: { grade?: number | null; submittedAt: string; content?: string | null; feedback?: string | null }[];
-}
-
-interface Attempt {
-  answers: Record<string, string | number>;
-  score?: number | null;
-  total?: number | null;
-}
-
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
-const parseAttempt = (content?: string | null): Attempt | null => {
-  if (!content) return null;
-  try {
-    const parsed = JSON.parse(content);
-    if (parsed.answers || typeof parsed.score === 'number') {
-      return {
-        answers: parsed.answers || {},
-        score: typeof parsed.score === 'number' ? parsed.score : null,
-        total: typeof parsed.total === 'number' ? parsed.total : null
-      };
-    }
-    return null;
-  } catch {
-    return null;
-  }
-};
 
 const StudentGrades: React.FC = () => {
   const getCurrentTerm = () => {
@@ -69,35 +24,16 @@ const StudentGrades: React.FC = () => {
   const [selectedTerm, setSelectedTerm] = useState<number>(getCurrentTerm());
   const [termGradesData, setTermGradesData] = useState<any>(null);
   const [studentInfo, setStudentInfo] = useState<any>(null);
-  const [assignments, setAssignments] = useState<AssignmentGrade[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const [reviewing, setReviewing] = useState<{
-    title: string;
-    questions?: any[];
-    answers: Record<string, any>;
-    score: number | null;
-    total?: number | null;
-  } | null>(null);
-
-  const [documentFeedback, setDocumentFeedback] = useState<AssignmentGrade | null>(null);
   const [selectedTaskForReview, setSelectedTaskForReview] = useState<TaskForReview | null>(null);
   const { selectedStudentId } = useParent();
 
   const loadGradesAndEvaluation = async () => {
     try {
-      setLoading(true);
-      const studentParam = selectedStudentId ? `?studentId=${selectedStudentId}` : '';
       const targetStudentId = selectedStudentId || 'me';
       const token = localStorage.getItem('token');
       const headers = { Authorization: `Bearer ${token}` };
 
-      const [resAssignments, resTermGrades] = await Promise.all([
-        fetch(`${apiUrl}/api/assignments/me${studentParam}`, { headers }),
-        fetch(`${apiUrl}/api/term-grades/student/${targetStudentId}`, { headers })
-      ]);
-
-      if (resAssignments.ok) setAssignments(await resAssignments.json());
+      const resTermGrades = await fetch(`${apiUrl}/api/term-grades/student/${targetStudentId}`, { headers });
       if (resTermGrades.ok) {
         const data = await resTermGrades.json();
         setStudentInfo(data.student);
@@ -105,8 +41,6 @@ const StudentGrades: React.FC = () => {
       }
     } catch (err) {
       console.error(err);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -116,6 +50,11 @@ const StudentGrades: React.FC = () => {
 
   const currentTermInfo = termGradesData?.[selectedTerm];
   const isOnline = studentInfo?.modality === 'ONLINE';
+  const displayedOverallGrade = isOnline
+    ? currentTermInfo?.overallGrade
+    : [currentTermInfo?.middleExamGrade, currentTermInfo?.finalExamGrade, currentTermInfo?.tasksAverage].some((value) => typeof value === 'number')
+      ? Number(((currentTermInfo?.middleExamGrade || 0) * 0.35 + (currentTermInfo?.finalExamGrade || 0) * 0.35 + (currentTermInfo?.tasksAverage || 0) * 0.3).toFixed(2))
+      : null;
 
   // Descargar Boletín Trimestral PDF
   const handleDownloadReportCard = () => {
@@ -153,13 +92,6 @@ const StudentGrades: React.FC = () => {
     };
 
     generateReportCardPDF(reportData);
-  };
-
-  const openDocument = (assignment: AssignmentGrade) => {
-    const submittedUrl = assignment.submissions?.[0]?.content;
-    const url = submittedUrl && /^https?:\/\//i.test(submittedUrl) ? submittedUrl : assignment.material?.url;
-    if (url) window.open(url, '_blank', 'noopener,noreferrer');
-    else setDocumentFeedback(assignment);
   };
 
   return (
@@ -208,7 +140,7 @@ const StudentGrades: React.FC = () => {
             </div>
             <div>
               <h2 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--text-main)' }}>
-                Evaluación del {selectedTerm}º Trimestre
+                Evaluación Final / Competencias
               </h2>
               <span
                 style={{
@@ -223,7 +155,7 @@ const StudentGrades: React.FC = () => {
                   marginTop: '0.2rem'
                 }}
               >
-                {isOnline ? 'Online (Media Continua 100%)' : 'Presencial (50% Exámenes + 50% Tareas)'}
+                {isOnline ? 'Online (Media Continua 100%)' : 'Presencial (35% Mid Term + 35% Final Term + 30% Tareas)'}
               </span>
             </div>
           </div>
@@ -248,7 +180,7 @@ const StudentGrades: React.FC = () => {
         </div>
 
         {/* Resumen de Notas */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isOnline ? 'repeat(1, minmax(0, 1fr))' : 'repeat(4, minmax(0, 1fr))', gap: '0.75rem', marginBottom: '1.25rem', overflowX: 'auto' }}>
           {!isOnline && (
             <>
               <div style={{ padding: '0.85rem', background: 'var(--surface-alt)', borderRadius: '10px', border: '1px solid var(--border)', textAlign: 'center' }}>
@@ -273,7 +205,7 @@ const StudentGrades: React.FC = () => {
             </>
           )}
 
-          <div style={{ padding: '0.85rem', background: 'var(--surface-alt)', borderRadius: '10px', border: '1px solid var(--border)', textAlign: 'center' }}>
+          {!isOnline && <div style={{ padding: '0.85rem', background: 'var(--surface-alt)', borderRadius: '10px', border: '1px solid var(--border)', textAlign: 'center' }}>
             <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>MEDIA TAREAS</span>
             <strong style={{ fontSize: '1.25rem', color: 'var(--text-main)', display: 'block', marginTop: '0.2rem' }}>
               {currentTermInfo?.tasksAverage !== null && currentTermInfo?.tasksAverage !== undefined
@@ -281,25 +213,25 @@ const StudentGrades: React.FC = () => {
                 : '- / 10'}
             </strong>
             <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-              {isOnline ? '100% nota final' : '50% nota final'}
+              {isOnline ? '100% nota final' : '30% nota final'}
             </span>
-          </div>
+          </div>}
 
           <div style={{ padding: '0.85rem', background: 'var(--primary-light)', borderRadius: '10px', border: '1px solid var(--primary-border)', textAlign: 'center' }}>
             <span style={{ fontSize: '0.72rem', color: 'var(--primary-text)', display: 'block', fontWeight: 700 }}>CALIFICACIÓN TRIMESTRAL</span>
             <strong style={{ fontSize: '1.35rem', color: 'var(--primary-text)', display: 'block', marginTop: '0.2rem' }}>
-              {currentTermInfo?.overallGrade !== null && currentTermInfo?.overallGrade !== undefined
-                ? `${currentTermInfo.overallGrade.toFixed(1)} / 10`
+              {displayedOverallGrade !== null && displayedOverallGrade !== undefined
+                ? `${displayedOverallGrade.toFixed(1)} / 10`
                 : '- / 10'}
             </strong>
             <span style={{ fontSize: '0.68rem', color: 'var(--primary-text)', fontWeight: 600 }}>
-              {isOnline ? 'Media continua' : 'Media exámenes + tareas'}
+              {isOnline ? 'Media continua' : '35% Mid + 35% Final + 30% Tareas'}
             </span>
           </div>
         </div>
 
         {/* Competencias CEFR */}
-        {currentTermInfo && (currentTermInfo.grammar !== null || currentTermInfo.reading !== null || currentTermInfo.writing !== null || currentTermInfo.listening !== null || currentTermInfo.speaking !== null) && (
+        {isOnline && currentTermInfo && (currentTermInfo.grammar !== null || currentTermInfo.reading !== null || currentTermInfo.writing !== null || currentTermInfo.listening !== null || currentTermInfo.speaking !== null) && (
           <div style={{ marginBottom: '1rem' }}>
             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '0.4rem' }}>
               Desglose por Competencias Lingüísticas CEFR
@@ -337,7 +269,7 @@ const StudentGrades: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
             <BookOpen size={20} style={{ color: 'var(--primary)' }} />
             <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--text-main)' }}>
-              Bloques de Tareas y Ejercicios del {selectedTerm}º Trimestre ({currentTermInfo.tasks.length})
+              Historial de Tareas y Exámenes ({currentTermInfo.tasks.length})
             </h3>
           </div>
 
@@ -423,7 +355,7 @@ const StudentGrades: React.FC = () => {
                             border: '1px solid #fae0b0'
                           }}
                         >
-                          <Clock3 size={14} /> {isCompleted ? 'Entregado (Pendiente de Calificar)' : 'En progreso'}
+                          <Clock3 size={14} /> {isCompleted ? 'Pendiente' : 'En progreso'}
                         </span>
                       )}
 
@@ -504,104 +436,6 @@ const StudentGrades: React.FC = () => {
         </div>
       )}
 
-      {/* Historial de Entregas Sueltas / Directas */}
-      <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
-          <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-main)' }}>
-            Historial de Entregas y Exámenes ({assignments.length})
-          </h3>
-        </div>
-
-        {loading ? (
-          <p style={emptyStyle}>Cargando calificaciones...</p>
-        ) : assignments.length === 0 ? (
-          <p style={emptyStyle}>Aún no hay tareas o exámenes registrados.</p>
-        ) : (
-          assignments.map((assignment) => {
-            const submission = assignment.submissions?.[0];
-            const attempt = parseAttempt(submission?.content);
-            const submitted = Boolean(submission);
-            const isExam = assignment.material?.type === 'FORM' || Boolean(attempt);
-            const hasGrade = submission?.grade !== null && submission?.grade !== undefined;
-            const hasFeedback = Boolean(submission?.feedback);
-
-            return (
-              <div key={assignment.id} style={rowStyle}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <div style={iconStyle}>
-                    <FileText size={19} />
-                  </div>
-                  <div>
-                    <strong>{assignment.title}</strong>
-                    <small style={{ display: 'block', color: 'var(--text-muted)' }}>
-                      {assignment.course?.title || 'Asignación directa'}
-                      {isExam ? ' · Examen interactivo' : ''}
-                      {attempt && attempt.total !== null && attempt.score !== null && (
-                        <span style={{ marginLeft: '6px', fontWeight: 600, color: 'var(--primary)' }}>
-                          · {attempt.score} / {attempt.total} aciertos
-                        </span>
-                      )}
-                    </small>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', flexWrap: 'wrap' }}>
-                  {hasGrade ? (
-                    <span style={gradeStyle}>
-                      <CheckCircle2 size={15} /> {submission!.grade!.toFixed(1)} / 10
-                    </span>
-                  ) : (
-                    <span style={pendingStyle}>
-                      {submitted ? <CheckCircle2 size={15} /> : <Clock3 size={15} />} {submitted ? 'Entregado' : 'Pendiente'}
-                    </span>
-                  )}
-
-                  {hasFeedback && (
-                    <button className="btn-secondary" onClick={() => setDocumentFeedback(assignment)} style={smallButtonStyle}>
-                      <MessageSquare size={14} /> Feedback
-                    </button>
-                  )}
-
-                  {submitted &&
-                    (isExam ? (
-                      <button
-                        className="btn-secondary"
-                        onClick={() =>
-                          setReviewing({
-                            title: assignment.title,
-                            questions: assignment.material?.formData?.questions || [],
-                            answers: attempt?.answers || {},
-                            score: submission?.grade || null,
-                            total: attempt?.total
-                          })
-                        }
-                        style={smallButtonStyle}
-                      >
-                        Ver Examen Corregido
-                      </button>
-                    ) : (
-                      <button className="btn-secondary" onClick={() => openDocument(assignment)} style={smallButtonStyle}>
-                        <ExternalLink size={14} /> Abrir documento
-                      </button>
-                    ))}
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      {reviewing && (
-        <ExamReviewModal
-          title={reviewing.title}
-          questions={reviewing.questions}
-          answers={reviewing.answers}
-          score={reviewing.score}
-          total={reviewing.total}
-          onClose={() => setReviewing(null)}
-        />
-      )}
-
       {selectedTaskForReview && (
         <TaskDeliveryReviewModal
           task={selectedTaskForReview}
@@ -611,30 +445,8 @@ const StudentGrades: React.FC = () => {
         />
       )}
 
-      {documentFeedback &&
-        createPortal(
-          <div className="modal-backdrop" onClick={() => setDocumentFeedback(null)}>
-            <div className="glass-panel modal-card" onClick={(event) => event.stopPropagation()} style={{ maxWidth: '480px' }}>
-              <button onClick={() => setDocumentFeedback(null)} aria-label="Cerrar" className="modal-close">
-                <X size={20} />
-              </button>
-              <h2 style={{ marginTop: 0 }}>Feedback del profesor</h2>
-              <p style={{ color: 'var(--text-main)', background: 'var(--surface-alt)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border)', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>
-                {documentFeedback.submissions?.[0]?.feedback || 'El profesor aún no ha añadido comentarios.'}
-              </p>
-            </div>
-          </div>,
-          document.body
-        )}
     </div>
   );
 };
-
-const emptyStyle: React.CSSProperties = { padding: '3rem', color: 'var(--text-muted)', textAlign: 'center' };
-const rowStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', padding: '1rem 1.25rem', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' };
-const iconStyle: React.CSSProperties = { display: 'grid', placeItems: 'center', width: '38px', height: '38px', borderRadius: '9px', background: 'var(--primary-light)', color: 'var(--primary)' };
-const gradeStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.45rem 0.75rem', borderRadius: '16px', background: 'var(--primary-light)', border: '1px solid var(--primary-border)', color: 'var(--primary-text)', fontWeight: 700 };
-const pendingStyle: React.CSSProperties = { ...gradeStyle, color: '#8d5b12', background: '#fef7e8', borderColor: '#fae0b0' };
-const smallButtonStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.45rem 0.7rem', fontSize: '0.8rem' };
 
 export default StudentGrades;

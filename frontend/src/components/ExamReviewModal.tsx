@@ -81,7 +81,7 @@ const ExamReviewModal: React.FC<ExamReviewModalProps> = ({ title, questions = []
 
   return createPortal(
     <div className="modal-backdrop" style={backdropStyle} onClick={onClose}>
-      <div className="glass-panel modal-card" onClick={(event) => event.stopPropagation()} style={modalStyle}>
+      <div className="glass-panel modal-card modal-card--review" onClick={(event) => event.stopPropagation()} style={modalStyle}>
         <header style={headerStyle}>
           <div>
             <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase' }}>
@@ -196,7 +196,7 @@ const ExamReviewModal: React.FC<ExamReviewModalProps> = ({ title, questions = []
 };
 
 const backdropStyle: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.75rem', background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(6px)' };
-const modalStyle: React.CSSProperties = { width: 'min(92vw, 570px)', height: 'min(90vh, 620px)', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: '1rem 1.5rem 0.9rem', background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '12px', boxShadow: '0 12px 28px rgba(31, 41, 55, 0.16)' };
+const modalStyle: React.CSSProperties = { width: 'min(100%, 960px)', maxHeight: '92vh', overflowY: 'auto', padding: '1.75rem 2rem', background: '#ffffff', border: '1px solid rgba(226, 232, 240, 0.9)', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' };
 const headerStyle: React.CSSProperties = { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', paddingBottom: '0.65rem', borderBottom: '1px solid #e5e7eb' };
 const scoreStyle: React.CSSProperties = { margin: '0.55rem auto 0.2rem', padding: '0.55rem 1.5rem', minWidth: '180px', textAlign: 'center', borderRadius: '9px', background: '#f3f4f6', border: '1px solid #e5e7eb' };
 const listStyle: React.CSSProperties = { flex: 1, minHeight: 0, overflowY: 'auto', padding: '0.7rem 0.1rem 0.25rem 0' };

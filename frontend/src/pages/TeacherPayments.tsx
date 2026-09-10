@@ -33,12 +33,14 @@ interface PaymentStudent {
   firstName: string;
   lastName: string;
   dni?: string | null;
-  modality?: 'PRESENCIAL' | 'ONLINE' | null;
+  modality?: 'PRESENCIAL' | 'ONLINE' | 'HIBRIDO' | null;
   parent?: {
     profile?: {
       firstName: string;
       lastName: string;
       dni?: string | null;
+      address?: string | null;
+      address?: string | null;
     } | null;
   } | null;
   enrollments?: AcademyEnrollment[];
@@ -95,11 +97,13 @@ const TeacherPayments: React.FC = () => {
       ? `${student.parent.profile.firstName} ${student.parent.profile.lastName}`.trim()
       : studentName;
     const billedDni = student.parent?.profile?.dni || student.dni || null;
+    const billedAddress = student.parent?.profile?.address || null;
 
     generateInvoicePDF({
       studentName: billedName,
       studentDni: billedDni,
       studentEmail: student.email,
+      studentAddress: billedAddress,
       month: payment.month,
       year: payment.year,
       monthLabel: monthName,
@@ -146,11 +150,13 @@ const TeacherPayments: React.FC = () => {
       ? `${student.parent.profile.firstName} ${student.parent.profile.lastName}`.trim()
       : studentName;
     const billedDni = student.parent?.profile?.dni || student.dni || null;
+    const billedAddress = student.parent?.profile?.address || null;
 
     generateStatementPDF({
       studentName: billedName,
       studentDni: billedDni,
       studentEmail: student.email,
+      studentAddress: billedAddress,
       year: yearFilter === 'ALL' ? null : yearFilter,
       payments
     });
@@ -381,6 +387,7 @@ const TeacherPayments: React.FC = () => {
             const pastEnrollments = student.enrollments?.filter((enrollment) => enrollment.endDate) || [];
             const isSelected = selectedStudentPaymentId === student.id;
             const isOnline = student.modality === 'ONLINE';
+            const isPresencial = student.modality === 'PRESENCIAL' || !student.modality;
             const hasEnrollment = (student.enrollments?.length || 0) > 0;
             const unpaidCount = student.payments.filter(
               (payment) => payment.isApplicable && getPaymentVisualStatus(payment.isPaid, payment.month, payment.year) !== 'PAID'
@@ -446,12 +453,12 @@ const TeacherPayments: React.FC = () => {
                     padding: '2px 8px',
                     borderRadius: '10px',
                     flexShrink: 0,
-                    background: isOnline ? '#eef2ff' : '#f0fdf4',
-                    color: isOnline ? '#4338ca' : '#15803d',
-                    border: `1px solid ${isOnline ? '#c7d2fe' : '#bbf7d0'}`
+                    background: isPresencial ? '#f3e8ff' : '#e0f2fe',
+                    color: isPresencial ? '#7e22ce' : '#0369a1',
+                    border: `1px solid ${isPresencial ? '#d8b4fe' : '#bae6fd'}`
                   }}>
-                    {isOnline ? <Laptop size={12} /> : <GraduationCap size={12} />}
-                    {isOnline ? 'Online' : 'Presencial'}
+                    {isPresencial ? <GraduationCap size={12} /> : <Laptop size={12} />}
+                    {isPresencial ? 'Presencial' : student.modality === 'HIBRIDO' ? 'Híbrido' : 'Online'}
                   </span>
                 </div>
 

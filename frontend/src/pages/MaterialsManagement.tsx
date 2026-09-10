@@ -26,6 +26,7 @@ import VideoPlayer from '../components/VideoPlayer';
 import DocumentViewer from '../components/DocumentViewer';
 import FormPlayer from '../components/FormPlayer';
 import FormBuilderModal from '../components/FormBuilderModal';
+import MaterialViewerModal from '../components/MaterialViewerModal';
 
 interface Material {
   id: string;
@@ -112,7 +113,8 @@ const MaterialsManagement: React.FC = () => {
   const [showFormBuilder, setShowFormBuilder] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
   const [editingStandardMaterial, setEditingStandardMaterial] = useState<Material | null>(null);
-  const [viewingMaterial, setViewingMaterial] = useState<Material | null>(null);
+  const [viewingMaterialState, setViewingMaterial] = useState<Material | null>(null);
+  const viewingMaterial = viewingMaterialState as Material;
   const [deletingMaterial, setDeletingMaterial] = useState<Material | null>(null);
 
   // Formulario nuevo recurso estándar
@@ -360,7 +362,7 @@ const MaterialsManagement: React.FC = () => {
     const matchesCategory = materialCategoryFilter === 'ALL' || material.type === materialCategoryFilter;
     return matchesSearch && matchesCategory;
   });
-  const individualStructuredTasks = structuredTasks.filter((task) => task.assignmentType === 'INDIVIDUAL' && !task.isTemplate);
+  const individualStructuredTasks: StructuredTask[] = [];
   const structuredTaskTemplates = structuredTasks.filter((task) => task.isTemplate);
 
   const duplicateStructuredTask = async (task: StructuredTask) => {
@@ -541,26 +543,6 @@ const MaterialsManagement: React.FC = () => {
             + Crear Examen / Formulario
           </button>
 
-          <button
-            onClick={() => openStructuredTaskModal()}
-            className="btn-primary"
-            style={{
-              background: '#059669',
-              color: '#fff',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
-              padding: '0.7rem 1rem',
-              borderRadius: '12px',
-              fontWeight: 500,
-              border: 'none',
-              cursor: 'pointer',
-              transition: 'background-color 0.2s ease'
-            }}
-          >
-            + Crear Tarea Estructurada
-          </button>
         </div>
       </div>
 
@@ -573,7 +555,6 @@ const MaterialsManagement: React.FC = () => {
           { id: 'VIDEO', label: 'Vídeos', icon: <Video size={16} /> },
           { id: 'AUDIO', label: 'Audios', icon: <Headphones size={16} /> },
           { id: 'FORM', label: 'Exámenes y Formularios', icon: <HelpCircle size={16} /> },
-          { id: 'STRUCTURED', label: 'Tareas Estructuradas', icon: <ListChecks size={16} /> }
         ].map(tab => (
           <button
             key={tab.id}
@@ -659,7 +640,7 @@ const MaterialsManagement: React.FC = () => {
       </div>
 
       {/* Grid de Materiales */}
-      {typeFilter !== 'STRUCTURED' && (
+      {(
         loading ? (
           <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>
             Cargando biblioteca de materiales...
@@ -754,21 +735,19 @@ const MaterialsManagement: React.FC = () => {
         )
       )}
 
-      {(typeFilter === 'ALL' || typeFilter === 'STRUCTURED') && (
+      {structuredTaskTemplates.length > 0 && (
         <section style={{ marginTop: typeFilter === 'ALL' ? '2.5rem' : '0', paddingTop: typeFilter === 'ALL' ? '2rem' : '0', borderTop: typeFilter === 'ALL' ? '1px solid var(--border)' : 'none' }}>
           <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
             <div>
               <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.55rem', color: 'var(--text-main)', fontSize: '1.35rem' }}>
-                <ListChecks size={22} style={{ color: 'var(--primary)' }} /> Tareas Estructuradas
+                <ListChecks size={22} style={{ color: 'var(--primary)' }} /> Plantillas guardadas
               </h2>
-              <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)', fontSize: '0.88rem' }}>Organiza actividades guiadas con pasos numerados.</p>
+              <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)', fontSize: '0.88rem' }}>Selecciona una plantilla para reutilizarla en una tarea.</p>
             </div>
           </header>
 
-          {individualStructuredTasks.length === 0 ? (
-            <div style={{ padding: '2rem', border: '1px dashed var(--primary-border)', borderRadius: '8px', background: 'var(--primary-subtle)', color: 'var(--text-muted)', textAlign: 'center' }}>
-              Aún no hay tareas estructuradas asignadas individualmente.
-            </div>
+          {individualStructuredTasks.length > 0 ? (
+            <div />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
               {structuredTaskTemplates.length > 0 && (
@@ -1033,7 +1012,7 @@ const MaterialsManagement: React.FC = () => {
       )}
 
       {/* Modal: Visor / Reproductor Multimedia */}
-      {viewingMaterial && (
+      {viewingMaterial ? (false && (
         <div className="modal-backdrop" style={{
           position: 'fixed',
           inset: 0,
@@ -1081,7 +1060,7 @@ const MaterialsManagement: React.FC = () => {
             <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem' }}>
               {viewingMaterial.type === 'AUDIO' && viewingMaterial.url && (
                 <div style={{ padding: '2rem 0' }}>
-                  <AudioPlayer src={viewingMaterial.url} title={viewingMaterial.title} />
+                  <AudioPlayer src={viewingMaterial.url!} title={viewingMaterial.title} />
                   {viewingMaterial.description && (
                     <p style={{ marginTop: '1.5rem', color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: '1.6' }}>
                       {viewingMaterial.description}
@@ -1092,7 +1071,7 @@ const MaterialsManagement: React.FC = () => {
 
               {viewingMaterial.type === 'VIDEO' && viewingMaterial.url && (
                 <div>
-                  <VideoPlayer url={viewingMaterial.url} title={viewingMaterial.title} />
+                  <VideoPlayer url={viewingMaterial.url!} title={viewingMaterial.title} />
                   {viewingMaterial.description && (
                     <p style={{ marginTop: '1rem', color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: '1.5' }}>
                       {viewingMaterial.description}
@@ -1102,7 +1081,7 @@ const MaterialsManagement: React.FC = () => {
               )}
 
               {viewingMaterial.type === 'DOCUMENT' && viewingMaterial.url && (
-                <DocumentViewer url={viewingMaterial.url} title={viewingMaterial.title} />
+                <DocumentViewer url={viewingMaterial.url!} title={viewingMaterial.title} />
               )}
 
               {viewingMaterial.type === 'IMAGE' && viewingMaterial.url && (
@@ -1133,7 +1112,9 @@ const MaterialsManagement: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
+      )) : null}
+
+      <MaterialViewerModal material={viewingMaterialState} onClose={() => setViewingMaterial(null)} />
 
       {/* Modal: Añadir Recurso Multimedia / Documento */}
       {showAddResourceModal && (

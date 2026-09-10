@@ -415,13 +415,21 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                       {step.material && getMaterialIcon(step.material.type, 14)}
-                      <strong style={{ fontSize: '0.9rem', color: 'var(--text)' }}>
+                      <strong
+                        onClick={() => mode === 'TEACHER' && step.material && onOpenStep?.(step, task)}
+                        style={{ fontSize: '0.9rem', color: 'var(--text)', cursor: mode === 'TEACHER' && step.material ? 'pointer' : 'default', textDecoration: mode === 'TEACHER' && step.material ? 'underline' : 'none' }}
+                        title={mode === 'TEACHER' && step.material ? 'Abrir recurso' : undefined}
+                      >
                         {step.title}
                       </strong>
                     </div>
                     {step.material && (
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        {step.material.title} ({step.material.type})
+                      <span
+                        onClick={() => mode === 'TEACHER' && onOpenStep?.(step, task)}
+                        style={{ fontSize: '0.75rem', color: mode === 'TEACHER' ? 'var(--primary)' : 'var(--text-muted)', cursor: mode === 'TEACHER' ? 'pointer' : 'default', textDecoration: mode === 'TEACHER' ? 'underline' : 'none' }}
+                        title={mode === 'TEACHER' ? 'Abrir recurso' : undefined}
+                      >
+                        {step.material.title}
                       </span>
                     )}
                   </div>

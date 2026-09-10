@@ -30,6 +30,7 @@ interface StudentPaymentResponse {
       firstName: string;
       lastName: string;
       dni?: string | null;
+      address?: string | null;
     };
     enrollments?: AcademyEnrollment[];
     parent?: {
@@ -37,6 +38,7 @@ interface StudentPaymentResponse {
         firstName: string;
         lastName: string;
         dni?: string | null;
+        address?: string | null;
       } | null;
     } | null;
   };
@@ -184,11 +186,13 @@ const StudentPayments: React.FC = () => {
       ? `${card.data.student.parent.profile.firstName} ${card.data.student.parent.profile.lastName}`.trim()
       : studentName;
     const billedDni = card.data.student.parent?.profile?.dni || card.data.student.profile?.dni || null;
+    const billedAddress = card.data.student.parent?.profile?.address || card.data.student.profile?.address || null;
 
     generateInvoicePDF({
       studentName: billedName,
       studentDni: billedDni,
       studentEmail: card.data.student.email,
+      studentAddress: billedAddress,
       month: card.month,
       year: card.year,
       monthLabel: card.label,
@@ -224,11 +228,13 @@ const StudentPayments: React.FC = () => {
       ? `${student.parent.profile.firstName} ${student.parent.profile.lastName}`.trim()
       : studentName;
     const billedDni = student.parent?.profile?.dni || student.profile?.dni || null;
+    const billedAddress = student.parent?.profile?.address || student.profile?.address || null;
 
     generateStatementPDF({
       studentName: billedName,
       studentDni: billedDni,
       studentEmail: student.email,
+      studentAddress: billedAddress,
       year: yearFilter === 'ALL' ? null : yearFilter,
       payments: allPayments
     });

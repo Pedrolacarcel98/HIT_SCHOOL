@@ -15,7 +15,7 @@ import {
   ClipboardCheck,
   Image as ImageIcon
 } from 'lucide-react';
-import ExamReviewModal from './ExamReviewModal';
+import MaterialViewerModal, { type ViewerMaterial } from './MaterialViewerModal';
 import TaskCard, { type TaskItem } from './TaskCard';
 
 const SKILL_CATEGORIES = [
@@ -37,14 +37,6 @@ interface MaterialItem {
   description?: string | null;
   url?: string | null;
   formData?: { questions?: any[] } | null;
-}
-
-interface ExamReviewData {
-  title: string;
-  questions: any[];
-  answers: Record<string, any>;
-  score: number | null;
-  total?: number | null;
 }
 
 interface StepDraft {
@@ -87,8 +79,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [templateLoading, setTemplateLoading] = useState(false);
 
-  // Visor de Examen de un paso
-  const [reviewingExam, setReviewingExam] = useState<ExamReviewData | null>(null);
+  const [viewingMaterial, setViewingMaterial] = useState<ViewerMaterial | null>(null);
 
   useEffect(() => {
     fetchStructuredTasks();
@@ -539,19 +530,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                           onDuplicateTask={handleDuplicateTask}
                           onSaveAsTemplate={handleSaveAsTemplate}
                           onDeleteTask={handleDeleteTask}
-                          onOpenStep={(step) => {
-                            if (step.material?.type === 'FORM' && step.material.formData) {
-                              setReviewingExam({
-                                title: step.material.title,
-                                questions: step.material.formData.questions || [],
-                                answers: {},
-                                score: null,
-                                total: step.material.formData.questions?.length || 0
-                              });
-                            } else if (step.material?.url) {
-                              window.open(step.material.url, '_blank', 'noopener,noreferrer');
-                            }
-                          }}
+                          onOpenStep={(step) => { if (step.material) setViewingMaterial(step.material as ViewerMaterial); }}
                         />
                       );
                     })
@@ -568,10 +547,11 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
         <div className="modal-backdrop" style={modalBackdropStyle} onClick={() => setIsTaskModalOpen(false)}>
           <form
             onSubmit={saveTask}
-            className="glass-panel modal-card"
+            className="glass-panel modal-card modal-card--wide"
             onClick={(e) => e.stopPropagation()}
             style={{
-              width: 'min(100%, 760px)',
+              width: 'min(100%, 900px)',
+              maxWidth: '900px',
               maxHeight: '90vh',
               display: 'flex',
               flexDirection: 'column',
@@ -930,16 +910,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
       )}
 
       {/* Modal de Previsualización de Examen */}
-      {reviewingExam && (
-        <ExamReviewModal
-          title={reviewingExam.title}
-          questions={reviewingExam.questions}
-          answers={reviewingExam.answers}
-          score={reviewingExam.score}
-          total={reviewingExam.total}
-          onClose={() => setReviewingExam(null)}
-        />
-      )}
+      <MaterialViewerModal material={viewingMaterial} onClose={() => setViewingMaterial(null)} />
     </div>
   );
 };

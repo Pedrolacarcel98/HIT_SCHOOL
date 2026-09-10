@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Award, BookOpen, Users, LogOut, GraduationCap, FolderArchive, CircleDollarSign, MessageCircle, Menu, X, Settings, FileText, Home } from 'lucide-react';
+import { Award, BookOpen, Users, LogOut, GraduationCap, FolderArchive, CircleDollarSign, MessageCircle, Menu, X, Settings, FileText, Home, UserRoundCog } from 'lucide-react';
 import SettingsModal from './SettingsModal';
 
 const TeacherLayout: React.FC = () => {
@@ -48,6 +48,7 @@ const TeacherLayout: React.FC = () => {
     if (location.pathname === '/teacher/grades') return '#f3e8ff';
     if (location.pathname === '/teacher/materials') return '#d1fae5';
     if (location.pathname === '/teacher/students') return '#ffe4e6';
+    if (location.pathname === '/teacher/teachers') return '#e0e7ff';
     if (location.pathname === '/teacher/enrollments') return '#ffedd5';
     if (location.pathname === '/teacher/payments') return '#fce7f3';
     if (location.pathname === '/teacher/chat') return '#ccfbf1';
@@ -55,14 +56,15 @@ const TeacherLayout: React.FC = () => {
   };
 
   const navItems = [
-    { label: 'Inicio', path: '/teacher', icon: <Home size={20} /> },
-    { label: 'Mis Clases', path: '/teacher/courses', icon: <BookOpen size={20} /> },
-    { label: 'Calificaciones', path: '/teacher/grades', icon: <Award size={20} /> },
-    { label: 'Material de Clase', path: '/teacher/materials', icon: <FolderArchive size={20} /> },
-    { label: 'Gestión de Alumnos', path: '/teacher/students', icon: <Users size={20} /> },
-    { label: 'Matrículas', path: '/teacher/enrollments', icon: <FileText size={20} /> },
-    { label: 'Control de Pagos', path: '/teacher/payments', icon: <CircleDollarSign size={20} /> },
-    { label: 'Chat Alumnos', path: '/teacher/chat', icon: <MessageCircle size={20} /> },
+    { label: 'Inicio', path: '/teacher', icon: <Home size={20} />, iconColor: '#d99a00' },
+    { label: 'Mis Clases', path: '/teacher/courses', icon: <BookOpen size={20} />, iconColor: '#1682b3' },
+    { label: 'Calificaciones', path: '/teacher/grades', icon: <Award size={20} />, iconColor: '#7950b8' },
+    { label: 'Material de Clase', path: '/teacher/materials', icon: <FolderArchive size={20} />, iconColor: '#12966b' },
+    { label: 'Gestión de Alumnos', path: '/teacher/students', icon: <Users size={20} />, iconColor: '#d14f72' },
+    { label: 'Gestión Profesores', path: '/teacher/teachers', icon: <UserRoundCog size={20} />, iconColor: '#5369ad' },
+    { label: 'Matrículas', path: '/teacher/enrollments', icon: <FileText size={20} />, iconColor: '#c97824' },
+    { label: 'Control de Pagos', path: '/teacher/payments', icon: <CircleDollarSign size={20} />, iconColor: '#d14f72' },
+    { label: 'Chat Alumnos', path: '/teacher/chat', icon: <MessageCircle size={20} />, iconColor: '#12966b' },
   ];
 
   return (
@@ -198,7 +200,9 @@ const TeacherLayout: React.FC = () => {
                     if (!isActive) e.currentTarget.style.background = 'transparent';
                   }}
                 >
-                  {item.icon}
+                  <span style={{ display: 'inline-flex', color: isActive ? '#ffffff' : item.iconColor }}>
+                    {React.cloneElement(item.icon, { strokeWidth: 2.5 })}
+                  </span>
                   {item.label}
                 </button>
               );
