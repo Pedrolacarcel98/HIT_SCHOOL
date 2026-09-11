@@ -59,6 +59,7 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => 
     // Buscar tareas asignadas directamente al estudiante o a sus cursos
     const assignments = await prisma.assignment.findMany({
       where: {
+        structuredTaskStepId: null,
         AND: [
           {
             OR: [

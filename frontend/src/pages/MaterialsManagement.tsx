@@ -23,6 +23,7 @@ import {
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 import AudioPlayer from '../components/AudioPlayer';
 import VideoPlayer from '../components/VideoPlayer';
+import { toLocalDatetimeInput, toIsoDateString, getCurrentLocalDatetimeInput } from '../utils/dateUtils';
 import DocumentViewer from '../components/DocumentViewer';
 import FormPlayer from '../components/FormPlayer';
 import FormBuilderModal from '../components/FormBuilderModal';
@@ -297,7 +298,7 @@ const MaterialsManagement: React.FC = () => {
     setStructuredTaskCourseId(courseId);
     setStructuredTaskAssignmentType(assignmentType);
     setStructuredTaskIsSequential(task?.isSequential || false);
-    setStructuredTaskPublishAt(task?.publishAt ? new Date(task.publishAt).toISOString().slice(0, 16) : '');
+    setStructuredTaskPublishAt(toLocalDatetimeInput(task?.publishAt));
     setAssignedStudentIds(task?.assignedStudentIds?.length ? task.assignedStudentIds : (task?.assignedStudentId ? [task.assignedStudentId] : []));
     setStudentSearch('');
     setIsStudentPickerOpen(false);
@@ -346,7 +347,7 @@ const MaterialsManagement: React.FC = () => {
       const res = await fetch(`${apiUrl}/api/structured-tasks${editingStructuredTask ? `/${editingStructuredTask.id}` : ''}`, {
         method: editingStructuredTask ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ title, courseId: structuredTaskAssignmentType === 'CLASS' ? structuredTaskCourseId : null, assignmentType: structuredTaskAssignmentType, isSequential: structuredTaskIsSequential, publishAt: structuredTaskPublishAt ? new Date(structuredTaskPublishAt).toISOString() : null, assignedStudentIds: structuredTaskAssignmentType === 'INDIVIDUAL' ? assignedStudentIds : [], steps })
+        body: JSON.stringify({ title, courseId: structuredTaskAssignmentType === 'CLASS' ? structuredTaskCourseId : null, assignmentType: structuredTaskAssignmentType, isSequential: structuredTaskIsSequential, publishAt: toIsoDateString(structuredTaskPublishAt) || null, assignedStudentIds: structuredTaskAssignmentType === 'INDIVIDUAL' ? assignedStudentIds : [], steps })
       });
       if (!res.ok) throw new Error('No se pudo guardar la tarea estructurada.');
       await fetchStructuredTasks();
@@ -887,7 +888,7 @@ const MaterialsManagement: React.FC = () => {
               </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Publicar el (opcional)</label>
-                <input type="datetime-local" value={structuredTaskPublishAt} onChange={(event) => setStructuredTaskPublishAt(event.target.value)} min={new Date().toISOString().slice(0, 16)} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }} />
+                <input type="datetime-local" value={structuredTaskPublishAt} onChange={(event) => setStructuredTaskPublishAt(event.target.value)} min={getCurrentLocalDatetimeInput()} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }} />
                 <small style={{ display: 'block', marginTop: '0.25rem', color: 'var(--text-muted)', fontSize: '0.72rem' }}>Vacío: visible inmediatamente.</small>
               </div>
             </div>

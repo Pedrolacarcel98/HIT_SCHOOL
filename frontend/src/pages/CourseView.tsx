@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, MessageSquare, BookOpen, Users } from 'lucide-react';
 import StreamTab from '../components/StreamTab';
 import ClassworkTab from '../components/ClassworkTab';
@@ -8,8 +8,39 @@ import PeopleTab from '../components/PeopleTab';
 const CourseView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'stream' | 'classwork' | 'people'>('stream');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const paramTab = searchParams.get('tab');
+  const savedTab = id ? sessionStorage.getItem(`hit_teacher_course_tab_${id}`) : null;
+  const initialTab: 'stream' | 'classwork' | 'people' = 
+    (paramTab === 'classwork' || paramTab === 'people' || paramTab === 'stream')
+      ? paramTab
+      : (savedTab === 'classwork' || savedTab === 'people' ? savedTab : 'stream');
+
+  const [activeTab, setActiveTabState] = useState<'stream' | 'classwork' | 'people'>(initialTab);
   const [course, setCourse] = useState<any>(null);
+
+  const setActiveTab = (tab: 'stream' | 'classwork' | 'people') => {
+    setActiveTabState(tab);
+    if (id) {
+      sessionStorage.setItem(`hit_teacher_course_tab_${id}`, tab);
+    }
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (tab === 'stream') {
+        next.delete('tab');
+      } else {
+        next.set('tab', tab);
+      }
+      return next;
+    }, { replace: true });
+  };
+
+  useEffect(() => {
+    if (paramTab && (paramTab === 'stream' || paramTab === 'classwork' || paramTab === 'people') && paramTab !== activeTab) {
+      setActiveTabState(paramTab);
+    }
+  }, [paramTab]);
 
   useEffect(() => {
     fetchCourseDetails();

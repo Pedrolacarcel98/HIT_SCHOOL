@@ -1218,7 +1218,7 @@ const GradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
             const parsed = parseSavedExam(examStep.content);
             setReviewingExam({
               title: examStep.title,
-              questions: [],
+              questions: examStep.questions || [],
               answers: parsed?.answers || {},
               score: examStep.grade,
               total: parsed?.total

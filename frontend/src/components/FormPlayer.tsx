@@ -323,7 +323,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                       Puntuación final: {score} / {totalPoints} ({percentage}%)
                     </span>
                   </div>
-                  {allowRetry && <button
+                  <button
                     type="button"
                     onClick={() => setModalStep('GRADE')}
                     style={{
@@ -340,7 +340,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                     }}
                   >
                     ← Volver a mi Calificación
-                  </button>}
+                  </button>
                 </div>
 
                 {/* Lista Resumida de Preguntas */}

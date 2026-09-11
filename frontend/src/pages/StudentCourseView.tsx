@@ -1,17 +1,51 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, MessageSquare, BookOpen, Award } from 'lucide-react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, MessageSquare, BookOpen, CheckCircle2, Award } from 'lucide-react';
 import StudentStreamTab from '../components/StudentStreamTab';
 import StudentClassworkTab from '../components/StudentClassworkTab';
 import StudentGradesTab from '../components/StudentGradesTab';
 import { useParent } from '../context/ParentContext';
 
+type CourseTab = 'stream' | 'classwork' | 'completed' | 'grades';
+
 const StudentCourseView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'stream' | 'classwork' | 'grades'>('stream');
-  const [course, setCourse] = useState<any>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
   const { selectedStudentId } = useParent();
+
+  const validTabs: CourseTab[] = ['stream', 'classwork', 'completed', 'grades'];
+  const paramTab = searchParams.get('tab') as CourseTab | null;
+  const savedTab = id ? sessionStorage.getItem(`hit_student_course_tab_${id}`) as CourseTab | null : null;
+  const initialTab: CourseTab = 
+    (paramTab && validTabs.includes(paramTab))
+      ? paramTab
+      : (savedTab && validTabs.includes(savedTab) ? savedTab : 'stream');
+
+  const [activeTab, setActiveTabState] = useState<CourseTab>(initialTab);
+  const [course, setCourse] = useState<any>(null);
+
+  const setActiveTab = (tab: CourseTab) => {
+    setActiveTabState(tab);
+    if (id) {
+      sessionStorage.setItem(`hit_student_course_tab_${id}`, tab);
+    }
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (tab === 'stream') {
+        next.delete('tab');
+      } else {
+        next.set('tab', tab);
+      }
+      return next;
+    }, { replace: true });
+  };
+
+  useEffect(() => {
+    if (paramTab && validTabs.includes(paramTab) && paramTab !== activeTab) {
+      setActiveTabState(paramTab);
+    }
+  }, [paramTab]);
 
   useEffect(() => {
     const fetchCourseDetails = async () => {
@@ -62,7 +96,8 @@ const StudentCourseView: React.FC = () => {
         {/* Pestañas */}
         <div className="scrollable-tabs" style={{ padding: '0 1.5rem', height: '48px', alignItems: 'center', gap: '1.5rem' }}>
           <TabButton active={activeTab === 'stream'} onClick={() => setActiveTab('stream')} icon={<MessageSquare size={18}/>} label="Tablón" />
-          <TabButton active={activeTab === 'classwork'} onClick={() => setActiveTab('classwork')} icon={<BookOpen size={18}/>} label="Material Asignado / Tareas" />
+          <TabButton active={activeTab === 'classwork'} onClick={() => setActiveTab('classwork')} icon={<BookOpen size={18}/>} label="Tareas de clase" />
+          <TabButton active={activeTab === 'completed'} onClick={() => setActiveTab('completed')} icon={<CheckCircle2 size={18}/>} label="Tareas completadas" />
           <TabButton active={activeTab === 'grades'} onClick={() => setActiveTab('grades')} icon={<Award size={18}/>} label="Mis Calificaciones" />
         </div>
       </nav>
@@ -70,7 +105,8 @@ const StudentCourseView: React.FC = () => {
       {/* Contenido Principal */}
       <main>
         {activeTab === 'stream' && <StudentStreamTab courseId={id!} />}
-        {activeTab === 'classwork' && <StudentClassworkTab courseId={id!} />}
+        {activeTab === 'classwork' && <StudentClassworkTab courseId={id!} viewMode="PENDING" />}
+        {activeTab === 'completed' && <StudentClassworkTab courseId={id!} viewMode="COMPLETED" />}
         {activeTab === 'grades' && <StudentGradesTab courseId={id!} />}
       </main>
     </div>

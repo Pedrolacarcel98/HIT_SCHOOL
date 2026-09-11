@@ -63,12 +63,15 @@ export interface TaskItem {
     totalTargetStudents: number;
     completedStudentsCount: number;
     completionRate: number;
+    completedStudents?: { id: string; name: string; email?: string }[];
+    pendingStudents?: { id: string; name: string; email?: string }[];
   };
 }
 
 interface TaskCardProps {
   task: TaskItem;
   mode?: 'STUDENT' | 'TEACHER';
+  defaultExpanded?: boolean;
   onOpenStep?: (step: TaskStepItem, task: TaskItem) => void;
   onReviewStep?: (step: TaskStepItem, task: TaskItem) => void;
   onEditTask?: (task: TaskItem) => void;
@@ -102,6 +105,7 @@ const getMaterialIcon = (type?: string, size = 16) => {
 const TaskCard: React.FC<TaskCardProps> = ({
   task,
   mode = 'STUDENT',
+  defaultExpanded,
   onOpenStep,
   onReviewStep,
   onEditTask,
@@ -110,7 +114,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
   onDeleteTask,
   onViewSubmissions
 }) => {
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded ?? false);
+  const [isStudentsExpanded, setIsStudentsExpanded] = useState(false);
 
   const totalSteps = task.steps?.length || 0;
   const completedSteps = task.steps?.filter((s) => s.isCompleted).length || 0;
@@ -264,22 +269,146 @@ const TaskCard: React.FC<TaskCardProps> = ({
 
           {/* Estadísticas para el profesor */}
           {mode === 'TEACHER' && task.stats && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.35rem',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  padding: '0.2rem 0.6rem',
-                  borderRadius: '8px',
-                  background: task.stats.completionRate >= 100 ? '#ecfdf5' : '#f1f5f9',
-                  color: task.stats.completionRate >= 100 ? '#047857' : '#334155'
-                }}
-              >
-                <Users size={14} /> {task.stats.completionRate >= 100 ? 'Completada' : 'Entregas'}: {task.stats.completedStudentsCount} de {task.stats.totalTargetStudents} ({task.stats.completionRate}%)
-              </span>
+            <div style={{ marginTop: '0.65rem' }}>
+              {!task.isTemplate && (
+                <div style={{ background: 'var(--surface-alt)', borderRadius: '8px', border: '1px solid var(--border)', overflow: 'hidden' }}>
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsStudentsExpanded(!isStudentsExpanded);
+                    }}
+                    style={{
+                      padding: '0.45rem 0.75rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '0.5rem',
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                      background: isStudentsExpanded ? 'rgba(0,0,0,0.02)' : 'transparent'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+                      <Users size={14} style={{ color: task.stats.completionRate >= 100 ? '#059669' : 'var(--primary)' }} />
+                      <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                        Alumnos:
+                      </span>
+                      <span
+                        style={{
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          padding: '0.15rem 0.5rem',
+                          borderRadius: '10px',
+                          background: task.stats.completionRate >= 100 ? '#ecfdf5' : '#fef9c3',
+                          color: task.stats.completionRate >= 100 ? '#047857' : '#854d0e',
+                          border: `1px solid ${task.stats.completionRate >= 100 ? '#a7f3d0' : '#fef08a'}`
+                        }}
+                      >
+                        {task.stats.completedStudentsCount}/{task.stats.totalTargetStudents}
+                      </span>
+                      <span style={{ fontSize: '0.72rem', color: task.stats.completionRate >= 100 ? '#059669' : 'var(--text-muted)', fontWeight: 500 }}>
+                        ({task.stats.completionRate}% completada)
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsStudentsExpanded(!isStudentsExpanded);
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: '0.15rem 0.35rem',
+                        cursor: 'pointer',
+                        color: 'var(--text-muted)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.2rem',
+                        fontSize: '0.74rem',
+                        fontWeight: 600
+                      }}
+                    >
+                      {isStudentsExpanded ? (
+                        <><ChevronUp size={14} /> Plegar alumnos</>
+                      ) : (
+                        <><ChevronDown size={14} /> Ver alumnos ({task.stats.completedStudentsCount}/{task.stats.totalTargetStudents})</>
+                      )}
+                    </button>
+                  </div>
+
+                  {isStudentsExpanded && (
+                    <div style={{ borderTop: '1px solid var(--border)', padding: '0.55rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      {/* Alumnos con entrega completa (en verde) */}
+                      {task.stats.completedStudents && task.stats.completedStudents.length > 0 && (
+                        <div>
+                          <strong style={{ fontSize: '0.74rem', color: '#047857', display: 'inline-flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.3rem' }}>
+                            <CheckCircle2 size={13} style={{ color: '#059669' }} /> Entrega completa ({task.stats.completedStudents.length}):
+                          </strong>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                            {task.stats.completedStudents.map(student => (
+                              <span
+                                key={student.id}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.3rem',
+                                  padding: '0.18rem 0.55rem',
+                                  borderRadius: '12px',
+                                  background: '#ecfdf5',
+                                  border: '1px solid #a7f3d0',
+                                  color: '#047857',
+                                  fontSize: '0.74rem',
+                                  fontWeight: 600
+                                }}
+                              >
+                                ✓ {student.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Alumnos pendientes (en amarillo) */}
+                      {task.stats.pendingStudents && task.stats.pendingStudents.length > 0 && (
+                        <div>
+                          <strong style={{ fontSize: '0.74rem', color: '#854d0e', display: 'inline-flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.3rem' }}>
+                            ⏳ Pendientes ({task.stats.pendingStudents.length}):
+                          </strong>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                            {task.stats.pendingStudents.map(student => (
+                              <span
+                                key={student.id}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.3rem',
+                                  padding: '0.18rem 0.55rem',
+                                  borderRadius: '12px',
+                                  background: '#fefce8',
+                                  border: '1px solid #fef08a',
+                                  color: '#854d0e',
+                                  fontSize: '0.74rem',
+                                  fontWeight: 600
+                                }}
+                              >
+                                ⏳ {student.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {(!task.stats.completedStudents?.length && !task.stats.pendingStudents?.length) && (
+                        <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                          No hay alumnos asignados a esta tarea.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -387,9 +516,9 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   gap: '0.75rem',
                   padding: '0.75rem 1rem',
                   borderRadius: '10px',
-                  background: step.isCompleted ? '#f0fdf4' : 'var(--surface-alt)',
-                  border: `1px solid ${step.isCompleted ? '#bbf7d0' : 'var(--border)'}`,
-                  opacity: isCurrentAvailable ? 1 : 0.6,
+                  background: (mode === 'STUDENT' && step.isCompleted) ? '#f0fdf4' : 'var(--surface-alt)',
+                  border: `1px solid ${(mode === 'STUDENT' && step.isCompleted) ? '#bbf7d0' : 'var(--border)'}`,
+                  opacity: (mode === 'STUDENT' && !isCurrentAvailable) ? 0.6 : 1,
                   flexWrap: 'wrap'
                 }}
               >
@@ -404,12 +533,12 @@ const TaskCard: React.FC<TaskCardProps> = ({
                       justifyContent: 'center',
                       fontSize: '0.78rem',
                       fontWeight: 700,
-                      background: step.isCompleted ? '#10b981' : 'var(--primary-light)',
-                      color: step.isCompleted ? '#fff' : 'var(--primary-text)',
+                      background: (mode === 'STUDENT' && step.isCompleted) ? '#10b981' : 'var(--primary-light)',
+                      color: (mode === 'STUDENT' && step.isCompleted) ? '#fff' : 'var(--primary-text)',
                       flexShrink: 0
                     }}
                   >
-                    {step.isCompleted ? '✓' : step.order}
+                    {(mode === 'STUDENT' && step.isCompleted) ? '✓' : step.order}
                   </div>
 
                   <div>
@@ -437,33 +566,35 @@ const TaskCard: React.FC<TaskCardProps> = ({
 
                 {/* Acciones y Estados del Paso */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  {hasGrade ? (
-                    <span
-                      style={{
-                        fontSize: '0.78rem',
-                        fontWeight: 700,
-                        padding: '0.2rem 0.55rem',
-                        borderRadius: '6px',
-                        background: '#dcfce7',
-                        color: '#15803d'
-                      }}
-                    >
-                      Nota: {step.submission?.grade}/10
-                    </span>
-                  ) : hasSubmission ? (
-                    <span
-                      style={{
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        padding: '0.2rem 0.5rem',
-                        borderRadius: '6px',
-                        background: '#e0f2fe',
-                        color: '#0369a1'
-                      }}
-                    >
-                      Entregado
-                    </span>
-                  ) : null}
+                  {mode === 'STUDENT' && (
+                    hasGrade ? (
+                      <span
+                        style={{
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          padding: '0.2rem 0.55rem',
+                          borderRadius: '6px',
+                          background: '#dcfce7',
+                          color: '#15803d'
+                        }}
+                      >
+                        Nota: {step.submission?.grade}/10
+                      </span>
+                    ) : hasSubmission ? (
+                      <span
+                        style={{
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          padding: '0.2rem 0.5rem',
+                          borderRadius: '6px',
+                          background: '#e0f2fe',
+                          color: '#0369a1'
+                        }}
+                      >
+                        Entregado
+                      </span>
+                    ) : null
+                  )}
 
                   {mode === 'STUDENT' && (
                     <>
@@ -509,7 +640,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   )}
                 </div>
 
-                {step.submission?.feedback && (
+                {mode === 'STUDENT' && step.submission?.feedback && (
                   <div style={{ width: '100%', marginTop: '0.45rem', padding: '0.4rem 0.65rem', background: '#eff6ff', borderRadius: '6px', fontSize: '0.78rem', color: '#1e40af', border: '1px solid #bfdbfe' }}>
                     💬 <strong>Comentario del profesor:</strong> "{step.submission.feedback}"
                   </div>

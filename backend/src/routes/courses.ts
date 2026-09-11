@@ -171,16 +171,15 @@ router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, r
 router.delete('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
   const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   try {
-    const course = await prisma.course.findFirst({ where: { id: courseId, teacherId: req.user!.id } });
+    const courseWhere = req.user!.role === 'ADMIN'
+      ? { id: courseId }
+      : { id: courseId, teacherId: req.user!.id };
+    const course = await prisma.course.findFirst({ where: courseWhere });
     if (!course) return res.status(404).json({ error: 'Clase no encontrada' });
-    await prisma.$transaction(async (transaction) => {
-      await transaction.post.deleteMany({ where: { courseId } });
-      const assignments = await transaction.assignment.findMany({ where: { courseId }, select: { id: true } });
-      await transaction.submission.deleteMany({ where: { assignmentId: { in: assignments.map(assignment => assignment.id) } } });
-      await transaction.assignment.deleteMany({ where: { courseId } });
-      await transaction.enrollment.deleteMany({ where: { courseId } });
-      await transaction.course.delete({ where: { id: courseId } });
-    });
+    
+    // Con ON DELETE CASCADE en la base de datos, el borrado del curso elimina en cascada
+    // matrículas (Enrollment), tablón (Post), tareas (Assignment/Submission/StructuredTask) y boletines (TermGrade)
+    await prisma.course.delete({ where: { id: courseId } });
     res.json({ message: 'Clase eliminada correctamente' });
   } catch (error) {
     console.error('Error al eliminar clase:', error);
@@ -305,7 +304,7 @@ router.get('/:id/assignments', authenticateToken, verifyCourseAccess, async (req
   try {
     const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const assignments = await prisma.assignment.findMany({
-      where: { courseId },
+      where: { courseId, structuredTaskStepId: null },
       include: {
         material: { select: { id: true, title: true, type: true, url: true, formData: true, description: true, level: true } },
         submissions: {

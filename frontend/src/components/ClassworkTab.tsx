@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import MaterialViewerModal, { type ViewerMaterial } from './MaterialViewerModal';
 import TaskCard, { type TaskItem } from './TaskCard';
+import { toLocalDatetimeInput, toIsoDateString, getCurrentLocalDatetimeInput } from '../utils/dateUtils';
 
 const SKILL_CATEGORIES = [
   { id: 'GRAMMAR_VOCABULARY', label: 'Grammar and Vocabulary' },
@@ -147,8 +148,8 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     setTaskTitle(orig.title || '');
     setTaskDescription(orig.description || '');
     setTaskCategory(orig.category || 'GRAMMAR_VOCABULARY');
-    setTaskDueDate(orig.dueDate ? new Date(orig.dueDate).toISOString().slice(0, 16) : '');
-    setTaskPublishAt(orig.publishAt ? new Date(orig.publishAt).toISOString().slice(0, 16) : '');
+    setTaskDueDate(toLocalDatetimeInput(orig.dueDate));
+    setTaskPublishAt(toLocalDatetimeInput(orig.publishAt));
     setTaskTerm(orig.term || 1);
     setTaskIsSequential(Boolean(orig.isSequential));
     setTaskIsTemplate(Boolean(orig.isTemplate));
@@ -203,8 +204,8 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
       const payload = {
         title: taskTitle.trim(),
         description: taskDescription.trim() || null,
-        dueDate: taskDueDate ? new Date(taskDueDate).toISOString() : null,
-        publishAt: taskPublishAt ? new Date(taskPublishAt).toISOString() : null,
+        dueDate: toIsoDateString(taskDueDate) || null,
+        publishAt: toIsoDateString(taskPublishAt) || null,
         term: taskTerm,
         category: taskCategory,
         isTemplate: taskIsTemplate,
@@ -543,7 +544,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
       </div>
 
       {/* Modal: Crear / Editar Tarea */}
-      {isTaskModalOpen && (
+      {isTaskModalOpen && createPortal(
         <div className="modal-backdrop" style={modalBackdropStyle} onClick={() => setIsTaskModalOpen(false)}>
           <form
             onSubmit={saveTask}
@@ -642,7 +643,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
 
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Publicar el</label>
-                  <input type="datetime-local" value={taskPublishAt} onChange={(e) => setTaskPublishAt(e.target.value)} min={new Date().toISOString().slice(0, 16)} style={inputStyle} />
+                  <input type="datetime-local" value={taskPublishAt} onChange={(e) => setTaskPublishAt(e.target.value)} min={getCurrentLocalDatetimeInput()} style={inputStyle} />
                   <small style={{ display: 'block', marginTop: '0.25rem', color: 'var(--text-muted)', fontSize: '0.72rem' }}>Vacío: publicación inmediata.</small>
                 </div>
               </div>
@@ -771,7 +772,8 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
               </button>
             </div>
           </form>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal: Selector de Material para un Paso */}

@@ -126,6 +126,7 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => 
 
       const tasks = await prisma.assignment.findMany({
         where: {
+          structuredTaskStepId: null,
           AND: [
             {
               OR: [

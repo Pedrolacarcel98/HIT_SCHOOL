@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, CalendarDays, CheckCircle2, Clock3, ExternalLink, FileText, Link, ListChecks, Paperclip, PenTool, Send, X } from 'lucide-react';
+import { BookOpen, CalendarDays, CheckCircle2, Clock3, ExternalLink, Eye, FileText, Link, ListChecks, Paperclip, PenTool, Send, X } from 'lucide-react';
 import FormPlayer from '../components/FormPlayer';
 import ExamReviewModal from '../components/ExamReviewModal';
+import AttachmentViewerModal, { isAttachmentImage } from '../components/AttachmentViewerModal';
+import type { AttachmentData } from '../components/AttachmentViewerModal';
 import { useParent } from '../context/ParentContext';
 import type { ReviewQuestion } from '../components/ExamReviewModal';
 
@@ -164,6 +166,7 @@ const StudentCourses: React.FC = () => {
   const [structuredDeliveryAttachment, setStructuredDeliveryAttachment] = useState<SubmissionAttachment | null>(null);
   const [structuredDeliveryError, setStructuredDeliveryError] = useState('');
   const [isSavingStructuredDelivery, setIsSavingStructuredDelivery] = useState(false);
+  const [viewingAttachment, setViewingAttachment] = useState<AttachmentData | null>(null);
   const { selectedStudent, selectedStudentId } = useParent();
   const userRole = localStorage.getItem('userRole');
 
@@ -201,12 +204,11 @@ const StudentCourses: React.FC = () => {
     try {
       const isMaterialAssignment = Boolean(viewingMaterialAssignment);
       const targetId = viewingContent?.id || viewingMaterialAssignment?.id;
-      const response = await fetch(`${apiUrl}${isMaterialAssignment ? `/api/materials/assignments/${targetId}/submit` : `/api/assignments/${targetId}/submit`}`, {
+      await fetch(`${apiUrl}${isMaterialAssignment ? `/api/materials/assignments/${targetId}/submit` : `/api/assignments/${targetId}/submit`}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
         body: JSON.stringify({ content: JSON.stringify({ answers, score, total }), grade: total ? (score / total) * 10 : 0 })
       });
-      if (response.ok) { setViewingContent(null); setViewingMaterialAssignment(null); }
     } catch (error) {
       console.error('Error al entregar el examen:', error);
     }
@@ -645,22 +647,71 @@ const StudentCourses: React.FC = () => {
                   </div>
                   <div style={{ padding: '1rem', background: 'var(--surface-alt)', border: '1px solid var(--border)', borderRadius: '8px' }}>
                     <strong style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.88rem' }}>Contenido enviado</strong>
-                    {submitted.link ? (
-                      <a href={submitted.link} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--primary)', fontWeight: 700, textDecoration: 'none' }}>
-                        <ExternalLink size={14} /> Abrir enlace entregado
-                      </a>
-                    ) : submittedText ? (
-                      <p style={{ margin: 0, whiteSpace: 'pre-wrap', color: 'var(--text-main)', lineHeight: 1.5 }}>{submittedText}</p>
-                    ) : (
-                      <p style={{ margin: 0, color: 'var(--text-muted)' }}>Tarea marcada como completada.</p>
-                    )}
-                    {submitted.attachment && submitted.attachment.dataUrl && (
-                      <div style={{ marginTop: '0.75rem' }}>
-                        <a href={submitted.attachment.dataUrl} target="_blank" rel="noopener noreferrer" download={submitted.attachment.name} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--primary)', fontWeight: 700, textDecoration: 'none' }}>
-                          <Paperclip size={14} /> Descargar adjunto: {submitted.attachment.name}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                      {submitted.link && (
+                        <a href={submitted.link} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--primary)', fontWeight: 700, textDecoration: 'none' }}>
+                          <ExternalLink size={14} /> Abrir enlace entregado
                         </a>
-                      </div>
-                    )}
+                      )}
+                      {submittedText && (
+                        <p style={{ margin: 0, whiteSpace: 'pre-wrap', color: 'var(--text-main)', lineHeight: 1.5 }}>{submittedText}</p>
+                      )}
+                      {submitted.attachment && submitted.attachment.dataUrl && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', padding: '0.6rem 0.75rem', background: 'var(--surface-alt)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: 0 }}>
+                              <Paperclip size={15} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                              <span style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '240px' }} title={submitted.attachment.name}>
+                                {submitted.attachment.name}
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              <button
+                                type="button"
+                                onClick={() => setViewingAttachment(submitted.attachment)}
+                                className="btn-secondary"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.28rem 0.6rem', fontSize: '0.78rem' }}
+                                title="Ver archivo online sin descargar"
+                              >
+                                <Eye size={13} /> Ver en línea
+                              </button>
+                              <a
+                                href={submitted.attachment.dataUrl}
+                                download={submitted.attachment.name}
+                                className="btn-secondary"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.28rem 0.6rem', fontSize: '0.78rem', textDecoration: 'none' }}
+                                title="Descargar archivo"
+                              >
+                                <Paperclip size={13} /> Descargar
+                              </a>
+                            </div>
+                          </div>
+                          {isAttachmentImage(submitted.attachment) && (
+                            <div style={{ marginTop: '0.25rem' }}>
+                              <img
+                                src={submitted.attachment.dataUrl}
+                                alt={submitted.attachment.name}
+                                onClick={() => setViewingAttachment(submitted.attachment)}
+                                style={{
+                                  maxHeight: '150px',
+                                  maxWidth: '100%',
+                                  borderRadius: '6px',
+                                  border: '1px solid var(--border)',
+                                  cursor: 'pointer',
+                                  objectFit: 'contain',
+                                  background: '#fff',
+                                  display: 'block'
+                                }}
+                                title="Clic para ampliar y rotar"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {!submitted.link && !submittedText && !submitted.attachment && (
+                        <p style={{ margin: 0, color: 'var(--text-muted)' }}>Tarea marcada como completada.</p>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -733,7 +784,7 @@ const StudentCourses: React.FC = () => {
               🛡️ Vista del Tutor (Modo Solo Lectura): Los exámenes interactivos deben ser realizados directamente por el alumno desde su propia cuenta.
             </div>
           ) : (
-            <FormPlayer title={viewingContent.title} description={viewingContent.description} questions={viewingContent.material.formData.questions as never[] || []} onFinish={handleExamFinish} />
+            <FormPlayer title={viewingContent.title} description={viewingContent.description} questions={viewingContent.material.formData.questions as never[] || []} onFinish={handleExamFinish} onClose={() => setViewingContent(null)} allowRetry={false} />
           )}
         </div>
       </div>, document.body)}
@@ -745,7 +796,7 @@ const StudentCourses: React.FC = () => {
               🛡️ Vista del Tutor (Modo Solo Lectura): Los exámenes interactivos deben ser realizados directamente por el alumno desde su propia cuenta.
             </div>
           ) : (
-            <FormPlayer title={viewingMaterialAssignment.material.title} description={viewingMaterialAssignment.material.description || undefined} questions={(viewingMaterialAssignment.material.formData.questions || []) as any[]} onFinish={handleExamFinish} />
+            <FormPlayer title={viewingMaterialAssignment.material.title} description={viewingMaterialAssignment.material.description || undefined} questions={(viewingMaterialAssignment.material.formData.questions || []) as any[]} onFinish={handleExamFinish} onClose={() => setViewingMaterialAssignment(null)} allowRetry={false} />
           )}
         </div>
       </div>, document.body)}
@@ -781,9 +832,10 @@ const StudentCourses: React.FC = () => {
                     ...task,
                     steps: task.steps.map((step) => step.id === viewingStructuredForm.stepId ? { ...step, isCompleted: true, submission: result.submission } : step)
                   })));
-                  setViewingStructuredForm(null);
                 }
               }}
+              onClose={() => setViewingStructuredForm(null)}
+              allowRetry={false}
             />
           )}
         </div>
@@ -828,6 +880,12 @@ const StudentCourses: React.FC = () => {
           </form>
         </div>
       )}
+
+      {/* Visor Online de Archivos Adjuntos */}
+      <AttachmentViewerModal
+        attachment={viewingAttachment}
+        onClose={() => setViewingAttachment(null)}
+      />
     </div>
   );
 };

@@ -192,20 +192,14 @@ router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: A
             content: submission?.content || null
           };
         });
-        const relevantSteps = stepsDetail.filter((step) =>
-          step.isEvaluable ||
-          (typeof step.content === 'string' && step.content.trim().length > 0) ||
-          (typeof step.grade === 'number' && !Number.isNaN(step.grade))
-        );
-
         // Calcular nota de la tarea
         let taskGrade: number | null = null;
         if (delivery?.grade !== null && delivery?.grade !== undefined) {
           taskGrade = delivery.grade;
         } else {
           // Media automática de pasos evaluables calificados
-          const evaluableGraded = relevantSteps.filter(
-            (s) => typeof s.grade === 'number' && !isNaN(s.grade)
+          const evaluableGraded = stepsDetail.filter(
+            (s) => s.isEvaluable && typeof s.grade === 'number' && !isNaN(s.grade)
           );
           if (evaluableGraded.length > 0) {
             const sum = evaluableGraded.reduce((acc, curr) => acc + (curr.grade || 0), 0);
@@ -219,8 +213,8 @@ router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: A
           if (skill) scoresBySkill[skill] = [...(scoresBySkill[skill] || []), taskGrade];
         }
 
-        const allStepsCompleted = relevantSteps.length > 0 && relevantSteps.every((s) => s.isCompleted);
-        const completedAtDates = relevantSteps
+        const allStepsCompleted = stepsDetail.length > 0 && stepsDetail.every((s) => s.isCompleted);
+        const completedAtDates = stepsDetail
           .map((s) => s.completedAt ? new Date(s.completedAt) : null)
           .filter((date): date is Date => date instanceof Date && !Number.isNaN(date.getTime()));
         const completedAt = allStepsCompleted && completedAtDates.length > 0
@@ -233,7 +227,7 @@ router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: A
           taskTitle: task.title,
           category: task.category,
           dueDate: task.dueDate,
-          steps: relevantSteps,
+          steps: stepsDetail,
           taskGrade,
           taskFeedback: delivery?.feedback || null,
           isCompleted: allStepsCompleted,
@@ -531,17 +525,11 @@ router.get('/student/:studentId', authenticateToken, async (req: AuthRequest, re
             content: sub?.content || null
           };
         });
-        const relevantSteps = stepsFormatted.filter((step) =>
-          step.isEvaluable ||
-          (typeof step.content === 'string' && step.content.trim().length > 0) ||
-          (typeof step.grade === 'number' && !Number.isNaN(step.grade))
-        );
-
         let finalTaskGrade: number | null = null;
         if (delivery?.grade !== null && delivery?.grade !== undefined) {
           finalTaskGrade = delivery.grade;
         } else {
-          const graded = relevantSteps.filter((s) => typeof s.grade === 'number');
+          const graded = stepsFormatted.filter((s) => s.isEvaluable && typeof s.grade === 'number');
           if (graded.length > 0) {
             const sum = graded.reduce((acc, curr) => acc + (curr.grade || 0), 0);
             finalTaskGrade = Number((sum / graded.length).toFixed(2));
@@ -554,8 +542,8 @@ router.get('/student/:studentId', authenticateToken, async (req: AuthRequest, re
           if (skill) scoresBySkill[skill] = [...(scoresBySkill[skill] || []), finalTaskGrade];
         }
 
-        const allStepsCompleted = relevantSteps.length > 0 && relevantSteps.every((s) => s.isCompleted);
-        const completedAtDates = relevantSteps
+        const allStepsCompleted = stepsFormatted.length > 0 && stepsFormatted.every((s) => s.isCompleted);
+        const completedAtDates = stepsFormatted
           .map((s) => s.completedAt ? new Date(s.completedAt) : null)
           .filter((date): date is Date => date instanceof Date && !Number.isNaN(date.getTime()));
         const completedAt = allStepsCompleted && completedAtDates.length > 0
@@ -568,7 +556,7 @@ router.get('/student/:studentId', authenticateToken, async (req: AuthRequest, re
           title: task.title,
           category: task.category,
           dueDate: task.dueDate,
-          steps: relevantSteps,
+          steps: stepsFormatted,
           taskGrade: finalTaskGrade,
           taskFeedback: delivery?.feedback || null,
           isCompleted: allStepsCompleted,

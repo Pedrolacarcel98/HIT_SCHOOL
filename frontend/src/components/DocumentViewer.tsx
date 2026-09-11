@@ -25,7 +25,12 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({ url, title }) => {
 
   const embedUrl = getEmbedUrl(url);
   const googleDocumentId = getGoogleDocumentId(url);
-  const externalUrl = googleDocumentId ? embedUrl : getGoogleDriveFileId(url) ? embedUrl : url;
+  const googleDriveFileId = getGoogleDriveFileId(url);
+  const externalUrl = googleDocumentId 
+    ? `https://docs.google.com/document/d/${googleDocumentId}/edit` 
+    : googleDriveFileId 
+      ? `https://drive.google.com/file/d/${googleDriveFileId}/view` 
+      : url;
 
   return (
     <div style={{
@@ -83,6 +88,7 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({ url, title }) => {
           src={embedUrl}
           title={title || 'Visor de Documento'}
           style={{ width: '100%', height: '100%', border: 'none' }}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
         />
       </div>
     </div>

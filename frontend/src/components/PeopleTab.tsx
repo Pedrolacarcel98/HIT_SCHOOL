@@ -278,8 +278,15 @@ const PeopleTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                           <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>{student.email}</p>
                         </div>
                         {isEnrolledInOtherCourses && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', color: '#d97706', background: '#fef3c7', padding: '0.25rem 0.5rem', borderRadius: '4px' }}>
-                            <AlertCircle size={14} /> Ya en {student.enrollments.length} clase(s)
+                          <div
+                            title={student.enrollments.map((e: any) => e.course?.title).filter(Boolean).join(', ')}
+                            style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.75rem', color: '#d97706', background: '#fef3c7', padding: '0.25rem 0.5rem', borderRadius: '4px', maxWidth: '240px' }}
+                          >
+                            <AlertCircle size={14} style={{ flexShrink: 0 }} />
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              Ya en {student.enrollments.length} clase(s)
+                              {student.enrollments[0]?.course?.title ? ` (${student.enrollments.map((e: any) => e.course?.title).filter(Boolean).join(', ')})` : ''}
+                            </span>
                           </div>
                         )}
                       </div>

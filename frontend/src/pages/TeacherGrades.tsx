@@ -11,6 +11,7 @@ import {
   Download,
   Edit3,
   ExternalLink,
+  Eye,
   FileText,
   GraduationCap,
   Laptop,
@@ -21,6 +22,8 @@ import {
 } from 'lucide-react';
 import ExamReviewModal from '../components/ExamReviewModal';
 import type { ReviewQuestion } from '../components/ExamReviewModal';
+import AttachmentViewerModal, { isAttachmentImage } from '../components/AttachmentViewerModal';
+import type { AttachmentData } from '../components/AttachmentViewerModal';
 
 interface StudentData {
   id: string;
@@ -208,6 +211,7 @@ const TeacherGrades: React.FC = () => {
   const [isSavingGrade, setIsSavingGrade] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [reviewingExam, setReviewingExam] = useState<{ subId: string; title: string; questions?: ReviewQuestion[]; answers: Record<string, any>; score: number | null; total?: number | null; feedback: string | null } | null>(null);
+  const [viewingAttachment, setViewingAttachment] = useState<AttachmentData | null>(null);
 
   // Evaluación Final por Competencias
   const [currentEvaluation, setCurrentEvaluation] = useState<TermEvaluationData | null>(null);
@@ -423,6 +427,11 @@ const TeacherGrades: React.FC = () => {
     });
   }, [students, courses, assignments, allSubmissionsFlat]);
 
+  const activeDossierStudent = useMemo(() => {
+    if (!selectedStudentForDossier) return null;
+    return studentsWithMeta.find(s => s.id === selectedStudentForDossier.id) || selectedStudentForDossier;
+  }, [studentsWithMeta, selectedStudentForDossier]);
+
   // Filtrado de Alumnos
   const filteredStudents = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
@@ -565,6 +574,7 @@ const TeacherGrades: React.FC = () => {
       }
 
       // Actualizar estado local en assignments
+      const updatedFeedback = feedbackInput.trim() || null;
       setAssignments(prev => prev.map(assignment => ({
         ...assignment,
         submissions: assignment.submissions.map(s => {
@@ -572,14 +582,40 @@ const TeacherGrades: React.FC = () => {
             return {
               ...s,
               grade: numGrade,
-              feedback: feedbackInput.trim() || null
+              feedback: updatedFeedback
             };
           }
           return s;
         })
       })));
 
+      setSelectedStudentForDossier(prev => {
+        if (!prev) return null;
+        const updatedSubs = prev.submissions.map(s => {
+          if (s.id === evaluatingSubmission.subId) {
+            return {
+              ...s,
+              grade: numGrade,
+              feedback: updatedFeedback
+            };
+          }
+          return s;
+        });
+        const gradedSubs = updatedSubs.filter(s => s.grade !== null && s.grade !== undefined);
+        const avg = gradedSubs.length > 0
+          ? (gradedSubs.reduce((acc, curr) => acc + (curr.grade || 0), 0) / gradedSubs.length).toFixed(1)
+          : null;
+        return {
+          ...prev,
+          submissions: updatedSubs,
+          gradedSubmissions: gradedSubs.length,
+          pendingSubmissions: updatedSubs.filter(s => s.materialType !== 'FORM' && (s.grade === null || s.grade === undefined)).length,
+          averageGrade: avg
+        };
+      });
+
       setEvaluatingSubmission(null);
+      fetchData();
     } catch (err) {
       console.error(err);
       setSaveError('Error de conexión al guardar la calificación.');
@@ -592,13 +628,14 @@ const TeacherGrades: React.FC = () => {
     if (!reviewingExam) return;
 
     const token = localStorage.getItem('token');
+    const updatedFeedback = feedback ? feedback.trim() : null;
     const res = await fetch(`${apiUrl}/api/assignments/submissions/${reviewingExam.subId}/grade`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`
       },
-      body: JSON.stringify({ grade: reviewingExam.score, feedback: feedback || null })
+      body: JSON.stringify({ grade: reviewingExam.score, feedback: updatedFeedback })
     });
 
     if (!res.ok) {
@@ -608,9 +645,27 @@ const TeacherGrades: React.FC = () => {
 
     setAssignments(prev => prev.map(assignment => ({
       ...assignment,
-      submissions: assignment.submissions.map(sub => sub.id === reviewingExam.subId ? { ...sub, feedback: feedback || null } : sub)
+      submissions: assignment.submissions.map(sub => sub.id === reviewingExam.subId ? { ...sub, feedback: updatedFeedback } : sub)
     })));
+
+    setSelectedStudentForDossier(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        submissions: prev.submissions.map(s => {
+          if (s.id === reviewingExam.subId) {
+            return {
+              ...s,
+              feedback: updatedFeedback
+            };
+          }
+          return s;
+        })
+      };
+    });
+
     setReviewingExam(null);
+    fetchData();
   };
 
   // Métricas globales
@@ -888,7 +943,7 @@ const TeacherGrades: React.FC = () => {
               </div>
 
               {/* Expediente Académico Detallado del Alumno Seleccionado */}
-              {selectedStudentForDossier && (
+              {activeDossierStudent && (
                 createPortal(
                 <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: '260px', zIndex: 50, minHeight: '100vh', overflowY: 'auto', background: '#f3e8ff', padding: '2rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: '1.25rem' }}>
                   {selectedClassForDossier && (
@@ -900,7 +955,7 @@ const TeacherGrades: React.FC = () => {
                       </div>
                       <div style={{ maxHeight: 'calc(100vh - 190px)', overflowY: 'auto' }}>
                         {selectedClassStudents.map(student => {
-                          const isClassStudentSelected = selectedStudentForDossier.id === student.id;
+                          const isClassStudentSelected = activeDossierStudent.id === student.id;
                           return (
                             <button key={student.id} type="button" onClick={() => selectClassStudent(student)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.8rem 0.9rem', border: 'none', borderBottom: '1px solid var(--border)', borderLeft: isClassStudentSelected ? '4px solid var(--primary)' : '4px solid transparent', background: isClassStudentSelected ? 'var(--primary-subtle)' : 'var(--surface)', color: 'var(--text-main)', textAlign: 'left', cursor: 'pointer' }}>
                               <span style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--primary)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.75rem', fontWeight: 700 }}>{student.fullName.slice(0, 2).toUpperCase()}</span>
@@ -929,11 +984,11 @@ const TeacherGrades: React.FC = () => {
                         {selectedClassForDossier ? `EXPEDIENTE ACADÉMICO · ${selectedClassForDossier.title}` : 'EXPEDIENTE ACADÉMICO DEL ALUMNO'}
                       </span>
                       <h1 style={{ margin: '0.35rem 0 0', fontSize: '1.75rem', color: 'var(--text-main)' }}>
-                        {selectedStudentForDossier.fullName}
+                        {activeDossierStudent.fullName}
                       </h1>
                       <p style={{ margin: '0.15rem 0 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                        {selectedStudentForDossier.email} · <span style={{ display: 'inline-flex', alignItems: 'center', padding: '0.15rem 0.5rem', borderRadius: '999px', background: '#f3e8ff', color: '#7e22ce', border: '1px solid #d8b4fe', fontWeight: 700, fontSize: '0.76rem' }}>
-                          {selectedStudentForDossier.modality === 'ONLINE' ? 'Modalidad Online' : 'Modalidad Presencial'}
+                        {activeDossierStudent.email} · <span style={{ display: 'inline-flex', alignItems: 'center', padding: '0.15rem 0.5rem', borderRadius: '999px', background: '#f3e8ff', color: '#7e22ce', border: '1px solid #d8b4fe', fontWeight: 700, fontSize: '0.76rem' }}>
+                          {activeDossierStudent.modality === 'ONLINE' ? 'Modalidad Online' : 'Modalidad Presencial'}
                         </span>
                       </p>
                     </div>
@@ -986,7 +1041,7 @@ const TeacherGrades: React.FC = () => {
 
                     {currentEvaluation ? (
                       <div>
-                        {selectedStudentForDossier.modality !== 'ONLINE' && (
+                        {activeDossierStudent.modality !== 'ONLINE' && (
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '0.65rem', marginBottom: '0.85rem' }}>
                             {[
                               ['MIDDLE TERM', currentEvaluation.middleExamGrade, 'Examen parcial (35%)'],
@@ -1003,7 +1058,7 @@ const TeacherGrades: React.FC = () => {
                           </div>
                         )}
 
-                        {selectedStudentForDossier.modality === 'ONLINE' && (
+                        {activeDossierStudent.modality === 'ONLINE' && (
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: '0.65rem', marginBottom: '0.85rem' }}>
                             {[['GRAMMAR', currentEvaluation.grammar], ['READING', currentEvaluation.reading], ['WRITING', currentEvaluation.writing], ['LISTENING', currentEvaluation.listening], ['SPEAKING', currentEvaluation.speaking], ['NOTA GLOBAL', currentEvaluation.overallGrade]].map(([label, value]) => (
                               <div key={label} style={{ padding: '0.65rem', background: label === 'NOTA GLOBAL' ? 'var(--primary-light)' : 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
@@ -1014,7 +1069,7 @@ const TeacherGrades: React.FC = () => {
                           </div>
                         )}
 
-                        {selectedStudentForDossier.modality === 'ONLINE' && false && (
+                        {activeDossierStudent.modality === 'ONLINE' && false && (
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: '0.65rem', marginBottom: '0.85rem' }}>
                           <div style={{ padding: '0.65rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
                             <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>GRAMMAR</span>
@@ -1074,16 +1129,16 @@ const TeacherGrades: React.FC = () => {
 
                   {/* Listado de Entregas del Alumno */}
                   <h4 style={{ margin: '0 0 0.85rem', fontSize: '1rem', color: 'var(--text-main)' }}>
-                    Historial de Tareas y Exámenes ({selectedStudentForDossier.submissions.filter(sub => !termEvaluation?.tasks?.length || termEvaluation.tasks.some(task => sub.assignmentTitle.toLowerCase().includes(task.title.toLowerCase()) || task.title.toLowerCase().includes(sub.assignmentTitle.toLowerCase()))).length})
+                    Historial de Tareas y Exámenes ({activeDossierStudent.submissions.filter(sub => !termEvaluation?.tasks?.length || termEvaluation.tasks.some(task => sub.assignmentTitle.toLowerCase().includes(task.title.toLowerCase()) || task.title.toLowerCase().includes(sub.assignmentTitle.toLowerCase()))).length})
                   </h4>
 
-                  {selectedStudentForDossier.submissions.length === 0 ? (
+                  {activeDossierStudent.submissions.length === 0 ? (
                     <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-muted)', background: 'var(--surface-alt)', borderRadius: '10px' }}>
                       Este alumno aún no ha realizado entregas de tareas ni exámenes.
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                      {selectedStudentForDossier.submissions.filter(sub => !termEvaluation?.tasks?.length || termEvaluation.tasks.some(task => sub.assignmentTitle.toLowerCase().includes(task.title.toLowerCase()) || task.title.toLowerCase().includes(sub.assignmentTitle.toLowerCase()))).map(sub => {
+                      {activeDossierStudent.submissions.filter(sub => !termEvaluation?.tasks?.length || termEvaluation.tasks.some(task => sub.assignmentTitle.toLowerCase().includes(task.title.toLowerCase()) || task.title.toLowerCase().includes(sub.assignmentTitle.toLowerCase()))).map(sub => {
                         const examData = parseSavedExam(sub.content);
                         const isExam = sub.materialType === 'FORM' || Boolean(examData);
                         const hasGrade = sub.grade !== null && sub.grade !== undefined;
@@ -1203,60 +1258,96 @@ const TeacherGrades: React.FC = () => {
                                 );
                               }
 
-                              if (submissionDetails.attachment && submissionDetails.attachment.dataUrl) {
-                                return (
-                                  <div style={{ margin: '0.5rem 0', padding: '0.6rem 0.8rem', background: 'var(--surface-alt)', borderRadius: '6px', fontSize: '0.85rem' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                      <FileText size={15} style={{ color: 'var(--primary)' }} />
-                                      <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>Archivo adjunto:</span>
-                                      <a
-                                        href={submissionDetails.attachment.dataUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}
-                                      >
-                                        <ExternalLink size={14} /> {submissionDetails.attachment.name}
-                                      </a>
-                                      <a
-                                        href={submissionDetails.attachment.dataUrl}
-                                        download={submissionDetails.attachment.name}
-                                        title="Descargar archivo adjunto"
-                                        aria-label={`Descargar ${submissionDetails.attachment.name}`}
-                                        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0.3rem', borderRadius: '6px', color: 'var(--primary)', border: '1px solid var(--primary-border)', background: 'var(--surface)', textDecoration: 'none' }}
-                                      >
-                                        <Download size={15} />
+                              return (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', margin: '0.5rem 0' }}>
+                                  {submissionDetails.text && (
+                                    <div style={{ padding: '0.6rem 0.8rem', background: 'var(--surface-alt)', borderRadius: '6px', fontSize: '0.85rem' }}>
+                                      <p style={{ margin: 0, color: 'var(--text-main)', whiteSpace: 'pre-wrap' }}>
+                                        {submissionDetails.text}
+                                      </p>
+                                    </div>
+                                  )}
+
+                                  {submissionDetails.link && (
+                                    <div style={{ padding: '0.6rem 0.8rem', background: 'var(--surface-alt)', borderRadius: '6px', fontSize: '0.85rem' }}>
+                                      <a href={submissionDetails.link} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
+                                        <ExternalLink size={14} /> Abrir documento entregado en la nube
                                       </a>
                                     </div>
-                                  </div>
-                                );
-                              }
+                                  )}
 
-                              if (submissionDetails.link) {
-                                return (
-                                  <div style={{ margin: '0.5rem 0', padding: '0.6rem 0.8rem', background: 'var(--surface-alt)', borderRadius: '6px', fontSize: '0.85rem' }}>
-                                    <a href={submissionDetails.link} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
-                                      <ExternalLink size={14} /> Abrir documento entregado en la nube
-                                    </a>
-                                  </div>
-                                );
-                              }
+                                  {submissionDetails.attachment && submissionDetails.attachment.dataUrl && (
+                                    <div style={{ padding: '0.6rem 0.8rem', background: 'var(--surface-alt)', borderRadius: '6px', fontSize: '0.85rem' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+                                          <FileText size={15} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                                          <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>Archivo adjunto:</span>
+                                          <span style={{ color: 'var(--text-main)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '240px' }} title={submissionDetails.attachment.name}>
+                                            {submissionDetails.attachment.name}
+                                          </span>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                          <button
+                                            type="button"
+                                            onClick={() => setViewingAttachment(submissionDetails.attachment)}
+                                            className="btn-secondary"
+                                            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.28rem 0.6rem', fontSize: '0.78rem' }}
+                                            title="Ver archivo online sin descargar"
+                                          >
+                                            <Eye size={13} /> Ver en línea
+                                          </button>
+                                          <a
+                                            href={submissionDetails.attachment.dataUrl}
+                                            download={submissionDetails.attachment.name}
+                                            title="Descargar archivo adjunto"
+                                            aria-label={`Descargar ${submissionDetails.attachment.name}`}
+                                            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0.3rem', borderRadius: '6px', color: 'var(--primary)', border: '1px solid var(--primary-border)', background: 'var(--surface)', textDecoration: 'none' }}
+                                          >
+                                            <Download size={15} />
+                                          </a>
+                                        </div>
+                                      </div>
+                                      {isAttachmentImage(submissionDetails.attachment) && (
+                                        <div style={{ marginTop: '0.5rem' }}>
+                                          <img
+                                            src={submissionDetails.attachment.dataUrl}
+                                            alt={submissionDetails.attachment.name}
+                                            onClick={() => setViewingAttachment(submissionDetails.attachment)}
+                                            style={{
+                                              maxHeight: '150px',
+                                              maxWidth: '100%',
+                                              borderRadius: '6px',
+                                              border: '1px solid var(--border)',
+                                              cursor: 'pointer',
+                                              objectFit: 'contain',
+                                              background: '#fff',
+                                              display: 'block'
+                                            }}
+                                            title="Clic para ampliar y rotar"
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
 
-                              return (
-                                <div style={{ margin: '0.5rem 0', padding: '0.6rem 0.8rem', background: 'var(--surface-alt)', borderRadius: '6px', fontSize: '0.85rem' }}>
-                                  <p style={{ margin: 0, color: 'var(--text-main)', whiteSpace: 'pre-wrap' }}>
-                                    {submissionDetails.text || sub.content}
-                                  </p>
+                                  {!submissionDetails.text && !submissionDetails.link && !submissionDetails.attachment && sub.content && (
+                                    <div style={{ padding: '0.6rem 0.8rem', background: 'var(--surface-alt)', borderRadius: '6px', fontSize: '0.85rem' }}>
+                                      <p style={{ margin: 0, color: 'var(--text-main)', whiteSpace: 'pre-wrap' }}>
+                                        {sub.content}
+                                      </p>
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })()}
 
                             {/* Feedback del profesor */}
                             {sub.feedback && (
-                              <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', background: 'var(--primary-subtle)', borderRadius: '6px', border: '1px solid var(--primary-border)', fontSize: '0.84rem' }}>
-                                <strong style={{ color: 'var(--primary-text)', display: 'block', marginBottom: '0.2rem', fontSize: '0.78rem' }}>
-                                  💬 Observaciones del profesor:
+                              <div style={{ marginTop: '0.65rem', padding: '0.65rem 0.85rem', background: '#eff6ff', borderRadius: '8px', border: '1px solid #bfdbfe', fontSize: '0.86rem' }}>
+                                <strong style={{ color: '#1d4ed8', display: 'block', marginBottom: '0.25rem', fontSize: '0.78rem', fontWeight: 700 }}>
+                                  💬 Comentarios y observaciones del profesor:
                                 </strong>
-                                <span style={{ color: 'var(--text-main)' }}>{sub.feedback}</span>
+                                <p style={{ margin: 0, color: '#1e3a8a', whiteSpace: 'pre-wrap', lineHeight: '1.45' }}>{sub.feedback}</p>
                               </div>
                             )}
 
@@ -1587,6 +1678,78 @@ const TeacherGrades: React.FC = () => {
                   );
                 }
 
+                const subDetails = parseSubmissionContent(evaluatingSubmission.content);
+                const hasDetails = Boolean(subDetails.text || subDetails.link || subDetails.attachment);
+
+                if (hasDetails) {
+                  return (
+                    <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px dashed var(--border)', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                      {subDetails.text && (
+                        <p style={{ margin: 0, color: 'var(--text-main)', fontSize: '0.88rem', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                          {subDetails.text}
+                        </p>
+                      )}
+                      {subDetails.link && (
+                        <a href={subDetails.link} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--primary)', fontWeight: 600, fontSize: '0.85rem', textDecoration: 'none' }}>
+                          <ExternalLink size={14} /> Abrir documento entregado en la nube
+                        </a>
+                      )}
+                      {subDetails.attachment && subDetails.attachment.dataUrl && (
+                        <div style={{ padding: '0.6rem 0.75rem', background: 'var(--surface)', borderRadius: '6px', border: '1px solid var(--border)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: 0 }}>
+                              <FileText size={16} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px' }} title={subDetails.attachment.name}>
+                                {subDetails.attachment.name}
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              <button
+                                type="button"
+                                onClick={() => setViewingAttachment(subDetails.attachment)}
+                                className="btn-secondary"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.28rem 0.6rem', fontSize: '0.78rem' }}
+                                title="Ver archivo online sin descargar"
+                              >
+                                <Eye size={13} /> Ver en línea
+                              </button>
+                              <a
+                                href={subDetails.attachment.dataUrl}
+                                download={subDetails.attachment.name}
+                                className="btn-secondary"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.28rem 0.6rem', fontSize: '0.78rem', textDecoration: 'none' }}
+                                title="Descargar archivo"
+                              >
+                                <Download size={13} /> Descargar
+                              </a>
+                            </div>
+                          </div>
+                          {isAttachmentImage(subDetails.attachment) && (
+                            <div style={{ marginTop: '0.5rem' }}>
+                              <img
+                                src={subDetails.attachment.dataUrl}
+                                alt={subDetails.attachment.name}
+                                onClick={() => setViewingAttachment(subDetails.attachment)}
+                                style={{
+                                  maxHeight: '160px',
+                                  maxWidth: '100%',
+                                  borderRadius: '6px',
+                                  border: '1px solid var(--border)',
+                                  cursor: 'pointer',
+                                  objectFit: 'contain',
+                                  background: '#fff',
+                                  display: 'block'
+                                }}
+                                title="Clic para ampliar y rotar"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
                 if (/^https?:\/\//i.test(evaluatingSubmission.content)) {
                   return (
                     <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px dashed var(--border)' }}>
@@ -1597,7 +1760,13 @@ const TeacherGrades: React.FC = () => {
                   );
                 }
 
-                return null;
+                return (
+                  <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px dashed var(--border)' }}>
+                    <p style={{ margin: 0, color: 'var(--text-main)', fontSize: '0.88rem', whiteSpace: 'pre-wrap' }}>
+                      {evaluatingSubmission.content}
+                    </p>
+                  </div>
+                );
               })()}
             </div>
 
@@ -1736,7 +1905,7 @@ const TeacherGrades: React.FC = () => {
       {/* =========================================================================
           MODAL DE EVALUACIÓN FINAL POR COMPETENCIAS
          ========================================================================= */}
-      {isEvaluationModalOpen && selectedStudentForDossier && createPortal(
+      {isEvaluationModalOpen && activeDossierStudent && createPortal(
         <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
           <div className="glass-panel modal-card" style={{ width: '100%', maxWidth: '520px', padding: '2rem', background: 'var(--surface)', position: 'relative' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
@@ -1748,7 +1917,7 @@ const TeacherGrades: React.FC = () => {
                   <Award style={{ color: 'var(--primary)' }} /> Evaluación Final / Competencias
                 </h3>
                 <p style={{ margin: '0.2rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                  {selectedStudentForDossier.fullName}
+                  {activeDossierStudent.fullName}
                 </p>
               </div>
               <button type="button" onClick={() => setIsEvaluationModalOpen(false)} className="modal-close" aria-label="Cerrar modal">
@@ -1757,7 +1926,7 @@ const TeacherGrades: React.FC = () => {
             </div>
 
             <form onSubmit={handleSaveEvaluation} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {selectedStudentForDossier.modality !== 'ONLINE' && (
+              {activeDossierStudent.modality !== 'ONLINE' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   {([['middleExamGrade', 'MIDDLE TERM (35%)'], ['finalExamGrade', 'FINAL TERM (35%)']] as const).map(([field, label]) => (
                     <label key={field} style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)' }}>
@@ -1767,7 +1936,7 @@ const TeacherGrades: React.FC = () => {
                   ))}
                 </div>
               )}
-              {selectedStudentForDossier.modality === 'ONLINE' && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              {activeDossierStudent.modality === 'ONLINE' && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.3rem' }}>
                     Grammar
@@ -1849,7 +2018,7 @@ const TeacherGrades: React.FC = () => {
                 </div>
               </div>}
 
-              {selectedStudentForDossier.modality === 'ONLINE' ? <div>
+              {activeDossierStudent.modality === 'ONLINE' ? <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
                   <label style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--primary)' }}>
                     Nota Global
@@ -1922,6 +2091,12 @@ const TeacherGrades: React.FC = () => {
         </div>
       , document.body
       )}
+
+      {/* Visor Online de Archivos Adjuntos (Fotos de exámenes y PDFs) */}
+      <AttachmentViewerModal
+        attachment={viewingAttachment}
+        onClose={() => setViewingAttachment(null)}
+      />
     </div>
   );
 };

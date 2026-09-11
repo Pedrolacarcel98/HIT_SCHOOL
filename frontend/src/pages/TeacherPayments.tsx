@@ -40,7 +40,6 @@ interface PaymentStudent {
       lastName: string;
       dni?: string | null;
       address?: string | null;
-      address?: string | null;
     } | null;
   } | null;
   enrollments?: AcademyEnrollment[];
@@ -386,7 +385,6 @@ const TeacherPayments: React.FC = () => {
             const activeEnrollment = student.enrollments?.find((enrollment) => !enrollment.endDate);
             const pastEnrollments = student.enrollments?.filter((enrollment) => enrollment.endDate) || [];
             const isSelected = selectedStudentPaymentId === student.id;
-            const isOnline = student.modality === 'ONLINE';
             const isPresencial = student.modality === 'PRESENCIAL' || !student.modality;
             const hasEnrollment = (student.enrollments?.length || 0) > 0;
             const unpaidCount = student.payments.filter(

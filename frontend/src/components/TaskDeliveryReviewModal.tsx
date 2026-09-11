@@ -9,10 +9,13 @@ import {
   Award,
   BookOpen,
   Download,
+  Eye,
   MessageSquare,
   Sparkles
 } from 'lucide-react';
 import ExamReviewModal from './ExamReviewModal';
+import AttachmentViewerModal, { isAttachmentImage } from './AttachmentViewerModal';
+import type { AttachmentData } from './AttachmentViewerModal';
 
 export interface TaskStepDetail {
   stepId: string;
@@ -139,6 +142,7 @@ const TaskDeliveryReviewModal: React.FC<TaskDeliveryReviewModalProps> = ({
   );
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
+  const [viewingAttachment, setViewingAttachment] = useState<AttachmentData | null>(null);
 
   const handleReviewExamStep = (step: TaskStepDetail) => {
     if (onReviewExam) {
@@ -496,21 +500,55 @@ const TaskDeliveryReviewModal: React.FC<TaskDeliveryReviewModalProps> = ({
                           )}
 
                           {parsed.attachment && parsed.attachment.dataUrl && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem', background: '#fff', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                              <FileText size={18} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-                              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {parsed.attachment.name}
-                              </span>
-                              <a
-                                href={parsed.attachment.dataUrl}
-                                download={parsed.attachment.name}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="btn-secondary"
-                                style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem', textDecoration: 'none' }}
-                              >
-                                <Download size={13} /> Descargar / Abrir Archivo
-                              </a>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', padding: '0.6rem 0.75rem', background: '#fff', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: 0 }}>
+                                  <FileText size={18} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '240px' }} title={parsed.attachment.name}>
+                                    {parsed.attachment.name}
+                                  </span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => setViewingAttachment(parsed.attachment)}
+                                    className="btn-secondary"
+                                    style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                                    title="Ver archivo online sin descargar"
+                                  >
+                                    <Eye size={13} /> Ver en línea
+                                  </button>
+                                  <a
+                                    href={parsed.attachment.dataUrl}
+                                    download={parsed.attachment.name}
+                                    className="btn-secondary"
+                                    style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem', textDecoration: 'none' }}
+                                    title="Descargar archivo"
+                                  >
+                                    <Download size={13} /> Descargar
+                                  </a>
+                                </div>
+                              </div>
+                              {isAttachmentImage(parsed.attachment) && (
+                                <div style={{ marginTop: '0.25rem' }}>
+                                  <img
+                                    src={parsed.attachment.dataUrl}
+                                    alt={parsed.attachment.name}
+                                    onClick={() => setViewingAttachment(parsed.attachment)}
+                                    style={{
+                                      maxHeight: '150px',
+                                      maxWidth: '100%',
+                                      borderRadius: '6px',
+                                      border: '1px solid #e2e8f0',
+                                      cursor: 'pointer',
+                                      objectFit: 'contain',
+                                      background: '#f8fafc',
+                                      display: 'block'
+                                    }}
+                                    title="Clic para ampliar y rotar"
+                                  />
+                                </div>
+                              )}
                             </div>
                           )}
 
@@ -771,6 +809,12 @@ const TaskDeliveryReviewModal: React.FC<TaskDeliveryReviewModalProps> = ({
           onClose={() => setInternalExamReview(null)}
         />
       )}
+
+      {/* Visor Online de Archivos Adjuntos */}
+      <AttachmentViewerModal
+        attachment={viewingAttachment}
+        onClose={() => setViewingAttachment(null)}
+      />
     </div>,
     document.body
   );

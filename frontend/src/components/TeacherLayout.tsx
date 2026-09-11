@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Award, BookOpen, Users, LogOut, GraduationCap, FolderArchive, CircleDollarSign, MessageCircle, Menu, X, Settings, FileText, Home, UserRoundCog } from 'lucide-react';
+import { Award, BookOpen, Users, LogOut, GraduationCap, FolderArchive, CircleDollarSign, MessageCircle, Menu, X, Settings, FileText, Home, UserRoundCog, ListTodo } from 'lucide-react';
 import SettingsModal from './SettingsModal';
 
 const TeacherLayout: React.FC = () => {
@@ -45,6 +45,7 @@ const TeacherLayout: React.FC = () => {
   const getMainBackground = () => {
     if (location.pathname === '/teacher') return '#fef3c7';
     if (location.pathname === '/teacher/courses' || location.pathname.startsWith('/teacher/course/')) return '#e0f2fe';
+    if (location.pathname === '/teacher/tasks') return '#ecfdf5';
     if (location.pathname === '/teacher/grades') return '#f3e8ff';
     if (location.pathname === '/teacher/materials') return '#d1fae5';
     if (location.pathname === '/teacher/students') return '#ffe4e6';
@@ -58,6 +59,7 @@ const TeacherLayout: React.FC = () => {
   const navItems = [
     { label: 'Inicio', path: '/teacher', icon: <Home size={20} />, iconColor: '#d99a00' },
     { label: 'Mis Clases', path: '/teacher/courses', icon: <BookOpen size={20} />, iconColor: '#1682b3' },
+    { label: 'Tareas y Plantillas', path: '/teacher/tasks', icon: <ListTodo size={20} />, iconColor: '#059669' },
     { label: 'Calificaciones', path: '/teacher/grades', icon: <Award size={20} />, iconColor: '#7950b8' },
     { label: 'Material de Clase', path: '/teacher/materials', icon: <FolderArchive size={20} />, iconColor: '#12966b' },
     { label: 'Gestión de Alumnos', path: '/teacher/students', icon: <Users size={20} />, iconColor: '#d14f72' },

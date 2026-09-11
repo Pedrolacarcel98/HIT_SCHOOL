@@ -13,6 +13,7 @@ import StudentsManagement from './pages/StudentsManagement';
 import TeachersManagement from './pages/TeachersManagement';
 import EnrollmentsManagement from './pages/EnrollmentsManagement';
 import MaterialsManagement from './pages/MaterialsManagement';
+import TasksManagement from './pages/TasksManagement';
 import CourseView from './pages/CourseView';
 import StudentCourseView from './pages/StudentCourseView';
 import StudentPayments from './pages/StudentPayments';
@@ -31,6 +32,7 @@ function App() {
           <Route path="/teacher" element={<TeacherLayout />}>
             <Route index element={<TeacherDashboard />} />
             <Route path="courses" element={<TeacherCourses />} />
+            <Route path="tasks" element={<TasksManagement />} />
             <Route path="grades" element={<TeacherGrades />} />
             <Route path="materials" element={<MaterialsManagement />} />
             <Route path="students" element={<StudentsManagement />} />

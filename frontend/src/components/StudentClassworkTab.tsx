@@ -1,9 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CalendarDays, CheckCircle2, ChevronDown, ChevronUp, Clock3, Download, FileText, Search, X, ExternalLink, Send, Link, PenTool, Check } from 'lucide-react';
+import { CalendarDays, CheckCircle2, ChevronDown, ChevronUp, Clock3, Download, Eye, FileText, Search, X, ExternalLink, Send, Link, PenTool, Check, Lock, Layers } from 'lucide-react';
 import DocumentViewer from './DocumentViewer';
+import AudioPlayer from './AudioPlayer';
+import VideoPlayer from './VideoPlayer';
 import FormPlayer from './FormPlayer';
 import ExamReviewModal from './ExamReviewModal';
+import AttachmentViewerModal, { isAttachmentImage } from './AttachmentViewerModal';
+import type { AttachmentData } from './AttachmentViewerModal';
 import { useParent } from '../context/ParentContext';
 import type { ReviewQuestion } from './ExamReviewModal';
 
@@ -153,17 +157,34 @@ const getResourceDownloadUrl = (material: { type: string; url?: string | null })
   return rawUrl;
 };
 
-const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
+const getImageDisplayUrl = (url?: string | null) => {
+  if (!url) return '';
+  const driveFileId = url.match(/drive\.google\.com\/file\/d\/([^/?]+)/)?.[1] || url.match(/[?&]id=([^&/?]+)/)?.[1] || url.match(/lh3\.googleusercontent\.com\/d\/([^=/?]+)/)?.[1];
+  return driveFileId ? `https://lh3.googleusercontent.com/d/${driveFileId}=w1600` : url;
+};
+
+interface StudentClassworkTabProps {
+  courseId: string;
+  viewMode?: 'PENDING' | 'COMPLETED';
+}
+
+const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, viewMode = 'PENDING' }) => {
   const [assignedMaterials] = useState<AssignedMaterial[]>([]);
   const [structuredTasks, setStructuredTasks] = useState<StructuredTask[]>([]);
+  const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | AssignedMaterial['status']>('ALL');
-  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>(() => Object.fromEntries(SKILL_CATEGORIES.map((category) => [category.id, false])));
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>(() => Object.fromEntries(SKILL_CATEGORIES.map((category) => [category.id, true])));
   const [viewingMaterial, setViewingMaterial] = useState<AssignedMaterial | null>(null);
   const [reviewingMaterial, setReviewingMaterial] = useState<AssignedMaterial | null>(null);
+  const [viewingAttachment, setViewingAttachment] = useState<AttachmentData | null>(null);
   const { selectedStudentId } = useParent();
   const userRole = localStorage.getItem('userRole');
+
+  const toggleTaskExpand = (taskId: string) => {
+    setExpandedTasks((prev) => ({ ...prev, [taskId]: !prev[taskId] }));
+  };
 
   // Formulario de Entrega
   const [deliveryType, setDeliveryType] = useState<'TEXT' | 'LINK' | 'SIMPLE'>('TEXT');
@@ -173,9 +194,9 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
-  const fetchAssignedMaterials = async () => {
+  const fetchAssignedMaterials = async (isBackground = false) => {
     try {
-      setLoading(true);
+      if (!isBackground) setLoading(true);
       const token = localStorage.getItem('token');
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
       const studentParam = selectedStudentId ? `?studentId=${selectedStudentId}` : '';
@@ -186,7 +207,7 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     } catch (err) {
       console.error(err);
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
     }
   };
 
@@ -194,22 +215,34 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     fetchAssignedMaterials();
   }, [courseId, selectedStudentId]);
 
+  const isTaskCompleted = (task: StructuredTask) => {
+    return task.steps.length > 0 && task.steps.every((s) => Boolean(s.isCompleted));
+  };
+
+  const filteredTasksByMode = useMemo(() => {
+    return structuredTasks.filter((task) => {
+      const isDone = isTaskCompleted(task);
+      return viewMode === 'COMPLETED' ? isDone : !isDone;
+    });
+  }, [structuredTasks, viewMode]);
+
   const filteredMaterials = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
     return assignedMaterials.filter((material) => {
       const matchesSearch = !query || `${material.title} ${material.description} ${material.category}`.toLowerCase().includes(query);
       const matchesStatus = statusFilter === 'ALL' || material.status === statusFilter;
-      return matchesSearch && matchesStatus;
+      const matchesMode = viewMode === 'COMPLETED' ? material.status === 'COMPLETED' : material.status !== 'COMPLETED';
+      return matchesSearch && matchesStatus && matchesMode;
     });
-  }, [searchTerm, statusFilter, assignedMaterials]);
+  }, [searchTerm, statusFilter, assignedMaterials, viewMode]);
 
   const groupedMaterials = useMemo(() => SKILL_CATEGORIES.map((category) => ({
     ...category,
     materials: filteredMaterials.filter((material) => material.category === category.id),
-    structuredTasks: structuredTasks.filter((task) => (task.category || 'GRAMMAR_VOCABULARY') === category.id)
-  })), [filteredMaterials, structuredTasks]);
+    structuredTasks: filteredTasksByMode.filter((task) => (task.category || 'GRAMMAR_VOCABULARY') === category.id)
+  })), [filteredMaterials, filteredTasksByMode]);
 
-  const uncategorizedStructuredTasks = useMemo(() => structuredTasks.filter((task) => !SKILL_CATEGORIES.some((category) => category.id === (task.category || 'GRAMMAR_VOCABULARY'))), [structuredTasks]);
+  const uncategorizedStructuredTasks = useMemo(() => filteredTasksByMode.filter((task) => !SKILL_CATEGORIES.some((category) => category.id === (task.category || 'GRAMMAR_VOCABULARY'))), [filteredTasksByMode]);
 
   const toggleCategory = (categoryId: string) => setExpandedCategories((categories) => ({ ...categories, [categoryId]: !categories[categoryId] }));
 
@@ -222,7 +255,13 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     setDeliveryType('TEXT');
   };
 
+  const isStepBlocked = (step: any, task: StructuredTask) => {
+    if (!task.isSequential || step.isCompleted) return false;
+    return task.steps.some((s) => s.order < step.order && !s.isCompleted);
+  };
+
   const openActionModal = (step: any, task: StructuredTask) => {
+    if (isStepBlocked(step, task)) return;
     const submission = step.submission || null;
     setViewingMaterial({
       id: step.id,
@@ -267,7 +306,7 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
         body: JSON.stringify({})
       });
       if (res.ok) {
-        await fetchAssignedMaterials();
+        await fetchAssignedMaterials(true);
       }
     } catch (err) {
       console.error(err);
@@ -275,7 +314,7 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   };
 
   const handleTick = (step: any, task: StructuredTask) => {
-    if (step.isCompleted) return;
+    if (step.isCompleted || isStepBlocked(step, task)) return;
 
     if (step.material || step.isEvaluable) {
       openActionModal(step, task);
@@ -289,7 +328,7 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   };
 
   const openStructuredResource = (step: StructuredTask['steps'][number], task: StructuredTask) => {
-    if (!step.material) return;
+    if (!step.material || isStepBlocked(step, task)) return;
     if (step.isCompleted || step.submission) {
       openActionModal(step, task);
       return;
@@ -366,7 +405,7 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
         return;
       }
 
-      await fetchAssignedMaterials();
+      await fetchAssignedMaterials(true);
       setViewingMaterial(null);
       setAttachmentFile(null);
     } catch (err) {
@@ -430,8 +469,7 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
         body: JSON.stringify(body)
       });
       if (res.ok) {
-        await fetchAssignedMaterials();
-        setViewingMaterial(null);
+        await fetchAssignedMaterials(true);
       }
     } catch (err) {
       console.error(err);
@@ -463,11 +501,21 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
 
       {loading ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: '4rem 2rem', color: 'var(--text-muted)' }}>Cargando tareas de la clase...</div>
-      ) : filteredMaterials.length === 0 && structuredTasks.length === 0 ? (
+      ) : filteredMaterials.length === 0 && filteredTasksByMode.length === 0 ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-          <FileText size={46} style={{ color: 'var(--primary)', opacity: 0.45, marginBottom: '1rem' }} />
-          <h2 style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>No hay tareas para mostrar</h2>
-          <p style={{ color: 'var(--text-muted)' }}>Prueba con otra búsqueda o cambia el filtro de estado.</p>
+          {viewMode === 'COMPLETED' ? (
+            <>
+              <CheckCircle2 size={46} style={{ color: '#16a34a', opacity: 0.7, marginBottom: '1rem' }} />
+              <h2 style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>No hay tareas completadas todavía</h2>
+              <p style={{ color: 'var(--text-muted)' }}>Cuando completes todos los pasos de una tarea de clase, se trasladará automáticamente a esta pestaña.</p>
+            </>
+          ) : (
+            <>
+              <FileText size={46} style={{ color: 'var(--primary)', opacity: 0.45, marginBottom: '1rem' }} />
+              <h2 style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>No hay tareas pendientes</h2>
+              <p style={{ color: 'var(--text-muted)' }}>{searchTerm ? 'Prueba con otra búsqueda o cambia el filtro de estado.' : '¡Genial! Todas las tareas de esta clase están al día.'}</p>
+            </>
+          )}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -502,35 +550,15 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                   <span style={{ padding: '0.2rem 0.55rem', borderRadius: '12px', background: 'var(--primary-light)', color: 'var(--primary-text)', border: '1px solid var(--primary-border)', fontSize: '0.72rem', fontWeight: 700 }}>{material.level}</span>
                 </div>
                 <h2 style={{ fontSize: '1.1rem', lineHeight: 1.35, marginBottom: '0.55rem' }}>{material.title}</h2>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.86rem', lineHeight: 1.45, marginBottom: '1.25rem', flex: 1 }}>{material.description}</p>
-                <div style={{ display: 'grid', gap: '0.45rem', borderTop: '1px solid var(--border)', paddingTop: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  {material.deadline && (() => {
-                    let color = 'var(--text-muted)';
-                    if (material.status === 'PENDING' && material.rawDeadline) {
-                      const diff = new Date(material.rawDeadline).getTime() - new Date().getTime();
-                      const hours = diff / (1000 * 60 * 60);
-                      if (hours < 0) color = '#e53e3e';
-                      else if (hours < 48) color = '#d69e2e';
-                    }
-                    return (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color, fontWeight: color !== 'var(--text-muted)' ? 'bold' : 'normal' }}>
-                        <CalendarDays size={14} /> Entrega: {material.deadline}
-                      </span>
-                    );
-                  })()}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginTop: '1.25rem' }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: material.status === 'COMPLETED' ? '#24583e' : '#8d5b12', background: material.status === 'COMPLETED' ? 'var(--primary-light)' : '#fef7e8', padding: '0.3rem 0.65rem', borderRadius: '14px', border: material.status === 'COMPLETED' ? '1px solid var(--primary-border)' : '1px solid #fae0b0', fontSize: '0.82rem', fontWeight: 700 }}>
-                    {material.status === 'COMPLETED' ? <><CheckCircle2 size={16} /> Entregado</> : <><Clock3 size={16} /> Pendiente</>}
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', lineHeight: 1.5, margin: '0 0 1.25rem', flex: 1 }}>{material.description || 'Sin descripción adicional para este recurso.'}</p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '1rem', borderTop: '1px solid var(--border)', marginTop: 'auto' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', color: material.status === 'COMPLETED' ? '#2f855a' : '#c05621', fontWeight: 600 }}>
+                    {material.status === 'COMPLETED' ? <CheckCircle2 size={16} /> : <Clock3 size={16} />}
+                    {material.status === 'COMPLETED' ? 'Completado' : 'Pendiente'}
                   </span>
                   <button
-                    onClick={() => {
-                      if (material.status === 'COMPLETED' && isExam) {
-                        setReviewingMaterial(material);
-                      } else {
-                        openMaterialModal(material);
-                      }
-                    }}
+                    type="button"
+                    onClick={() => openMaterialModal(material)}
                     className="btn-primary"
                     style={{ padding: '0.55rem 0.9rem', fontSize: '0.84rem' }}
                   >
@@ -544,59 +572,226 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
               {group.structuredTasks.map((task) => {
                 const completedCount = task.steps.filter((step) => step.isCompleted).length;
                 const progress = task.steps.length ? Math.round((completedCount / task.steps.length) * 100) : 0;
+                const isTaskExpanded = Boolean(expandedTasks[task.id]);
                 return (
                 <article key={task.id} className="glass-panel" style={{ marginTop: '1rem', padding: '1rem 1.15rem', border: '1px solid var(--primary-border)' }}>
-                  <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+                  <header
+                    onClick={() => toggleTaskExpand(task.id)}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      flexWrap: 'wrap',
+                      marginBottom: isTaskExpanded ? '0.75rem' : 0,
+                      cursor: 'pointer'
+                    }}
+                  >
                     <div>
                       <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1rem' }}>{task.title}</h3>
                       <span style={{ display: 'block', marginTop: '0.25rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>{completedCount} de {task.steps.length} pasos completados - {progress}%</span>
                     </div>
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
                       {task.publishAt && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.55rem', borderRadius: '12px', background: '#eef2ff', border: '1px solid #c7d2fe', color: '#3730a3', fontSize: '0.72rem', fontWeight: 700 }}><Clock3 size={13} /> Programada: {formatDateTime(task.publishAt)}</span>}
                       {task.dueDate && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.55rem', borderRadius: '12px', background: '#fef3c7', border: '1px solid #fde68a', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}><CalendarDays size={13} /> Entrega: {formatDateTime(task.dueDate)}</span>}
-                      {task.isSequential && <span style={{ padding: '0.2rem 0.55rem', borderRadius: '12px', background: '#fef3c7', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}>Paso a paso</span>}
+                      {task.isSequential && (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.55rem', borderRadius: '12px', background: '#fef3c7', border: '1px solid #fde68a', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}>
+                          <Layers size={13} /> Paso a paso
+                        </span>
+                      )}
                       <span style={{ padding: '0.2rem 0.55rem', borderRadius: '12px', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.72rem', fontWeight: 700 }}>{task.steps.length} pasos</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleTaskExpand(task.id);
+                        }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.25rem',
+                          padding: '0.25rem 0.65rem',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border)',
+                          background: 'var(--surface-alt)',
+                          color: 'var(--text-main)',
+                          fontSize: '0.78rem',
+                          fontWeight: 600,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {isTaskExpanded ? <><ChevronUp size={14} /> Plegar</> : <><ChevronDown size={14} /> Desplegar</>}
+                      </button>
                     </div>
                   </header>
-                  <div style={{ width: '100%', height: '8px', borderRadius: '999px', overflow: 'hidden', background: 'var(--surface-alt)', border: '1px solid var(--border)', marginBottom: '0.75rem' }}>
-                    <div style={{ width: `${progress}%`, height: '100%', background: 'var(--primary)', transition: 'width 0.2s ease' }} />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-                    {task.steps.map((step) => (
-                      <div key={step.id} style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.75rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)' }}>
-                        <input
-                          type="checkbox"
-                          checked={Boolean(step.isCompleted)}
-                          disabled={Boolean(step.isCompleted)}
-                          onChange={(event) => {
-                            if (event.target.checked) handleTick(step, task);
-                          }}
-                          style={{ width: '20px', height: '20px', cursor: step.isCompleted ? 'default' : 'pointer', accentColor: 'var(--primary)' }}
-                        />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <strong style={{ fontSize: '0.9rem', color: step.isCompleted ? 'var(--text-muted)' : 'var(--text-main)', textDecoration: step.isCompleted ? 'line-through' : 'none' }}>{step.order}. {step.title}</strong>
-                          {step.material && <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-                            <button type="button" onClick={() => openStructuredResource(step, task)} disabled={!step.material.url && step.material.type !== 'FORM'} style={{ display: 'inline-flex', marginTop: '0.45rem', padding: '0.35rem 0.65rem', borderRadius: '10px', border: '1px solid var(--primary-border)', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>{step.material.title}</button>
-                            {step.material.type === 'DOCUMENT' && step.material.url && <a href={getResourceDownloadUrl(step.material)} download title="Descargar documento en PDF" aria-label={`Descargar ${step.material.title} en PDF`} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginTop: '0.45rem', padding: '0.35rem', borderRadius: '8px', border: '1px solid var(--primary-border)', background: 'var(--surface)', color: 'var(--primary-text)' }}><Download size={15} /></a>}
-                          </div>}
-                          {step.submission?.content && (() => {
-                            const submission = parseSubmissionContent(step.submission.content);
-                            return (
-                              <div style={{ marginTop: '0.5rem', padding: '0.55rem 0.7rem', borderRadius: '7px', background: 'var(--surface)', border: '1px solid var(--primary-border)', fontSize: '0.78rem', color: 'var(--text-main)' }}>
-                                <strong style={{ display: 'block', color: 'var(--primary-text)', marginBottom: '0.2rem' }}>Tu entrega:</strong>
-                                {submission.text && <span style={{ display: 'block', whiteSpace: 'pre-wrap' }}>{submission.text}</span>}
-                                {submission.link && <a href={submission.link} target="_blank" rel="noopener noreferrer" style={{ display: 'block', color: 'var(--primary)', fontWeight: 700, textDecoration: 'none' }}>Abrir enlace entregado</a>}
-                                {submission.attachment?.name && <span style={{ display: 'block', color: 'var(--primary-text)', fontWeight: 600 }}>Archivo: {submission.attachment.name}</span>}
-                              </div>
-                            );
-                          })()}
-                        </div>
+                  {isTaskExpanded && (
+                    <>
+                      <div style={{ width: '100%', height: '8px', borderRadius: '999px', overflow: 'hidden', background: 'var(--surface-alt)', border: '1px solid var(--border)', marginBottom: '0.75rem' }}>
+                        <div style={{ width: `${progress}%`, height: '100%', background: 'var(--primary)', transition: 'width 0.2s ease' }} />
                       </div>
-                    ))}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                    {(() => {
+                      let firstIncompleteFound = false;
+                      return task.steps.map((step) => {
+                        const isBlocked = Boolean(task.isSequential && firstIncompleteFound && !step.isCompleted);
+                        if (!step.isCompleted) firstIncompleteFound = true;
+
+                        return (
+                          <div
+                            key={step.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.85rem',
+                              padding: '0.75rem',
+                              border: isBlocked ? '1px dashed var(--border)' : '1px solid var(--border)',
+                              borderRadius: '8px',
+                              background: isBlocked ? 'var(--surface)' : 'var(--surface-alt)',
+                              opacity: isBlocked ? 0.65 : 1
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={Boolean(step.isCompleted)}
+                              disabled={isBlocked || Boolean(step.isCompleted)}
+                              onChange={(event) => {
+                                if (event.target.checked) handleTick(step, task);
+                              }}
+                              style={{
+                                width: '20px',
+                                height: '20px',
+                                cursor: (isBlocked || step.isCompleted) ? 'default' : 'pointer',
+                                accentColor: 'var(--primary)'
+                              }}
+                            />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                <strong
+                                  style={{
+                                    fontSize: '0.9rem',
+                                    color: step.isCompleted ? 'var(--text-muted)' : 'var(--text-main)',
+                                    textDecoration: step.isCompleted ? 'line-through' : 'none'
+                                  }}
+                                >
+                                  {step.order}. {step.title}
+                                </strong>
+                                {isBlocked && (
+                                  <span
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '0.3rem',
+                                      fontSize: '0.74rem',
+                                      fontWeight: 600,
+                                      padding: '0.15rem 0.5rem',
+                                      borderRadius: '8px',
+                                      background: '#f1f5f9',
+                                      color: '#64748b',
+                                      border: '1px solid #cbd5e1'
+                                    }}
+                                  >
+                                    <Lock size={12} /> Bloqueado: completa el paso anterior
+                                  </span>
+                                )}
+                              </div>
+
+                              {step.material && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => openStructuredResource(step, task)}
+                                    disabled={isBlocked || (!step.material.url && step.material.type !== 'FORM')}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '0.35rem',
+                                      padding: '0.35rem 0.65rem',
+                                      borderRadius: '10px',
+                                      border: isBlocked ? '1px solid var(--border)' : '1px solid var(--primary-border)',
+                                      background: isBlocked ? 'var(--surface-alt)' : 'var(--primary-light)',
+                                      color: isBlocked ? 'var(--text-muted)' : 'var(--primary-text)',
+                                      fontSize: '0.78rem',
+                                      fontWeight: 700,
+                                      cursor: isBlocked ? 'not-allowed' : 'pointer',
+                                      opacity: isBlocked ? 0.6 : 1
+                                    }}
+                                  >
+                                    {isBlocked && <Lock size={12} />}
+                                    {step.material.title}
+                                  </button>
+                                  {!isBlocked && step.material.type === 'DOCUMENT' && step.material.url && (
+                                    <a
+                                      href={getResourceDownloadUrl(step.material)}
+                                      download
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      title="Descargar documento en PDF"
+                                      aria-label={`Descargar ${step.material.title} en PDF`}
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        padding: '0.35rem',
+                                        borderRadius: '8px',
+                                        border: '1px solid var(--primary-border)',
+                                        background: 'var(--surface)',
+                                        color: 'var(--primary-text)'
+                                      }}
+                                    >
+                                      <Download size={15} />
+                                    </a>
+                                  )}
+                                </div>
+                              )}
+
+                              {(() => {
+                                const isExam = step.material?.type === 'FORM' || Boolean(parseSavedExam(step.submission?.content));
+                                if (isExam && (step.isCompleted || step.submission)) {
+                                  return (
+                                    <div style={{ marginTop: '0.45rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.25rem 0.65rem', borderRadius: '12px', background: '#ecfdf5', border: '1px solid #a7f3d0', fontSize: '0.78rem', color: '#15803d', fontWeight: 600 }}>
+                                      <CheckCircle2 size={13} />
+                                      <span>
+                                        Examen entregado y corregido
+                                        {typeof step.submission?.grade === 'number' ? ` · Nota: ${step.submission.grade.toFixed(1)}/10` : ''}
+                                      </span>
+                                    </div>
+                                  );
+                                }
+                                if (step.submission?.content) {
+                                  const submission = parseSubmissionContent(step.submission.content);
+                                  if (submission.text || submission.link || submission.attachment?.name) {
+                                    return (
+                                      <div style={{ marginTop: '0.5rem', padding: '0.55rem 0.7rem', borderRadius: '7px', background: 'var(--surface)', border: '1px solid var(--primary-border)', fontSize: '0.78rem', color: 'var(--text-main)' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: 'var(--primary-text)', fontWeight: 700, marginBottom: '0.2rem' }}>
+                                          <CheckCircle2 size={13} /> Tu entrega:
+                                        </div>
+                                        {submission.text && <span style={{ display: 'block', whiteSpace: 'pre-wrap' }}>{submission.text}</span>}
+                                        {submission.link && <a href={submission.link} target="_blank" rel="noopener noreferrer" style={{ display: 'block', color: 'var(--primary)', fontWeight: 700, textDecoration: 'none' }}>Abrir enlace entregado</a>}
+                                        {submission.attachment?.name && <span style={{ display: 'block', color: 'var(--primary-text)', fontWeight: 600 }}>Archivo: {submission.attachment.name}</span>}
+                                      </div>
+                                    );
+                                  }
+                                }
+                                if (step.isCompleted) {
+                                  return (
+                                    <div style={{ marginTop: '0.45rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.2rem 0.55rem', borderRadius: '10px', background: '#ecfdf5', border: '1px solid #a7f3d0', fontSize: '0.75rem', color: '#15803d', fontWeight: 600 }}>
+                                      <CheckCircle2 size={12} /> Completado
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })()}
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
-                </article>
-              );
-              })}</>
+                </>
+              )}
+            </article>
+          );
+          })}</>
               )}
               </div>
               </>}
@@ -615,74 +810,225 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
             {uncategorizedStructuredTasks.map((task) => {
               const completedCount = task.steps.filter((step) => step.isCompleted).length;
               const progress = task.steps.length ? Math.round((completedCount / task.steps.length) * 100) : 0;
+              const isTaskExpanded = Boolean(expandedTasks[task.id]);
               return (
               <article key={task.id} className="glass-panel" style={{ padding: '1rem 1.15rem', border: '1px solid var(--primary-border)' }}>
-                <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+                <header
+                  onClick={() => toggleTaskExpand(task.id)}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    flexWrap: 'wrap',
+                    marginBottom: isTaskExpanded ? '0.75rem' : 0,
+                    cursor: 'pointer'
+                  }}
+                >
                   <div>
                     <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1rem' }}>{task.title}</h3>
                     <span style={{ display: 'block', marginTop: '0.25rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>{completedCount} de {task.steps.length} pasos completados - {progress}%</span>
                   </div>
-                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
                     {task.publishAt && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.55rem', borderRadius: '12px', background: '#eef2ff', border: '1px solid #c7d2fe', color: '#3730a3', fontSize: '0.72rem', fontWeight: 700 }}><Clock3 size={13} /> Programada: {formatDateTime(task.publishAt)}</span>}
                     {task.dueDate && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.55rem', borderRadius: '12px', background: '#fef3c7', border: '1px solid #fde68a', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}><CalendarDays size={13} /> Entrega: {formatDateTime(task.dueDate)}</span>}
-                    {task.isSequential && <span style={{ padding: '0.2rem 0.55rem', borderRadius: '12px', background: '#fef3c7', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}>Paso a paso</span>}
+                    {task.isSequential && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.55rem', borderRadius: '12px', background: '#fef3c7', border: '1px solid #fde68a', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}>
+                        <Layers size={13} /> Paso a paso
+                      </span>
+                    )}
                     <span style={{ padding: '0.2rem 0.55rem', borderRadius: '12px', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.72rem', fontWeight: 700 }}>{task.steps.length} pasos</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleTaskExpand(task.id);
+                      }}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.25rem',
+                        padding: '0.25rem 0.65rem',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border)',
+                        background: 'var(--surface-alt)',
+                        color: 'var(--text-main)',
+                        fontSize: '0.78rem',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {isTaskExpanded ? <><ChevronUp size={14} /> Plegar</> : <><ChevronDown size={14} /> Desplegar</>}
+                    </button>
                   </div>
                 </header>
-                <div style={{ width: '100%', height: '8px', borderRadius: '999px', overflow: 'hidden', background: 'var(--surface-alt)', border: '1px solid var(--border)', marginBottom: '0.75rem' }}>
-                  <div style={{ width: `${progress}%`, height: '100%', background: 'var(--primary)', transition: 'width 0.2s ease' }} />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                {isTaskExpanded && (
+                  <>
+                    <div style={{ width: '100%', height: '8px', borderRadius: '999px', overflow: 'hidden', background: 'var(--surface-alt)', border: '1px solid var(--border)', marginBottom: '0.75rem' }}>
+                      <div style={{ width: `${progress}%`, height: '100%', background: 'var(--primary)', transition: 'width 0.2s ease' }} />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
                   {(() => {
                     let firstIncompleteFound = false;
                     return task.steps.map((step) => {
-                      const isBlocked = task.isSequential && firstIncompleteFound;
+                      const isBlocked = Boolean(task.isSequential && firstIncompleteFound && !step.isCompleted);
                       if (!step.isCompleted) firstIncompleteFound = true;
                       
                       return (
-                        <div key={step.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.85rem', padding: '0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)', opacity: isBlocked ? 0.6 : 1, pointerEvents: isBlocked ? 'none' : 'auto' }}>
-                          <div style={{ paddingTop: '0.15rem' }}>
-                            <input 
-                              type="checkbox" 
-                              checked={step.isCompleted} 
-                              disabled={isBlocked || step.isCompleted}
-                              onChange={(e) => {
-                                if (e.target.checked) handleTick(step, task);
-                              }}
-                              style={{ width: '22px', height: '22px', cursor: (isBlocked || step.isCompleted) ? 'default' : 'pointer', accentColor: 'var(--primary)' }}
-                            />
-                          </div>
-                          
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', color: 'var(--text-main)', fontSize: '0.95rem' }}>
-                              <span style={{ fontWeight: 600, textDecoration: step.isCompleted ? 'line-through' : 'none', color: step.isCompleted ? 'var(--text-muted)' : 'inherit' }}>
+                        <div
+                          key={step.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.85rem',
+                            padding: '0.75rem',
+                            border: isBlocked ? '1px dashed var(--border)' : '1px solid var(--border)',
+                            borderRadius: '8px',
+                            background: isBlocked ? 'var(--surface)' : 'var(--surface-alt)',
+                            opacity: isBlocked ? 0.65 : 1
+                          }}
+                        >
+                          <input 
+                            type="checkbox" 
+                            checked={Boolean(step.isCompleted)} 
+                            disabled={isBlocked || Boolean(step.isCompleted)}
+                            onChange={(e) => {
+                              if (e.target.checked) handleTick(step, task);
+                            }}
+                            style={{
+                              width: '20px',
+                              height: '20px',
+                              cursor: (isBlocked || step.isCompleted) ? 'default' : 'pointer',
+                              accentColor: 'var(--primary)'
+                            }}
+                          />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                              <strong
+                                style={{
+                                  fontSize: '0.9rem',
+                                  color: step.isCompleted ? 'var(--text-muted)' : 'var(--text-main)',
+                                  textDecoration: step.isCompleted ? 'line-through' : 'none'
+                                }}
+                              >
                                 {step.order}. {step.title}
-                              </span>
+                              </strong>
+                              {isBlocked && (
+                                <span
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.3rem',
+                                    fontSize: '0.74rem',
+                                    fontWeight: 600,
+                                    padding: '0.15rem 0.5rem',
+                                    borderRadius: '8px',
+                                    background: '#f1f5f9',
+                                    color: '#64748b',
+                                    border: '1px solid #cbd5e1'
+                                  }}
+                                >
+                                  <Lock size={12} /> Bloqueado: completa el paso anterior
+                                </span>
+                              )}
                             </div>
                             
                             {step.material && (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
                                 <button 
                                   type="button" 
                                   onClick={() => openStructuredResource(step, task)}
-                                  disabled={!step.material?.url && step.material?.type !== 'FORM'} 
-                                  style={{ padding: '0.35rem 0.65rem', borderRadius: '10px', border: '1px solid var(--primary-border)', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.78rem', fontWeight: 700, cursor: (step.material?.url || step.material?.type === 'FORM') ? 'pointer' : 'default', opacity: (step.material?.url || step.material?.type === 'FORM') ? 1 : 0.6 }}
+                                  disabled={isBlocked || (!step.material?.url && step.material?.type !== 'FORM')} 
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.35rem',
+                                    padding: '0.35rem 0.65rem',
+                                    borderRadius: '10px',
+                                    border: isBlocked ? '1px solid var(--border)' : '1px solid var(--primary-border)',
+                                    background: isBlocked ? 'var(--surface-alt)' : 'var(--primary-light)',
+                                    color: isBlocked ? 'var(--text-muted)' : 'var(--primary-text)',
+                                    fontSize: '0.78rem',
+                                    fontWeight: 700,
+                                    cursor: isBlocked ? 'not-allowed' : 'pointer',
+                                    opacity: isBlocked ? 0.6 : 1
+                                  }}
                                 >
+                                  {isBlocked && <Lock size={12} />}
                                   {step.material.title}
                                 </button>
-                                {step.material.type === 'DOCUMENT' && step.material.url && <a href={getResourceDownloadUrl(step.material)} download title="Descargar documento en PDF" aria-label={`Descargar ${step.material.title} en PDF`} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0.35rem', borderRadius: '8px', border: '1px solid var(--primary-border)', background: 'var(--surface)', color: 'var(--primary-text)' }}><Download size={15} /></a>}
-                                
+                                {!isBlocked && step.material.type === 'DOCUMENT' && step.material.url && (
+                                  <a
+                                    href={getResourceDownloadUrl(step.material)}
+                                    download
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title="Descargar documento en PDF"
+                                    aria-label={`Descargar ${step.material.title} en PDF`}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      padding: '0.35rem',
+                                      borderRadius: '8px',
+                                      border: '1px solid var(--primary-border)',
+                                      background: 'var(--surface)',
+                                      color: 'var(--primary-text)'
+                                    }}
+                                  >
+                                    <Download size={15} />
+                                  </a>
+                                )}
                               </div>
                             )}
+                            {(() => {
+                              const isExam = step.material?.type === 'FORM' || Boolean(parseSavedExam(step.submission?.content));
+                              if (isExam && (step.isCompleted || step.submission)) {
+                                return (
+                                  <div style={{ marginTop: '0.45rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.25rem 0.65rem', borderRadius: '12px', background: '#ecfdf5', border: '1px solid #a7f3d0', fontSize: '0.78rem', color: '#15803d', fontWeight: 600 }}>
+                                    <CheckCircle2 size={13} />
+                                    <span>
+                                      Examen entregado y corregido
+                                      {typeof step.submission?.grade === 'number' ? ` · Nota: ${step.submission.grade.toFixed(1)}/10` : ''}
+                                    </span>
+                                  </div>
+                                );
+                              }
+                              if (step.submission?.content) {
+                                const submission = parseSubmissionContent(step.submission.content);
+                                if (submission.text || submission.link || submission.attachment?.name) {
+                                  return (
+                                    <div style={{ marginTop: '0.5rem', padding: '0.55rem 0.7rem', borderRadius: '7px', background: 'var(--surface)', border: '1px solid var(--primary-border)', fontSize: '0.78rem', color: 'var(--text-main)' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: 'var(--primary-text)', fontWeight: 700, marginBottom: '0.2rem' }}>
+                                        <CheckCircle2 size={13} /> Tu entrega:
+                                      </div>
+                                      {submission.text && <span style={{ display: 'block', whiteSpace: 'pre-wrap' }}>{submission.text}</span>}
+                                      {submission.link && <a href={submission.link} target="_blank" rel="noopener noreferrer" style={{ display: 'block', color: 'var(--primary)', fontWeight: 700, textDecoration: 'none' }}>Abrir enlace entregado</a>}
+                                      {submission.attachment?.name && <span style={{ display: 'block', color: 'var(--primary-text)', fontWeight: 600 }}>Archivo: {submission.attachment.name}</span>}
+                                    </div>
+                                  );
+                                }
+                              }
+                              if (step.isCompleted) {
+                                return (
+                                  <div style={{ marginTop: '0.45rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.2rem 0.55rem', borderRadius: '10px', background: '#ecfdf5', border: '1px solid #a7f3d0', fontSize: '0.75rem', color: '#15803d', fontWeight: 600 }}>
+                                    <CheckCircle2 size={12} /> Completado
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()}
                           </div>
                         </div>
                       );
                     });
                   })()}
                 </div>
-              </article>
-            );
-            })}
+                </>
+              )}
+            </article>
+          );
+          })}
           </div>
         </section>
       )}
@@ -732,6 +1078,8 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                     description={viewingMaterial.description} 
                     questions={viewingMaterial.formData.questions} 
                     onFinish={handleFormFinish} 
+                    onClose={() => setViewingMaterial(null)}
+                    allowRetry={false}
                   />
                 )
               ) : (
@@ -749,9 +1097,40 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                   )}
 
                   {viewingMaterial.url && (
-                    <div>
-                      <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.92rem', color: 'var(--text-muted)' }}>Material de consulta:</h4>
-                      <DocumentViewer url={viewingMaterial.url} title={viewingMaterial.title} />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <h4 style={{ margin: 0, fontSize: '0.92rem', color: 'var(--text-muted)' }}>Material de consulta:</h4>
+                        <a
+                          href={getResourceOpenUrl({ type: viewingMaterial.type || 'DOCUMENT', url: viewingMaterial.url })}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn-secondary"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.35rem',
+                            fontSize: '0.8rem',
+                            padding: '0.3rem 0.65rem',
+                            textDecoration: 'none'
+                          }}
+                        >
+                          <ExternalLink size={13} /> Abrir en pestaña nueva
+                        </a>
+                      </div>
+                      {viewingMaterial.type === 'VIDEO' ? (
+                        <VideoPlayer url={viewingMaterial.url} title={viewingMaterial.title} />
+                      ) : viewingMaterial.type === 'AUDIO' ? (
+                        <AudioPlayer src={viewingMaterial.url} title={viewingMaterial.title} />
+                      ) : viewingMaterial.type === 'IMAGE' ? (
+                        <img
+                          src={getImageDisplayUrl(viewingMaterial.url)}
+                          alt={viewingMaterial.title}
+                          referrerPolicy="no-referrer"
+                          style={{ maxWidth: '100%', maxHeight: 450, borderRadius: '8px', objectFit: 'contain', display: 'block', margin: '0 auto' }}
+                        />
+                      ) : (
+                        <DocumentViewer url={viewingMaterial.url} title={viewingMaterial.title} />
+                      )}
                     </div>
                   )}
 
@@ -800,7 +1179,7 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                         {(() => {
                           const submissionDetails = parseSubmissionContent(viewingMaterial.submissionContent);
-                          const hasLink = Boolean(submissionDetails.link);
+                          const renderedLink = submissionDetails.link?.trim();
                           const hasAttachment = Boolean(submissionDetails.attachment && submissionDetails.attachment.dataUrl);
                           const renderedText = submissionDetails.text?.trim();
 
@@ -809,61 +1188,95 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                               <span style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
                                 Contenido que enviaste:
                               </span>
-                              {hasLink ? (
-                                <a
-                                  href={submissionDetails.link!}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '0.4rem',
-                                    color: 'var(--primary)',
-                                    fontWeight: 600,
-                                    textDecoration: 'none',
-                                    padding: '0.5rem 0.85rem',
-                                    background: 'var(--surface)',
-                                    borderRadius: '6px',
-                                    border: '1px solid var(--border)'
-                                  }}
-                                >
-                                  <ExternalLink size={15} /> Abrir documento entregado en la nube
-                                </a>
-                              ) : renderedText ? (
-                                <p style={{ margin: 0, color: 'var(--text-main)', fontSize: '0.92rem', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
-                                  {renderedText}
-                                </p>
-                              ) : hasAttachment ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
-                                  <span style={{ color: 'var(--text-main)', fontSize: '0.92rem' }}>Archivo adjunto enviado:</span>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                {renderedLink && (
                                   <a
-                                    href={submissionDetails.attachment!.dataUrl}
+                                    href={renderedLink}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    download={submissionDetails.attachment!.name}
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '0.4rem',
+                                      color: 'var(--primary)',
+                                      fontWeight: 700,
+                                      fontSize: '0.92rem',
+                                      textDecoration: 'none',
+                                      padding: '0.65rem 0.9rem',
+                                      background: 'var(--surface-alt)',
+                                      borderRadius: '8px',
+                                      border: '1px solid var(--border)'
+                                    }}
                                   >
-                                    <FileText size={15} /> {submissionDetails.attachment!.name}
+                                    <ExternalLink size={15} /> Abrir documento entregado en la nube
                                   </a>
-                                </div>
-                              ) : (
-                                <p style={{ margin: 0, color: 'var(--text-main)', fontSize: '0.92rem', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
-                                  Tarea marcada como completada.
-                                </p>
-                              )}
-                              {hasAttachment && submissionDetails.attachment && (
-                                <div style={{ marginTop: '0.75rem' }}>
-                                  <a
-                                    href={submissionDetails.attachment.dataUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    download={submissionDetails.attachment.name}
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: 'var(--primary)', fontWeight: 700, textDecoration: 'none' }}
-                                  >
-                                    <ExternalLink size={14} /> Descargar archivo adjunto
-                                  </a>
-                                </div>
-                              )}
+                                )}
+
+                                {renderedText && (
+                                  <p style={{ margin: 0, color: 'var(--text-main)', fontSize: '0.92rem', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                                    {renderedText}
+                                  </p>
+                                )}
+
+                                {hasAttachment && submissionDetails.attachment && (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem', padding: '0.65rem 0.85rem', background: 'var(--surface-alt)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: 0 }}>
+                                        <FileText size={16} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                                        <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '240px' }} title={submissionDetails.attachment.name}>
+                                          {submissionDetails.attachment.name}
+                                        </span>
+                                      </div>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                        <button
+                                          type="button"
+                                          onClick={() => setViewingAttachment(submissionDetails.attachment)}
+                                          className="btn-secondary"
+                                          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.3rem 0.65rem', fontSize: '0.78rem' }}
+                                          title="Ver archivo online sin descargar"
+                                        >
+                                          <Eye size={13} /> Ver en línea
+                                        </button>
+                                        <a
+                                          href={submissionDetails.attachment.dataUrl}
+                                          download={submissionDetails.attachment.name}
+                                          className="btn-secondary"
+                                          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.3rem 0.65rem', fontSize: '0.78rem', textDecoration: 'none' }}
+                                          title="Descargar archivo"
+                                        >
+                                          <Download size={13} /> Descargar
+                                        </a>
+                                      </div>
+                                    </div>
+                                    {isAttachmentImage(submissionDetails.attachment) && (
+                                      <div style={{ marginTop: '0.35rem' }}>
+                                        <img
+                                          src={submissionDetails.attachment.dataUrl}
+                                          alt={submissionDetails.attachment.name}
+                                          onClick={() => setViewingAttachment(submissionDetails.attachment)}
+                                          style={{
+                                            maxHeight: '160px',
+                                            maxWidth: '100%',
+                                            borderRadius: '6px',
+                                            border: '1px solid var(--border)',
+                                            cursor: 'pointer',
+                                            objectFit: 'contain',
+                                            background: '#fff',
+                                            display: 'block'
+                                          }}
+                                          title="Clic para ampliar y rotar"
+                                        />
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {!renderedLink && !renderedText && !hasAttachment && (
+                                  <p style={{ margin: 0, color: 'var(--text-main)', fontSize: '0.92rem', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                                    Tarea marcada como completada.
+                                  </p>
+                                )}
+                              </div>
                             </div>
                           );
                         })()}
@@ -1126,6 +1539,12 @@ const StudentClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
           onClose={() => setReviewingMaterial(null)}
         />
       )}
+
+      {/* Visor Online de Archivos Adjuntos */}
+      <AttachmentViewerModal
+        attachment={viewingAttachment}
+        onClose={() => setViewingAttachment(null)}
+      />
     </div>
   );
 };
