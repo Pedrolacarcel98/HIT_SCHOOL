@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&display=swap');
+
 @media print {
   .no-print {
     display: none !important;
@@ -154,6 +156,15 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--text-main);
+}
+
+h1,
+.page-title {
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  font-size: 1.75rem !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em !important;
+  color: #1e293b !important;
 }
 
 .btn-primary {

@@ -2,7 +2,9 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import { randomInt } from 'crypto';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { sendPasswordResetEmail } from '../services/email';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -102,6 +104,47 @@ router.post('/login', async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Error del servidor al iniciar sesión' });
+  }
+});
+
+router.post('/forgot-password', async (req, res) => {
+  const { email, role } = req.body;
+  const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+  const allowedRoles = ['STUDENT', 'TEACHER', 'PARENT'];
+
+  if (!normalizedEmail || !allowedRoles.includes(role)) {
+    return res.status(400).json({ error: 'Indica un correo y un tipo de perfil válido.' });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      include: { profile: true }
+    });
+
+    // Responder igual cuando el correo no existe o no corresponde al perfil elegido.
+    if (!user || user.role !== role || user.status !== 'ACTIVE') {
+      return res.json({ message: 'Si los datos son válidos, recibirás un correo con tu nueva contraseña.' });
+    }
+
+    const temporaryPassword = `hit${randomInt(100000, 1000000)}`;
+    const passwordHash = await bcrypt.hash(temporaryPassword, 10);
+
+    await sendPasswordResetEmail(
+      user.email,
+      user.profile?.firstName || 'usuario',
+      temporaryPassword
+    );
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash }
+    });
+
+    res.json({ message: 'Si los datos son válidos, recibirás un correo con tu nueva contraseña.' });
+  } catch (error) {
+    console.error('Error al recuperar la contraseña:', error);
+    res.status(502).json({ error: 'No se pudo enviar el correo de recuperación. Inténtalo de nuevo más tarde.' });
   }
 });
 

@@ -19,6 +19,7 @@ import structuredTaskRoutes from './routes/structuredTasks';
 import enrollmentsRoutes from './routes/enrollments';
 import dashboardRoutes from './routes/dashboard';
 import termGradeRoutes from './routes/termGrades';
+import { processPendingTaskNotifications } from './services/taskNotifications';
 
 app.use(cors());
 app.use(express.json());
@@ -47,5 +48,10 @@ app.get('/api/health', (req, res) => {
 
 app.listen(port, () => {
   console.log(`Servidor backend corriendo en http://localhost:${port}`);
+  const runTaskNotifications = () => processPendingTaskNotifications().catch((error) => {
+    console.error('Error al procesar notificaciones de tareas:', error);
+  });
+  runTaskNotifications();
+  setInterval(runTaskNotifications, 60 * 1000);
 });
 

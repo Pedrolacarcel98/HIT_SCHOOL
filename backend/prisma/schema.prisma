@@ -254,6 +254,7 @@ model StructuredTask {
   assignmentType        StructuredTaskAssignmentType @default(CLASS)
   isSequential          Boolean                      @default(false)
   assignedStudentId     String?
+  notificationSentAt    DateTime?
   createdAt             DateTime                     @default(now())
   updatedAt             DateTime                     @updatedAt
   course                Course?                      @relation(fields: [courseId], references: [id], onDelete: Cascade)

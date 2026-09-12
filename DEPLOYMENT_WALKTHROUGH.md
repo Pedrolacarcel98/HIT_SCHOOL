@@ -39,12 +39,13 @@ FRONTEND_URL="http://localhost:5173"
 SMTP_HOST="smtp.example.com"
 SMTP_PORT=587
 SMTP_SECURE=false
-SMTP_USER="usuario@example.com"
-SMTP_PASSWORD="contraseña-smtp"
-SMTP_FROM="HitSchool <usuario@example.com>"
+SMTP_REJECT_UNAUTHORIZED=false
+SMTP_USER="pruebas@hitschool.example.com"
+SMTP_PASSWORD="credencial-de-prueba"
+SMTP_FROM="HitSchool <pruebas@hitschool.example.com>"
 ```
 
-Las variables `SMTP_*` son necesarias para que el backend envíe directamente el correo de bienvenida de los profesores. Si se dejan vacías, el profesor se crea igualmente y el backend deja constancia en los logs de que el correo no pudo enviarse.
+Las credenciales anteriores son datos de prueba y no envían correos reales. Sustitúyelas por las credenciales de tu proveedor SMTP antes de probar la recuperación de contraseña. `SMTP_REJECT_UNAUTHORIZED=false` solo debe usarse en entornos locales cuando un antivirus o proxy intercepte TLS con un certificado autofirmado; en producción debe omitirse o establecerse en `true`. El backend utiliza SMTP directamente tanto para la recuperación como para el correo de bienvenida de los profesores.
 
 ---
 
@@ -84,13 +85,19 @@ docker exec hit_school_backend npx prisma db seed
 > **Datos de Acceso Precargados:**
 > - 💼 **Profesor:** `profesor@hitschool.com` | Contraseña: `1234`
 > - 🎓 **Alumno:** `alumno@hitschool.com` | Contraseña: `1234`
-> - 🎓 **Tutor:** `marpargut@hitschool.com` | Contraseña: `1234`
+> - 🎓 **Tutor:** `marpargut@hitschool.com` | Contraseña: `123456`
 
 ---
 
 ## 🤖 6. Configurar n8n para el Envío Automático de Correos
 
 Cuando el profesor da de alta a un nuevo alumno, el backend dispara un Webhook a n8n para que este envíe automáticamente un email con sus credenciales.
+
+La recuperación de contraseña se realiza directamente desde el backend mediante SMTP, por lo que no necesita un webhook de n8n. Cuando el usuario está activo, el backend genera una contraseña temporal, la envía al correo indicado y solo después actualiza la contraseña almacenada.
+
+Las publicaciones del tablón también generan notificaciones directamente desde el backend mediante SMTP. Al publicar un anuncio, se envía un correo individual a cada alumno matriculado y a su tutor asociado cuando sus cuentas están activas. Los destinatarios duplicados se agrupan por correo y el profesor que publica no recibe una copia. El mensaje incluye la clase, el profesor, el contenido del anuncio y un enlace para acceder a la clase. Si algún correo falla, el anuncio se conserva y el error queda registrado en los logs del backend.
+
+Las tareas estructuradas/multistep también generan notificaciones directamente desde el backend mediante SMTP. Las tareas de clase se envían a todos los alumnos matriculados y a sus tutores activos; las tareas individuales solo se envían a los alumnos asignados y a sus tutores activos. Las plantillas no generan correos y el profesor no recibe copia. Si `publishAt` tiene una fecha futura, el backend espera hasta esa fecha; si está vacío, se notifica inmediatamente. El backend revisa las tareas pendientes cada minuto y guarda la fecha de envío para evitar duplicados tras reinicios. Si SMTP falla, la tarea se conserva y queda pendiente para reintento.
 
 ### Paso a Paso en n8n:
 1. Accede a **[http://localhost:5678](http://localhost:5678)** y crea tu cuenta de administrador local.
@@ -120,6 +127,23 @@ Sigue esta lista de verificación para comprobar que todo funciona al 100%:
   - 📖 **Mis Clases**
   - 📁 **Material de Clase**
   - 👥 **Gestión de Alumnos**
+
+### Notificaciones del Tablón
+- Crea o utiliza una clase con al menos un alumno matriculado y, si procede, un tutor asociado.
+- Verifica que las cuentas del alumno y del tutor estén activas.
+- Publica un anuncio desde la pestaña **Tablón**.
+- Comprueba que el alumno y su tutor reciben el correo en sus direcciones respectivas.
+- Comprueba que una cuenta inactiva no recibe la notificación y que el anuncio sigue visible en la clase.
+- Para probar un fallo de correo, detén temporalmente el servicio SMTP o usa una configuración inválida y verifica el error en `docker logs hit_school_backend`; la publicación debe conservarse.
+
+### Notificaciones de Tareas Estructuradas
+- Crea una tarea estructurada de tipo **Clase** para una clase con alumnos matriculados.
+- Comprueba que los alumnos y tutores activos reciben el correo y que el profesor no lo recibe.
+- Crea una tarea estructurada de tipo **Individual** para varios alumnos y comprueba que solo ellos y sus tutores reciben la notificación.
+- Programa una tarea con `publishAt` futuro y verifica que no llega antes de la fecha; el backend la procesará en el siguiente ciclo de un minuto.
+- Comprueba que una plantilla, una cuenta inactiva o un destinatario duplicado no genera envíos incorrectos.
+- Reinicia el backend después de un envío y verifica que no se repite el correo.
+- Para probar un fallo SMTP, usa una configuración inválida y revisa `docker logs hit_school_backend`; la tarea debe conservarse y reintentarse cuando el SMTP vuelva a funcionar.
 
 ### 2. Gestión de Aulas (Core Google Classroom)
 - En **Mis Clases**, pulsa **`+ Crear nueva clase`** (ej. *B2 First Cambridge*).

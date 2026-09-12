@@ -4,6 +4,7 @@ import { authenticateToken, requireTeacher, AuthRequest } from '../middleware/au
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { sendBoardPostNotification } from '../services/email';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -27,8 +28,13 @@ const postUpload = multer({
 const getDriveFileId = (rawUrl: string) => {
   try {
     const parsedUrl = new URL(rawUrl);
-    if (!['drive.google.com', 'docs.google.com'].includes(parsedUrl.hostname)) return null;
-    return parsedUrl.pathname.match(/\/file\/d\/([^/]+)/)?.[1] || parsedUrl.searchParams.get('id');
+    if (['drive.google.com', 'docs.google.com'].includes(parsedUrl.hostname)) {
+      return parsedUrl.pathname.match(/\/file\/d\/([^/]+)/)?.[1] || parsedUrl.searchParams.get('id');
+    }
+    if (parsedUrl.hostname === 'lh3.googleusercontent.com') {
+      return parsedUrl.pathname.match(/\/d\/([^/=]+)/)?.[1] || null;
+    }
+    return null;
   } catch {
     return null;
   }
@@ -301,6 +307,81 @@ router.post('/:id/posts', authenticateToken, requireTeacher, verifyCourseAccess,
         mediaName: req.file?.originalname || (linkedMediaUrl ? `Recurso de Google Drive (${linkedMediaType})` : null)
       }
     });
+
+    const course = await prisma.course.findUnique({
+      where: { id: courseId },
+      include: {
+        teacher: { include: { profile: true } },
+        enrollments: {
+          include: {
+            student: {
+              include: {
+                profile: true,
+                parent: { include: { profile: true } }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (course) {
+      const teacherName = `${course.teacher.profile?.firstName || ''} ${course.teacher.profile?.lastName || ''}`.trim() || course.teacher.email;
+      const courseUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/student/course/${course.id}`;
+      const notificationMediaLinkUrl = linkedMediaUrl || (req.file ? `${process.env.FRONTEND_URL || 'http://localhost:5173'}${post.mediaUrl}` : null);
+      const driveFileId = linkedMediaUrl && ['image', 'video'].includes(linkedMediaType)
+        ? getDriveFileId(linkedMediaUrl)
+        : null;
+      const notificationMediaUrl = driveFileId
+        ? `https://drive.google.com/thumbnail?id=${encodeURIComponent(driveFileId)}&sz=w1200`
+        : notificationMediaLinkUrl;
+      const notificationMediaInlineUrl = driveFileId
+        ? [
+          `https://lh3.googleusercontent.com/d/${encodeURIComponent(driveFileId)}=w1200`,
+          `https://drive.google.com/thumbnail?id=${encodeURIComponent(driveFileId)}&sz=w1200`,
+          `https://drive.google.com/uc?export=download&id=${encodeURIComponent(driveFileId)}`
+        ]
+        : null;
+      const recipients = new Map<string, { email: string; firstName: string }>();
+
+      for (const enrollment of course.enrollments) {
+        const student = enrollment.student;
+        if (student.status === 'ACTIVE' && student.email !== course.teacher.email) {
+          recipients.set(student.email.toLowerCase(), {
+            email: student.email,
+            firstName: student.profile?.firstName || 'alumno'
+          });
+        }
+
+        const parent = student.parent;
+        if (parent?.status === 'ACTIVE' && parent.email !== course.teacher.email) {
+          recipients.set(parent.email.toLowerCase(), {
+            email: parent.email,
+            firstName: parent.profile?.firstName || 'tutor'
+          });
+        }
+      }
+
+      const notifications = await Promise.allSettled(
+        Array.from(recipients.values()).map(recipient => sendBoardPostNotification(
+          recipient.email,
+          recipient.firstName,
+          course.title,
+          teacherName,
+          content,
+          courseUrl,
+          notificationMediaUrl,
+          post.mediaType,
+          notificationMediaLinkUrl,
+          notificationMediaInlineUrl
+        ))
+      );
+      const failedNotifications = notifications.filter(result => result.status === 'rejected');
+      if (failedNotifications.length > 0) {
+        console.error(`No se pudieron enviar ${failedNotifications.length} notificaciones del tablón para el curso ${course.id}:`, failedNotifications.map(result => result.reason));
+      }
+    }
+
     res.status(201).json(post);
   } catch (error) {
     console.error('Error al crear post:', error);

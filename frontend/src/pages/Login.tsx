@@ -7,6 +7,8 @@ const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotMessage, setForgotMessage] = useState('');
   const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -60,6 +62,37 @@ const Login: React.FC = () => {
     }
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setForgotMessage('');
+
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+      const res = await fetch(`${apiUrl}/api/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, role: roleMode }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'No se pudo solicitar la recuperación');
+        return;
+      }
+
+      setForgotMessage(data.message);
+    } catch (err) {
+      setError('No se pudo conectar con el servidor');
+    }
+  };
+
+  const returnToLogin = () => {
+    setForgotMode(false);
+    setForgotMessage('');
+    setError('');
+  };
+
   return (
     <div className="app-container">
       <div className="glass-panel animate-fade-in" style={{ maxWidth: '400px', width: '100%' }}>
@@ -87,13 +120,27 @@ const Login: React.FC = () => {
              </button>
           </div>
         ) : (
-          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <button type="button" onClick={() => setRoleMode('NONE')} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+          <form onSubmit={forgotMode ? handleForgotPassword : handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <button type="button" onClick={() => { setRoleMode('NONE'); returnToLogin(); }} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
               <ArrowLeft size={16} /> Volver
             </button>
             <h3 style={{ marginBottom: '0.5rem', color: 'var(--primary-text)', textAlign: 'center', fontWeight: '700' }}>
               Acceso {roleMode === 'TEACHER' ? 'Profesor' : roleMode === 'PARENT' ? 'Tutor / Padre' : 'Alumno'}
             </h3>
+            {forgotMode ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem', textAlign: 'center' }}>
+                  Te enviaremos una nueva contraseña al correo asociado a tu cuenta.
+                </p>
+                {forgotMessage && <div style={{ color: 'var(--primary-text)', textAlign: 'center', fontSize: '0.9rem' }}>{forgotMessage}</div>}
+                <button type="submit" className="btn-primary" style={{ marginTop: '0.5rem', width: '100%' }}>
+                  Enviar nueva contraseña <ArrowRight size={18} style={{ marginLeft: '0.5rem' }} />
+                </button>
+                <button type="button" onClick={returnToLogin} style={{ background: 'none', border: 'none', color: 'var(--primary-text)', cursor: 'pointer', fontSize: '0.9rem' }}>
+                  Volver al acceso
+                </button>
+              </div>
+            ) : <>
             <div>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', fontSize: '0.9rem', color: 'var(--text-main)' }}>Correo Electrónico</label>
               <div style={{ position: 'relative' }}>
@@ -127,6 +174,10 @@ const Login: React.FC = () => {
             <button type="submit" className="btn-primary" style={{ marginTop: '1rem', width: '100%' }}>
               Entrar <ArrowRight size={18} style={{ marginLeft: '0.5rem' }} />
             </button>
+            <button type="button" onClick={() => { setForgotMode(true); setError(''); }} style={{ background: 'none', border: 'none', color: 'var(--primary-text)', cursor: 'pointer', fontSize: '0.9rem' }}>
+              He olvidado mi contraseña
+            </button>
+            </>}
           </form>
         )}
       </div>
