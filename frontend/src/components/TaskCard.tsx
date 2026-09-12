@@ -63,7 +63,7 @@ export interface TaskItem {
     totalTargetStudents: number;
     completedStudentsCount: number;
     completionRate: number;
-    completedStudents?: { id: string; name: string; email?: string }[];
+    completedStudents?: { id: string; name: string; email?: string; isLate?: boolean }[];
     pendingStudents?: { id: string; name: string; email?: string }[];
   };
 }
@@ -154,7 +154,19 @@ const TaskCard: React.FC<TaskCardProps> = ({
     >
       {/* Cabecera de la Tarjeta */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
-        <div style={{ flex: 1, minWidth: '240px' }}>
+        <div
+          style={{ flex: 1, minWidth: '240px', cursor: 'pointer' }}
+          onClick={() => setIsExpanded(!isExpanded)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              setIsExpanded(!isExpanded);
+            }
+          }}
+          title={isExpanded ? 'Contraer pasos' : 'Expandir pasos'}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
             <span
               style={{
@@ -364,6 +376,9 @@ const TaskCard: React.FC<TaskCardProps> = ({
                                 }}
                               >
                                 ✓ {student.name}
+                                {student.isLate && (
+                                  <span style={{ color: '#92400e', fontWeight: 700 }}> (Fuera de plazo)</span>
+                                )}
                               </span>
                             ))}
                           </div>
@@ -374,7 +389,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                       {task.stats.pendingStudents && task.stats.pendingStudents.length > 0 && (
                         <div>
                           <strong style={{ fontSize: '0.74rem', color: '#854d0e', display: 'inline-flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.3rem' }}>
-                            ⏳ Pendientes ({task.stats.pendingStudents.length}):
+                            Pendientes ({task.stats.pendingStudents.length}):
                           </strong>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
                             {task.stats.pendingStudents.map(student => (

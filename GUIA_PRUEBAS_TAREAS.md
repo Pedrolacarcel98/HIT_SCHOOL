@@ -315,8 +315,8 @@ La base de datos y el repositorio de materiales han sido **completamente resetea
   2. Localizar la tarea `Módulo B1: Grammar, Listening & Writing (Semana 1)`.
   3. Observar la fila correspondiente al alumno **Mateo**:
 - **Verificación**:
-  - [ ] Aparece el estado verde: `✓ Tarea Entregada` y `Dentro de plazo`.
-  - [ ] En la fila de chips de pasos aparecen **todos los pasos**:
+  - [x] Aparece el estado verde: `✓ Tarea Entregada` y `Dentro de plazo`.
+  - [x] En la fila de chips de pasos aparecen **todos los pasos**:
     - `✓ 1. Visionado: Present Perfect vs Past Simple` (chip verde claro).
     - `✓ 2. Lectura y Estudio: Guía de Conectores` (chip verde claro).
     - `7.0/10 3. Cuestionario de Evaluación Continua` (chip con nota).
@@ -333,7 +333,7 @@ La base de datos y el repositorio de materiales han sido **completamente resetea
     - `✓ Pasos completados: 4 / 4`.
     - `📝 Evaluables: 2`.
     - `📖 Formativos / Guías: 2`.
-  - [ ] En el cuerpo del desglose aparecen numerados correlativamente:
+  - [x] En el cuerpo del desglose aparecen numerados correlativamente:
     - **Paso 1**: Identificado como `📖 Material didáctico (No evaluable)`. Badge: `Completado ✓`. Mensaje: `✓ El alumno ha visualizado y marcado este recurso como completado.` Enlace `Ver material`.
     - **Paso 2**: Identificado como `📖 Material didáctico (No evaluable)`. Badge: `Completado ✓`. Mensaje: `✓ El alumno ha visualizado y marcado este recurso como completado.` Enlace `Ver material`.
     - **Paso 3**: Identificado como `📝 Cuestionario / Examen (Evaluación automática)`. Muestra: `📊 Resultado: 3 de 4 aciertos`. Botón: `Ver Cuestionario Corregido`.
@@ -350,7 +350,7 @@ La base de datos y el repositorio de materiales han sido **completamente resetea
   4. En el campo *«Comentarios / Feedback pedagógico para este cuestionario»*, escribir:
      `"Muy buen resultado en el examen. Repasa el condicional tipo 2 para la próxima semana."`
 - **Verificación**:
-  - [ ] El modal de examen abre con preguntas y respuestas sin pantallas en blanco ni errores.
+  - [x] El modal de examen abre con preguntas y respuestas sin pantallas en blanco ni errores.
 
 ---
 
@@ -367,8 +367,8 @@ La base de datos y el repositorio de materiales han sido **completamente resetea
   5. En el campo de **Feedback del Paso**, escribir:
      `"Excelente uso de conectores (furthermore, in addition). Cuida la ortografía de los adjetivos irregulares."`
 - **Verificación**:
-  - [ ] El visor online de fotos/PDFs funciona con fluidez sin obligar a descargar el archivo al disco duro.
-  - [ ] La nota `8.5` se introduce correctamente en el input.
+  - [x] El visor online de fotos/PDFs funciona con fluidez sin obligar a descargar el archivo al disco duro.
+  - [x] La nota `8.5` se introduce correctamente en el input.
 
 ---
 
@@ -382,10 +382,10 @@ La base de datos y el repositorio de materiales han sido **completamente resetea
      `"Módulo completado con éxito. Excelente trabajo en redacción y comprensión."`
   4. Pulsar **«Guardar Calificación y Feedback»**.
 - **Verificación**:
-  - [ ] Se cierra el modal y aparece el mensaje de confirmación de guardado.
-  - [ ] En la tabla de `GradesTab`, la fila de Mateo ahora muestra la nota consolidada: `Nota: 8.0 / 10`.
-  - [ ] El chip del Paso 4 cambia de `⏳` a `8.5/10`.
-  - [ ] Debajo de la fila de Mateo aparece el cuadro con el feedback pedagógico del profesor:
+  - [ x] Se cierra el modal y aparece el mensaje de confirmación de guardado.
+  - [x] En la tabla de `GradesTab`, la fila de Mateo ahora muestra la nota consolidada: `Nota: 8.0 / 10`.
+  - [x] El chip del Paso 4 cambia de `⏳` a `8.5/10`.
+  - [x] Debajo de la fila de Mateo aparece el cuadro con el feedback pedagógico del profesor:
     `💬 Feedback del profesor: "Módulo completado con éxito. Excelente trabajo en redacción y comprensión."`
 
 ---
@@ -398,10 +398,10 @@ La base de datos y el repositorio de materiales han sido **completamente resetea
 - **Rol**: Alumno (`hermano.mayor@hitschool.com` - Mateo).
 - **Navegación**: Entrar en `KIDS 1` -> Pestaña **«Calificaciones»**.
 - **Verificación**:
-  - [ ] Mateo ve la nota final de la tarea: `8.0 / 10`.
-  - [ ] Ve los chips de cada paso con sus notas respectivas (`7.0/10` y `8.5/10`).
-  - [ ] Puede leer el feedback global del profesor y las observaciones individuales de la redacción.
-  - [ ] Puede pulsar para revisar su examen corregido en cualquier momento.
+  - [x] Mateo ve la nota final de la tarea: `8.0 / 10`.
+  - [x] Ve los chips de cada paso con sus notas respectivas (`7.0/10` y `8.5/10`).
+  - [x] Puede leer el feedback global del profesor y las observaciones individuales de la redacción.
+  - [x] Puede pulsar para revisar su examen corregido en cualquier momento.
 
 ---
 
@@ -415,8 +415,8 @@ La base de datos y el repositorio de materiales han sido **completamente resetea
   4. En el selector de hijos, cambiar a **Sofía**:
   5. Entrar en `KIDS 1` -> Pestaña «Calificaciones» y «Trabajo de clase».
 - **Verificación**:
-  - [ ] Las vistas están completamente aisladas: la pantalla de Sofía muestra sus propias tareas pendientes, sin mezclar las notas ni entregas de Mateo.
-  - [ ] No hay fugas de datos entre hermanos.
+  - [x] Las vistas están completamente aisladas: la pantalla de Sofía muestra sus propias tareas pendientes, sin mezclar las notas ni entregas de Mateo.
+  - [x] No hay fugas de datos entre hermanos.
 
 ---
 

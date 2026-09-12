@@ -62,6 +62,7 @@ interface TaskDeliveryReviewModalProps {
     questions?: any[];
   }) => void;
   readOnly?: boolean;
+  inline?: boolean;
 }
 
 const parseSubmissionContent = (content?: string | null) => {
@@ -110,7 +111,8 @@ const TaskDeliveryReviewModal: React.FC<TaskDeliveryReviewModalProps> = ({
   onClose,
   onSaveGrade,
   onReviewExam,
-  readOnly = false
+  readOnly = false,
+  inline = false
 }) => {
   // Estado para visualización interna del examen en caso de no pasar onReviewExam
   const [internalExamReview, setInternalExamReview] = useState<{
@@ -252,32 +254,48 @@ const TaskDeliveryReviewModal: React.FC<TaskDeliveryReviewModalProps> = ({
     }
   };
 
-  return createPortal(
+  const reviewContent = (
     <div
-      className="modal-backdrop animate-fade-in"
+      className={inline ? 'animate-fade-in' : 'modal-backdrop animate-fade-in'}
       style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 110,
-        display: 'grid',
-        placeItems: 'center',
-        padding: '1rem',
-        background: 'rgba(15, 23, 42, 0.65)',
-        backdropFilter: 'blur(4px)'
+        ...(inline ? {
+          width: '100%',
+          marginTop: '0.75rem'
+        } : {
+          position: 'fixed',
+          inset: 0,
+          zIndex: 110,
+          display: 'grid',
+          placeItems: 'center',
+          padding: '1rem',
+          background: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(4px)'
+        })
       }}
-      onClick={onClose}
+      onClick={inline ? undefined : onClose}
     >
       <div
-        className="glass-panel modal-card modal-card--review"
+        className={inline ? 'glass-panel' : 'glass-panel modal-card modal-card--review'}
         style={{
-          width: 'min(100%, 960px)',
-          maxHeight: '92vh',
-          overflowY: 'auto',
-          padding: '1.75rem 2rem',
-          background: '#ffffff',
-          borderRadius: '16px',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-          border: '1px solid rgba(226, 232, 240, 0.9)'
+          ...(inline ? {
+            width: '100%',
+            maxHeight: 'none',
+            overflow: 'visible',
+            padding: '1.25rem',
+            background: 'var(--surface)',
+            borderRadius: '10px',
+            boxShadow: 'none',
+            border: '1px solid var(--border)'
+          } : {
+            width: 'min(100%, 960px)',
+            maxHeight: '92vh',
+            overflowY: 'auto',
+            padding: '1.75rem 2rem',
+            background: '#ffffff',
+            borderRadius: '16px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            border: '1px solid rgba(226, 232, 240, 0.9)'
+          })
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -301,7 +319,7 @@ const TaskDeliveryReviewModal: React.FC<TaskDeliveryReviewModalProps> = ({
               Alumno: <strong style={{ color: 'var(--text-main)' }}>{studentName}</strong>
             </p>
           </div>
-          <button
+          {!inline && <button
             type="button"
             onClick={onClose}
             aria-label="Cerrar"
@@ -309,7 +327,7 @@ const TaskDeliveryReviewModal: React.FC<TaskDeliveryReviewModalProps> = ({
             style={{ border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}
           >
             <X size={20} />
-          </button>
+          </button>}
         </div>
 
         {/* Resumen de Pasos */}
@@ -815,9 +833,10 @@ const TaskDeliveryReviewModal: React.FC<TaskDeliveryReviewModalProps> = ({
         attachment={viewingAttachment}
         onClose={() => setViewingAttachment(null)}
       />
-    </div>,
-    document.body
+    </div>
   );
+
+  return inline ? reviewContent : createPortal(reviewContent, document.body);
 };
 
 export default TaskDeliveryReviewModal;

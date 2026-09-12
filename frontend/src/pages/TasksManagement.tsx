@@ -1137,16 +1137,7 @@ const TasksManagement: React.FC = () => {
                       </div>
 
                       {(() => {
-                        const isPassive = linkedMaterial && (linkedMaterial.type === 'VIDEO' || linkedMaterial.type === 'AUDIO' || linkedMaterial.type === 'IMAGE');
                         const isForm = linkedMaterial?.type === 'FORM';
-
-                        if (isPassive) {
-                          return (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem', color: 'var(--text-muted)', marginLeft: '36px' }}>
-                              <span>📖 Recurso didáctico (Formativo / No evaluable)</span>
-                            </div>
-                          );
-                        }
 
                         return (
                           <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: isForm ? 'default' : 'pointer', fontSize: '0.78rem', color: 'var(--text-muted)', marginLeft: '36px' }}>
@@ -1157,7 +1148,7 @@ const TasksManagement: React.FC = () => {
                               onChange={(e) => handleUpdateStep(index, { requiresSubmission: e.target.checked })}
                               style={{ width: '14px', height: '14px', accentColor: 'var(--primary)' }}
                             />
-                            <span>{isForm ? '📝 Examen autocorregible con nota' : '📝 Paso evaluable (requiere entrega y nota numérica)'}</span>
+                              <span>{isForm ? '📝 Examen autocorregible con nota' : '📝 Paso evaluable (requiere entrega y nota numérica)'}</span>
                           </label>
                         );
                       })()}
@@ -1243,13 +1234,12 @@ const TasksManagement: React.FC = () => {
                     type="button"
                     onClick={() => {
                       if (pickerStepIndex !== null) {
-                        const isPassive = m.type === 'VIDEO' || m.type === 'AUDIO' || m.type === 'IMAGE';
                         handleUpdateStep(pickerStepIndex, {
                           materialId: m.id,
                           title: taskSteps[pickerStepIndex]?.title.trim() === `${pickerStepIndex + 1}.` || !taskSteps[pickerStepIndex]?.title.trim()
                             ? `${pickerStepIndex + 1}. ${m.title}`
                             : taskSteps[pickerStepIndex].title,
-                          requiresSubmission: m.type === 'FORM' ? true : (isPassive ? false : undefined)
+                          requiresSubmission: m.type === 'FORM' ? true : false
                         });
                         setPickerStepIndex(null);
                       }

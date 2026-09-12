@@ -395,6 +395,11 @@ const GradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
 
   const studentsList: any[] = termData?.students || [];
   const tasksSummary: any[] = termData?.tasksSummary || [];
+  const evaluableTasksSummary = tasksSummary.filter((task) =>
+    studentsList.some((student) => (student.tasks || []).some((studentTask: any) =>
+      studentTask.taskId === task.id && (studentTask.steps || []).some((step: any) => step.isEvaluable)
+    ))
+  );
 
   return (
     <div className="animate-fade-in" style={{ padding: '1.5rem 0', maxWidth: '1100px', margin: '0 auto' }}>
@@ -479,7 +484,7 @@ const GradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
               fontSize: '0.88rem'
             }}
           >
-            <BookOpen size={16} /> Bloques de Tareas ({tasksSummary.length})
+            <BookOpen size={16} /> Bloques de Tareas ({evaluableTasksSummary.length})
           </button>
 
           <button
@@ -822,7 +827,7 @@ const GradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
             <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
               Cargando tareas estructuradas...
             </div>
-          ) : tasksSummary.length === 0 ? (
+          ) : evaluableTasksSummary.length === 0 ? (
             <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
               <BookOpen size={40} style={{ opacity: 0.4, marginBottom: '0.75rem' }} />
               <p>No hay tareas estructuradas asignadas para el {selectedTerm}º Trimestre en este curso.</p>
@@ -835,7 +840,7 @@ const GradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                 </span>
               </div>
 
-              {tasksSummary.map((taskMeta) => {
+              {evaluableTasksSummary.map((taskMeta) => {
                 return (
                   <div
                     key={taskMeta.id}
@@ -881,6 +886,7 @@ const GradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                           taskGrade: studentTask.taskGrade,
                           taskFeedback: studentTask.taskFeedback
                         };
+                        const isReviewOpen = activeReviewStudent?.id === st.studentId && reviewingTask?.taskId === studentTask.taskId;
 
                         return (
                           <div
@@ -906,7 +912,7 @@ const GradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                                   </span>
                                 )}
                                 {isCompleted && studentTask.dueDate && (
-                                  <span style={{ fontSize: '0.72rem', color: studentTask.isLate ? '#92400e' : '#166534', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.2rem', padding: '0.12rem 0.45rem', borderRadius: '10px', background: studentTask.isLate ? '#fef3c7' : '#ecfdf5', border: `1px solid ${studentTask.isLate ? '#fde68a' : '#bbf7d0'}` }}>
+                                  <span style={{ fontSize: '0.72rem', color: studentTask.isLate ? '#b91c1c' : '#166534', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.2rem', padding: '0.12rem 0.45rem', borderRadius: '10px', background: studentTask.isLate ? '#fee2e2' : '#ecfdf5', border: `1px solid ${studentTask.isLate ? '#fecaca' : '#bbf7d0'}` }}>
                                     {studentTask.isLate ? 'Fuera de plazo' : 'Dentro de plazo'}
                                   </span>
                                 )}
@@ -936,13 +942,20 @@ const GradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setReviewingTask(taskForReview);
-                                    setActiveReviewStudent({ id: st.studentId, name: st.fullName });
+                                    if (isReviewOpen) {
+                                      setReviewingTask(null);
+                                      setActiveReviewStudent(null);
+                                    } else {
+                                      setReviewingTask(taskForReview);
+                                      setActiveReviewStudent({ id: st.studentId, name: st.fullName });
+                                    }
                                   }}
                                   className="btn-primary"
+                                  aria-expanded={isReviewOpen}
                                   style={{ padding: '0.35rem 0.75rem', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem', borderRadius: '6px' }}
                                 >
-                                  <Edit3 size={13} /> Revisar Entrega Completa
+                                  <Edit3 size={13} /> {isReviewOpen ? 'Ocultar entregas' : 'Ver entregas de la tarea'}
+                                  {isReviewOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                                 </button>
                               </div>
                             </div>
@@ -986,6 +999,29 @@ const GradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                                 );
                               })}
                             </div>
+
+                            {isReviewOpen && (
+                              <TaskDeliveryReviewModal
+                                task={taskForReview}
+                                studentName={st.fullName}
+                                inline
+                                onClose={() => {
+                                  setReviewingTask(null);
+                                  setActiveReviewStudent(null);
+                                }}
+                                onSaveGrade={handleSaveTaskDeliveryGrade}
+                                onReviewExam={(examStep) => {
+                                  const parsed = parseSavedExam(examStep.content);
+                                  setReviewingExam({
+                                    title: examStep.title,
+                                    questions: examStep.questions || [],
+                                    answers: parsed?.answers || {},
+                                    score: examStep.grade,
+                                    total: parsed?.total
+                                  });
+                                }}
+                              />
+                            )}
 
                             {studentTask.taskFeedback && (
                               <div style={{ marginTop: '0.35rem', padding: '0.35rem 0.6rem', background: '#f8fafc', borderRadius: '6px', fontSize: '0.78rem', color: 'var(--text-muted)', fontStyle: 'italic', border: '1px solid #e2e8f0' }}>
@@ -1202,29 +1238,6 @@ const GradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
             </form>
           </div>
         </div>
-      )}
-
-      {/* Modal de Revisión de Tarea Estructurada Completa */}
-      {reviewingTask && activeReviewStudent && (
-        <TaskDeliveryReviewModal
-          task={reviewingTask}
-          studentName={activeReviewStudent.name}
-          onClose={() => {
-            setReviewingTask(null);
-            setActiveReviewStudent(null);
-          }}
-          onSaveGrade={handleSaveTaskDeliveryGrade}
-          onReviewExam={(examStep) => {
-            const parsed = parseSavedExam(examStep.content);
-            setReviewingExam({
-              title: examStep.title,
-              questions: examStep.questions || [],
-              answers: parsed?.answers || {},
-              score: examStep.grade,
-              total: parsed?.total
-            });
-          }}
-        />
       )}
 
       {/* Modal de Revisión de Examen */}

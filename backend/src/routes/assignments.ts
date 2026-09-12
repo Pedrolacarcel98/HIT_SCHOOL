@@ -103,6 +103,7 @@ router.get('/teacher', authenticateToken, requireTeacher, async (req: AuthReques
         course: { select: { title: true } },
         student: { select: { email: true, profile: { select: { firstName: true, lastName: true } } } },
         material: { select: { id: true, title: true, type: true, url: true, formData: true, description: true } },
+        structuredTaskStep: { select: { id: true, order: true, title: true, requiresSubmission: true, task: { select: { id: true, title: true, category: true, dueDate: true } } } },
         submissions: {
           include: {
             student: { select: { email: true, profile: { select: { firstName: true, lastName: true } } } }

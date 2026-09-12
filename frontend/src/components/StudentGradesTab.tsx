@@ -1,43 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
 import {
   Award,
   BookOpen,
   CheckCircle2,
   Clock3,
   Download,
-  ExternalLink,
-  FileText,
-  MessageSquare,
-  X
+  ExternalLink
 } from 'lucide-react';
-import ExamReviewModal from './ExamReviewModal';
 import TaskDeliveryReviewModal, { type TaskForReview } from './TaskDeliveryReviewModal';
+import StudentCompetencyGrades from './StudentCompetencyGrades';
 import { generateReportCardPDF, type ReportCardData, type ReportCardTaskItem } from '../utils/reportCard';
 import { useParent } from '../context/ParentContext';
-
-interface ParsedExamData {
-  answers: Record<string, string | number>;
-  score?: number | null;
-  total?: number | null;
-}
-
-const parseSavedExam = (content?: string | null): ParsedExamData | null => {
-  if (!content) return null;
-  try {
-    const parsed = JSON.parse(content);
-    if (parsed.answers || typeof parsed.score === 'number') {
-      return {
-        answers: parsed.answers || {},
-        score: typeof parsed.score === 'number' ? parsed.score : null,
-        total: typeof parsed.total === 'number' ? parsed.total : null
-      };
-    }
-    return null;
-  } catch {
-    return null;
-  }
-};
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -54,16 +27,6 @@ const StudentGradesTab: React.FC<{ courseId: string; courseTitle?: string }> = (
   const [studentInfo, setStudentInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // Entregas sueltas directas (historial complementario)
-  const [completedAssignments, setCompletedAssignments] = useState<any[]>([]);
-  const [viewingFeedback, setViewingFeedback] = useState<{ title: string; feedback: string } | null>(null);
-  const [reviewingExam, setReviewingExam] = useState<{
-    title: string;
-    questions?: any[];
-    answers: Record<string, any>;
-    score: number | null;
-    total?: number | null;
-  } | null>(null);
   const [selectedTaskForReview, setSelectedTaskForReview] = useState<TaskForReview | null>(null);
 
   const { selectedStudentId } = useParent();
@@ -75,10 +38,7 @@ const StudentGradesTab: React.FC<{ courseId: string; courseTitle?: string }> = (
       const targetStudentId = selectedStudentId || 'me';
       const headers = { Authorization: `Bearer ${token}` };
 
-      const [resTermGrades, resAssignments] = await Promise.all([
-        fetch(`${apiUrl}/api/term-grades/student/${targetStudentId}?courseId=${courseId}`, { headers }),
-        fetch(`${apiUrl}/api/assignments/me${selectedStudentId ? `?studentId=${selectedStudentId}` : ''}`, { headers })
-      ]);
+      const resTermGrades = await fetch(`${apiUrl}/api/term-grades/student/${targetStudentId}?courseId=${courseId}`, { headers });
 
       if (resTermGrades.ok) {
         const data = await resTermGrades.json();
@@ -86,13 +46,6 @@ const StudentGradesTab: React.FC<{ courseId: string; courseTitle?: string }> = (
         setTermGradesData(data.terms || {});
       }
 
-      if (resAssignments.ok) {
-        const assignments = await resAssignments.json();
-        const courseCompleted = assignments.filter(
-          (a: any) => a.courseId === courseId && a.submissions && a.submissions.length > 0
-        );
-        setCompletedAssignments(courseCompleted);
-      }
     } catch (err) {
       console.error('Error al cargar calificaciones del alumno:', err);
     } finally {
@@ -150,7 +103,7 @@ const StudentGradesTab: React.FC<{ courseId: string; courseTitle?: string }> = (
   }
 
   return (
-    <div className="animate-fade-in" style={{ padding: '1.5rem 0', maxWidth: '950px', margin: '0 auto' }}>
+    <div className="animate-fade-in" style={{ padding: '1.5rem 0', maxWidth: '1200px', margin: '0 auto' }}>
       {/* Cabecera Principal y Selector de Trimestre */}
       <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
@@ -233,81 +186,14 @@ const StudentGradesTab: React.FC<{ courseId: string; courseTitle?: string }> = (
           )}
         </div>
 
-        {/* Resumen de Notas del Trimestre */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
-          {!isOnline && (
-            <>
-              <div style={{ padding: '0.85rem', background: 'var(--surface-alt)', borderRadius: '10px', border: '1px solid var(--border)', textAlign: 'center' }}>
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>MIDDLE TERM</span>
-                <strong style={{ fontSize: '1.25rem', color: 'var(--text-main)', display: 'block', marginTop: '0.2rem' }}>
-                  {currentTermInfo?.middleExamGrade !== null && currentTermInfo?.middleExamGrade !== undefined
-                    ? `${currentTermInfo.middleExamGrade.toFixed(1)} / 10`
-                    : '- / 10'}
-                </strong>
-                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Examen parcial</span>
-              </div>
-
-              <div style={{ padding: '0.85rem', background: 'var(--surface-alt)', borderRadius: '10px', border: '1px solid var(--border)', textAlign: 'center' }}>
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>FINAL TERM</span>
-                <strong style={{ fontSize: '1.25rem', color: 'var(--text-main)', display: 'block', marginTop: '0.2rem' }}>
-                  {currentTermInfo?.finalExamGrade !== null && currentTermInfo?.finalExamGrade !== undefined
-                    ? `${currentTermInfo.finalExamGrade.toFixed(1)} / 10`
-                    : '- / 10'}
-                </strong>
-                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Examen final</span>
-              </div>
-            </>
-          )}
-
-          <div style={{ padding: '0.85rem', background: 'var(--surface-alt)', borderRadius: '10px', border: '1px solid var(--border)', textAlign: 'center' }}>
-            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>MEDIA TAREAS</span>
-            <strong style={{ fontSize: '1.25rem', color: 'var(--text-main)', display: 'block', marginTop: '0.2rem' }}>
-              {currentTermInfo?.tasksAverage !== null && currentTermInfo?.tasksAverage !== undefined
-                ? `${currentTermInfo.tasksAverage.toFixed(1)} / 10`
-                : '- / 10'}
-            </strong>
-            <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-              {isOnline ? '100% nota final' : '50% nota final'}
-            </span>
-          </div>
-
-          <div style={{ padding: '0.85rem', background: 'var(--primary-light)', borderRadius: '10px', border: '1px solid var(--primary-border)', textAlign: 'center' }}>
-            <span style={{ fontSize: '0.72rem', color: 'var(--primary-text)', display: 'block', fontWeight: 700 }}>CALIFICACIÓN TRIMESTRAL</span>
-            <strong style={{ fontSize: '1.35rem', color: 'var(--primary-text)', display: 'block', marginTop: '0.2rem' }}>
-              {currentTermInfo?.overallGrade !== null && currentTermInfo?.overallGrade !== undefined
-                ? `${currentTermInfo.overallGrade.toFixed(1)} / 10`
-                : '- / 10'}
-            </strong>
-            <span style={{ fontSize: '0.68rem', color: 'var(--primary-text)', fontWeight: 600 }}>
-              {isOnline ? 'Media continua' : 'Media exámenes + tareas'}
-            </span>
-          </div>
-        </div>
-
-        {/* Competencias CEFR */}
-        {currentTermInfo && (currentTermInfo.grammar !== null || currentTermInfo.reading !== null || currentTermInfo.writing !== null || currentTermInfo.listening !== null || currentTermInfo.speaking !== null) && (
-          <div style={{ marginBottom: '1rem' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '0.4rem' }}>
-              Competencias Lingüísticas CEFR
-            </span>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', gap: '0.5rem' }}>
-              {[
-                { key: 'grammar', label: 'Grammar', val: currentTermInfo.grammar },
-                { key: 'reading', label: 'Reading', val: currentTermInfo.reading },
-                { key: 'writing', label: 'Writing', val: currentTermInfo.writing },
-                { key: 'listening', label: 'Listening', val: currentTermInfo.listening },
-                { key: 'speaking', label: 'Speaking', val: currentTermInfo.speaking }
-              ].map(({ key, label, val }) => (
-                <div key={key} style={{ padding: '0.5rem', background: 'var(--surface-alt)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
-                  <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>{label}</span>
-                  <strong style={{ fontSize: '1rem', color: 'var(--primary)' }}>
-                    {val !== null && val !== undefined ? `${val.toFixed(1)}` : '-'}
-                  </strong>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        <StudentCompetencyGrades
+          grammar={currentTermInfo?.grammar}
+          reading={currentTermInfo?.reading}
+          writing={currentTermInfo?.writing}
+          listening={currentTermInfo?.listening}
+          speaking={currentTermInfo?.speaking}
+          overallGrade={currentTermInfo?.overallGrade}
+        />
 
         {/* Observaciones del profesor */}
         {currentTermInfo?.observations && (
@@ -494,112 +380,6 @@ const StudentGradesTab: React.FC<{ courseId: string; courseTitle?: string }> = (
         )}
       </div>
 
-      {/* Historial Adicional de Entregas Directas */}
-      {completedAssignments.length > 0 && (
-        <div className="glass-panel" style={{ padding: '1.5rem' }}>
-          <h3 style={{ margin: '0 0 1rem', fontSize: '1.1rem', color: 'var(--text-main)' }}>
-            Historial de Entregas Directas ({completedAssignments.length})
-          </h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {completedAssignments.map((assignment) => {
-              const submission = assignment.submissions[0];
-              const examData = parseSavedExam(submission?.content);
-              const isTest = assignment.material?.type === 'FORM' || Boolean(examData);
-              const hasGrade = submission.grade !== null && submission.grade !== undefined;
-              const feedback = submission.feedback;
-
-              return (
-                <div
-                  key={assignment.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '1rem 1.25rem',
-                    border: '1px solid var(--border)',
-                    borderRadius: '10px',
-                    background: 'var(--surface)',
-                    gap: '1rem',
-                    flexWrap: 'wrap'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <div style={{ color: 'var(--primary)', padding: '0.45rem', background: 'var(--primary-light)', borderRadius: '8px' }}>
-                      <FileText size={18} />
-                    </div>
-                    <div>
-                      <h4 style={{ margin: 0, fontSize: '0.98rem', color: 'var(--text-main)' }}>{assignment.title}</h4>
-                      <p style={{ margin: '0.15rem 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                        Entregado el {new Date(submission.submittedAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
-                        {examData && examData.total !== null && examData.score !== null && (
-                          <span style={{ marginLeft: '6px', fontWeight: 600, color: 'var(--primary)' }}>
-                            · {examData.score} / {examData.total} aciertos
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    {hasGrade ? (
-                      <span style={{ padding: '0.35rem 0.75rem', borderRadius: '16px', background: 'var(--primary-light)', border: '1px solid var(--primary-border)', color: 'var(--primary-text)', fontWeight: 700, fontSize: '0.85rem' }}>
-                        {submission.grade.toFixed(1)} / 10
-                      </span>
-                    ) : (
-                      <span style={{ padding: '0.35rem 0.75rem', borderRadius: '16px', background: '#fef7e8', border: '1px solid #fae0b0', color: '#8d5b12', fontSize: '0.8rem', fontWeight: 600 }}>
-                        Entregado
-                      </span>
-                    )}
-
-                    {feedback && (
-                      <button
-                        type="button"
-                        onClick={() => setViewingFeedback({ title: assignment.title, feedback })}
-                        className="btn-secondary"
-                        style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem', borderRadius: '6px' }}
-                      >
-                        <MessageSquare size={13} /> Feedback
-                      </button>
-                    )}
-
-                    {isTest && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setReviewingExam({
-                            title: assignment.title,
-                            questions: assignment.material?.formData?.questions || [],
-                            answers: examData?.answers || {},
-                            score: submission.grade,
-                            total: examData?.total
-                          })
-                        }
-                        className="btn-secondary"
-                        style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', borderRadius: '6px' }}
-                      >
-                        Revisar Examen
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Modal para ver Examen Corregido */}
-      {reviewingExam && (
-        <ExamReviewModal
-          title={reviewingExam.title}
-          questions={reviewingExam.questions}
-          answers={reviewingExam.answers}
-          score={reviewingExam.score}
-          total={reviewingExam.total}
-          onClose={() => setReviewingExam(null)}
-        />
-      )}
-
       {selectedTaskForReview && (
         <TaskDeliveryReviewModal
           task={selectedTaskForReview}
@@ -609,22 +389,6 @@ const StudentGradesTab: React.FC<{ courseId: string; courseTitle?: string }> = (
         />
       )}
 
-      {/* Modal de Feedback */}
-      {viewingFeedback &&
-        createPortal(
-          <div className="modal-backdrop" onClick={() => setViewingFeedback(null)}>
-            <div className="glass-panel modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h3 style={{ margin: 0 }}>Feedback de: {viewingFeedback.title}</h3>
-                <button onClick={() => setViewingFeedback(null)} className="modal-close"><X size={20} /></button>
-              </div>
-              <p style={{ color: 'var(--text-main)', background: 'var(--surface-alt)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border)', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>
-                {viewingFeedback.feedback}
-              </p>
-            </div>
-          </div>,
-          document.body
-        )}
     </div>
   );
 };

@@ -78,8 +78,7 @@ const hasEvaluableStructuredStep = (task: {
   deliveries?: Array<{ grade?: number | null }>;
 }) => {
   const hasNormalEvaluableStep = task.steps.some((step) => {
-    const isPassiveMedia = Boolean(step.material && ['VIDEO', 'AUDIO', 'IMAGE'].includes(step.material.type || ''));
-    return !isPassiveMedia && Boolean(step.requiresSubmission || step.material?.type === 'FORM');
+    return Boolean(step.requiresSubmission || step.material?.type === 'FORM');
   });
 
   const hasStudentContent = task.steps.some((step) =>
@@ -173,8 +172,7 @@ router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: A
         
         // Evaluar pasos
         const stepsDetail = task.steps.map((step) => {
-          const isPassiveMedia = Boolean(step.material && ['VIDEO', 'AUDIO', 'IMAGE'].includes(step.material.type));
-          const isEvaluable = !isPassiveMedia && Boolean(step.requiresSubmission || step.material?.type === 'FORM');
+          const isEvaluable = Boolean(step.requiresSubmission || step.material?.type === 'FORM');
           const progress = step.progress.find((p) => p.studentId === student.id);
           const submission = step.assignment?.submissions.find((s) => s.studentId === student.id);
 
@@ -193,18 +191,13 @@ router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: A
           };
         });
         // Calcular nota de la tarea
+        const evaluableSteps = stepsDetail.filter((step) => step.isEvaluable);
+        const evaluableGraded = evaluableSteps.filter(
+          (step) => typeof step.grade === 'number' && !isNaN(step.grade)
+        );
         let taskGrade: number | null = null;
-        if (delivery?.grade !== null && delivery?.grade !== undefined) {
-          taskGrade = delivery.grade;
-        } else {
-          // Media automática de pasos evaluables calificados
-          const evaluableGraded = stepsDetail.filter(
-            (s) => s.isEvaluable && typeof s.grade === 'number' && !isNaN(s.grade)
-          );
-          if (evaluableGraded.length > 0) {
-            const sum = evaluableGraded.reduce((acc, curr) => acc + (curr.grade || 0), 0);
-            taskGrade = Number((sum / evaluableGraded.length).toFixed(2));
-          }
+        if (evaluableSteps.length > 0 && evaluableGraded.length === evaluableSteps.length) {
+          taskGrade = Number((evaluableGraded.reduce((sum, step) => sum + (step.grade || 0), 0) / evaluableGraded.length).toFixed(2));
         }
 
         if (taskGrade !== null) {
@@ -326,6 +319,7 @@ router.put('/course/:courseId', authenticateToken, requireTeacher, async (req: A
         deliveries: { where: { studentId } },
         steps: {
           include: {
+            material: { select: { type: true } },
             assignment: {
               include: {
                 submissions: { where: { studentId } }
@@ -338,18 +332,13 @@ router.put('/course/:courseId', authenticateToken, requireTeacher, async (req: A
 
     const taskGrades: number[] = [];
     tasks.forEach((t) => {
-      const delivery = t.deliveries[0];
-      if (delivery?.grade !== null && delivery?.grade !== undefined) {
-        taskGrades.push(delivery.grade);
-      } else {
-        const evaluableSteps = t.steps.filter((s) => s.requiresSubmission || s.materialId);
-        const gradedSubmissions = evaluableSteps
-          .map((s) => s.assignment?.submissions[0]?.grade)
-          .filter((g): g is number => typeof g === 'number' && !isNaN(g));
-        if (gradedSubmissions.length > 0) {
-          const avg = gradedSubmissions.reduce((a, b) => a + b, 0) / gradedSubmissions.length;
-          taskGrades.push(Number(avg.toFixed(2)));
-        }
+      const evaluableSteps = t.steps.filter((s) => s.requiresSubmission);
+      const gradedSubmissions = evaluableSteps
+        .map((s) => s.assignment?.submissions[0]?.grade)
+        .filter((g): g is number => typeof g === 'number' && !isNaN(g));
+      if (evaluableSteps.length > 0 && gradedSubmissions.length === evaluableSteps.length) {
+        const avg = gradedSubmissions.reduce((a, b) => a + b, 0) / gradedSubmissions.length;
+        taskGrades.push(Number(avg.toFixed(2)));
       }
     });
 
@@ -506,8 +495,7 @@ router.get('/student/:studentId', authenticateToken, async (req: AuthRequest, re
       const tasksFormatted = termTasks.map((task) => {
         const delivery = task.deliveries[0];
         const stepsFormatted = task.steps.map((step) => {
-          const isPassiveMedia = Boolean(step.material && ['VIDEO', 'AUDIO', 'IMAGE'].includes(step.material.type));
-          const isEvaluable = !isPassiveMedia && Boolean(step.requiresSubmission || step.material?.type === 'FORM');
+          const isEvaluable = Boolean(step.requiresSubmission || step.material?.type === 'FORM');
           const prog = step.progress[0];
           const sub = step.assignment?.submissions[0];
 
@@ -525,15 +513,11 @@ router.get('/student/:studentId', authenticateToken, async (req: AuthRequest, re
             content: sub?.content || null
           };
         });
+        const evaluableSteps = stepsFormatted.filter((step) => step.isEvaluable);
+        const graded = evaluableSteps.filter((step) => typeof step.grade === 'number' && !Number.isNaN(step.grade));
         let finalTaskGrade: number | null = null;
-        if (delivery?.grade !== null && delivery?.grade !== undefined) {
-          finalTaskGrade = delivery.grade;
-        } else {
-          const graded = stepsFormatted.filter((s) => s.isEvaluable && typeof s.grade === 'number');
-          if (graded.length > 0) {
-            const sum = graded.reduce((acc, curr) => acc + (curr.grade || 0), 0);
-            finalTaskGrade = Number((sum / graded.length).toFixed(2));
-          }
+        if (evaluableSteps.length > 0 && graded.length === evaluableSteps.length) {
+          finalTaskGrade = Number((graded.reduce((sum, step) => sum + (step.grade || 0), 0) / graded.length).toFixed(2));
         }
 
         if (finalTaskGrade !== null) {

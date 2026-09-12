@@ -24,6 +24,37 @@ const postUpload = multer({
   }
 });
 
+const getDriveFileId = (rawUrl: string) => {
+  try {
+    const parsedUrl = new URL(rawUrl);
+    if (!['drive.google.com', 'docs.google.com'].includes(parsedUrl.hostname)) return null;
+    return parsedUrl.pathname.match(/\/file\/d\/([^/]+)/)?.[1] || parsedUrl.searchParams.get('id');
+  } catch {
+    return null;
+  }
+};
+
+router.get('/media/drive', async (req: AuthRequest, res: Response) => {
+  const rawUrl = typeof req.query.url === 'string' ? req.query.url : '';
+  const fileId = getDriveFileId(rawUrl);
+  if (!fileId) return res.status(400).json({ error: 'URL de Google Drive no válida.' });
+
+  try {
+    const driveResponse = await fetch(`https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w1600`);
+    if (!driveResponse.ok) return res.status(502).json({ error: 'No se pudo obtener la imagen de Google Drive.' });
+
+    const contentType = driveResponse.headers.get('content-type') || 'image/jpeg';
+    if (!contentType.startsWith('image/')) return res.status(502).json({ error: 'El recurso de Drive no es una imagen.' });
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.send(Buffer.from(await driveResponse.arrayBuffer()));
+  } catch (error) {
+    console.error('Error al obtener imagen de Google Drive:', error);
+    res.status(502).json({ error: 'No se pudo obtener la imagen de Google Drive.' });
+  }
+});
+
 // Listar todos los cursos del usuario (incluyendo datos del profesor para el alumno/tutor)
 router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {

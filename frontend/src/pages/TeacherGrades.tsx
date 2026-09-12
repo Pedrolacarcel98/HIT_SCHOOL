@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   Clock3,
   Download,
   Edit3,
@@ -93,6 +94,12 @@ interface FlatSubmission extends SubmissionItem {
   materialFormData: any;
   studentName: string;
   studentEmail: string;
+  structuredTaskId?: string | null;
+  structuredTaskTitle?: string | null;
+  structuredTaskCategory?: string | null;
+  structuredStepOrder?: number | null;
+  structuredStepTitle?: string | null;
+  structuredStepRequiresSubmission?: boolean;
 }
 
 interface StudentWithMeta extends StudentData {
@@ -116,6 +123,13 @@ interface AssignmentItem {
   course?: { id: string; title: string } | null;
   student?: { id: string; email: string; profile?: { firstName: string; lastName: string } } | null;
   material?: { id: string; title: string; type: string; url?: string | null; formData?: any; description?: string | null } | null;
+  structuredTaskStep?: {
+    id: string;
+    order: number;
+    title: string;
+    requiresSubmission: boolean;
+    task?: { id: string; title: string; category: string; dueDate?: string | null } | null;
+  } | null;
   submissions: SubmissionItem[];
 }
 
@@ -164,6 +178,23 @@ const parseSubmissionContent = (content?: string | null): { text: string; link: 
   };
 };
 
+const openAttachmentInNewTab = (dataUrl: string) => {
+  try {
+    const [metadata, encodedData] = dataUrl.split(',', 2);
+    if (!metadata || !encodedData) throw new Error('Formato de archivo no válido');
+    const mimeType = metadata.match(/data:([^;]+)/)?.[1] || 'application/octet-stream';
+    const binary = metadata.includes(';base64') ? atob(encodedData) : decodeURIComponent(encodedData);
+    const bytes = metadata.includes(';base64')
+      ? Uint8Array.from(binary, (character) => character.charCodeAt(0))
+      : new TextEncoder().encode(binary);
+    const blobUrl = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+    window.open(blobUrl, '_blank');
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+  } catch {
+    window.open(dataUrl, '_blank');
+  }
+};
+
 const parseSavedExam = (content?: string | null): ParsedExamData | null => {
   if (!content) return null;
   try {
@@ -174,11 +205,149 @@ const parseSavedExam = (content?: string | null): ParsedExamData | null => {
         score: typeof parsed.score === 'number' ? parsed.score : null,
         total: typeof parsed.total === 'number' ? parsed.total : null
       };
+
     }
     return null;
   } catch {
     return null;
   }
+};
+
+interface StructuredTaskBlockProps {
+  blockKey: string;
+  submissions: FlatSubmission[];
+  expanded: boolean;
+  onToggle: (blockKey: string) => void;
+  onEdit: (submission: FlatSubmission) => void;
+  onReviewExam: (submission: FlatSubmission, examData: ParsedExamData) => void;
+}
+
+const groupStructuredSubmissions = (submissions: FlatSubmission[]) => {
+  const groups = new Map<string, FlatSubmission[]>();
+  submissions.forEach((submission) => {
+    if (!submission.structuredTaskId) return;
+    const key = `${submission.structuredTaskId}:${submission.studentId}`;
+    groups.set(key, [...(groups.get(key) || []), submission]);
+  });
+  return Array.from(groups.values()).filter((group) => group.some((submission) => {
+    const examData = parseSavedExam(submission.content);
+    return Boolean(submission.structuredStepRequiresSubmission || examData || submission.materialType === 'FORM');
+  }));
+};
+
+const StructuredTaskBlock: React.FC<StructuredTaskBlockProps> = ({ blockKey, submissions, expanded, onToggle, onEdit, onReviewExam }) => {
+  const toggleExpanded = () => onToggle(blockKey);
+  const orderedSubmissions = [...submissions].sort((a, b) => (a.structuredStepOrder || 0) - (b.structuredStepOrder || 0));
+  const first = orderedSubmissions[0];
+  const gradedSteps = orderedSubmissions.filter((submission) => submission.grade !== null && submission.grade !== undefined);
+  const averageGrade = gradedSteps.length > 0
+    ? gradedSteps.reduce((sum, submission) => sum + (submission.grade || 0), 0) / gradedSteps.length
+    : null;
+  const dueDate = first.dueDate;
+  const latestSubmissionAt = Math.max(...orderedSubmissions.map((submission) => new Date(submission.submittedAt).getTime()));
+  const isLate = Boolean(dueDate && latestSubmissionAt > new Date(dueDate).getTime());
+
+  return (
+    <article
+      onClick={toggleExpanded}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          toggleExpanded();
+        }
+      }}
+      style={{ padding: '1rem 1.15rem', borderRadius: '10px', border: '1px solid var(--border)', borderLeft: '4px solid #22c55e', background: 'var(--surface)', cursor: 'pointer' }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <div>
+          <span style={{ display: 'inline-block', marginBottom: '0.25rem', padding: '0.18rem 0.5rem', borderRadius: '6px', background: 'var(--primary-light)', color: 'var(--primary)', fontSize: '0.7rem', fontWeight: 700 }}>
+            {first.structuredTaskCategory || first.assignmentCategory}
+          </span>
+          <strong style={{ display: 'block', color: 'var(--text-main)', fontSize: '1rem' }}>{first.structuredTaskTitle || first.assignmentTitle}</strong>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+            <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{first.studentName} · {orderedSubmissions.length} pasos</span>
+            {isLate && <span style={{ padding: '0.16rem 0.45rem', borderRadius: '10px', background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: '0.7rem', fontWeight: 700 }}>Fuera de plazo</span>}
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+          <span style={{ padding: '0.3rem 0.7rem', borderRadius: '16px', background: averageGrade !== null && averageGrade >= 5 ? '#eaf4ef' : '#fef7e8', color: averageGrade !== null && averageGrade >= 5 ? '#24583e' : '#8d5b12', border: `1px solid ${averageGrade !== null && averageGrade >= 5 ? '#bfe0d0' : '#fae0b0'}`, fontWeight: 700, fontSize: '0.85rem' }}>
+            {averageGrade !== null ? `Nota tarea: ${averageGrade.toFixed(1)} / 10` : 'Pendiente de calificar'}
+          </span>
+          <button type="button" onClick={(event) => { event.stopPropagation(); toggleExpanded(); }} className="btn-secondary" aria-expanded={expanded} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.4rem 0.7rem', fontSize: '0.78rem' }}>
+            {expanded ? 'Ocultar pasos' : 'Ver entregas'} {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.75rem' }}>
+        {orderedSubmissions.map((submission) => {
+          const examData = parseSavedExam(submission.content);
+          const isExam = submission.materialType === 'FORM' || Boolean(examData);
+          const isEvaluable = Boolean(submission.structuredStepRequiresSubmission || isExam);
+          const hasGrade = submission.grade !== null && submission.grade !== undefined;
+          return (
+            <span key={submission.id} style={{ padding: '0.22rem 0.55rem', borderRadius: '6px', background: !isEvaluable ? '#ecfdf5' : (hasGrade ? '#eaf4ef' : '#fef7e8'), color: !isEvaluable ? '#065f46' : (hasGrade ? '#24583e' : '#8d5b12'), fontSize: '0.75rem', fontWeight: 600 }}>
+              {!isEvaluable ? '✓' : (hasGrade ? `${submission.grade!.toFixed(1)}/10` : '⏳')} {submission.structuredStepTitle || submission.assignmentTitle}
+            </span>
+          );
+        })}
+      </div>
+
+      {expanded && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px solid var(--border)' }}>
+          {orderedSubmissions.map((submission, index) => {
+            const examData = parseSavedExam(submission.content);
+            const isExam = submission.materialType === 'FORM' || Boolean(examData);
+            const isEvaluable = Boolean(submission.structuredStepRequiresSubmission || isExam);
+            const parsed = parseSubmissionContent(submission.content);
+            return (
+              <div key={submission.id} style={{ padding: '0.75rem', borderRadius: '8px', background: 'var(--surface-alt)', border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <strong style={{ color: 'var(--text-main)', fontSize: '0.88rem' }}>Paso {index + 1}: {submission.structuredStepTitle || submission.assignmentTitle}</strong>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    {submission.grade !== null && submission.grade !== undefined && <span style={{ padding: '0.25rem 0.55rem', borderRadius: '10px', background: submission.grade >= 5 ? '#eaf4ef' : '#fdf0f0', border: `1px solid ${submission.grade >= 5 ? '#bfe0d0' : '#f7caca'}`, color: submission.grade >= 5 ? '#24583e' : '#9e2a2b', fontSize: '0.75rem', fontWeight: 700 }}>Nota: {submission.grade.toFixed(1)} / 10</span>}
+                    {isExam && examData && <button type="button" onClick={(event) => { event.stopPropagation(); onReviewExam(submission, examData); }} className="btn-secondary" style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}><FileText size={13} /> Ver cuestionario</button>}
+                    {isEvaluable && !isExam && <button type="button" onClick={(event) => { event.stopPropagation(); onEdit(submission); }} className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.35rem 0.65rem', fontSize: '0.75rem' }}><Edit3 size={13} /> Editar nota y feedback</button>}
+                  </div>
+                </div>
+                {isExam ? (
+                  <span style={{ display: 'block', marginTop: '0.4rem', color: 'var(--text-muted)', fontSize: '0.78rem' }}>Test automático completado. La nota no se introduce manualmente.</span>
+                ) : (
+                  <div style={{ marginTop: '0.4rem', padding: '0.55rem 0.7rem', background: 'var(--surface)', borderRadius: '6px', color: 'var(--text-main)', fontSize: '0.82rem', whiteSpace: 'pre-wrap' }}>
+                    {parsed.text && <div>{parsed.text}</div>}
+                    {parsed.link && (
+                      <a href={parsed.link} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', marginTop: parsed.text ? '0.45rem' : 0, color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
+                        <ExternalLink size={13} /> Abrir enlace entregado
+                      </a>
+                    )}
+                    {parsed.attachment && parsed.attachment.dataUrl && (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap', marginTop: parsed.text || parsed.link ? '0.45rem' : 0 }}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={parsed.attachment.name}>
+                          Archivo: {parsed.attachment.name}
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <button type="button" onClick={() => openAttachmentInNewTab(parsed.attachment!.dataUrl)} className="btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.28rem 0.55rem', fontSize: '0.75rem' }}>
+                            <ExternalLink size={13} /> Abrir
+                          </button>
+                          <a href={parsed.attachment.dataUrl} download={parsed.attachment.name} className="btn-secondary" aria-label={`Descargar ${parsed.attachment.name}`} title="Descargar archivo" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0.35rem', textDecoration: 'none' }}>
+                            <Download size={15} />
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                    {!parsed.text && !parsed.link && !parsed.attachment && 'Sin entrega registrada.'}
+                  </div>
+                )}
+                {submission.feedback && <div style={{ marginTop: '0.4rem', color: '#1e40af', fontSize: '0.78rem' }}>💬 {submission.feedback}</div>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </article>
+  );
 };
 
 const TeacherGrades: React.FC = () => {
@@ -212,6 +381,8 @@ const TeacherGrades: React.FC = () => {
   const [saveError, setSaveError] = useState('');
   const [reviewingExam, setReviewingExam] = useState<{ subId: string; title: string; questions?: ReviewQuestion[]; answers: Record<string, any>; score: number | null; total?: number | null; feedback: string | null } | null>(null);
   const [viewingAttachment, setViewingAttachment] = useState<AttachmentData | null>(null);
+  const [expandedSubmissionDetailsId, setExpandedSubmissionDetailsId] = useState<string | null>(null);
+  const [expandedStructuredTaskKey, setExpandedStructuredTaskKey] = useState<string | null>(null);
 
   // Evaluación Final por Competencias
   const [currentEvaluation, setCurrentEvaluation] = useState<TermEvaluationData | null>(null);
@@ -380,13 +551,19 @@ const TeacherGrades: React.FC = () => {
         ...sub,
         assignmentTitle: assignment.title,
         assignmentCategory: assignment.category || 'GRAMMAR_VOCABULARY',
-        dueDate: assignment.dueDate,
+        dueDate: assignment.dueDate || assignment.structuredTaskStep?.task?.dueDate || null,
         courseId: assignment.courseId,
         courseTitle: assignment.course?.title,
         isDirect: Boolean(assignment.studentId),
         materialType: assignment.material?.type || (sub.content?.includes('"answers"') ? 'FORM' : 'DOCUMENT'),
         materialUrl: assignment.material?.url || null,
         materialFormData: assignment.material?.formData || null,
+        structuredTaskId: assignment.structuredTaskStep?.task?.id || null,
+        structuredTaskTitle: assignment.structuredTaskStep?.task?.title || null,
+        structuredTaskCategory: assignment.structuredTaskStep?.task?.category || null,
+        structuredStepOrder: assignment.structuredTaskStep?.order || null,
+        structuredStepTitle: assignment.structuredTaskStep?.title || null,
+        structuredStepRequiresSubmission: assignment.structuredTaskStep?.requiresSubmission || false,
         studentName: sub.student?.profile ? `${sub.student.profile.firstName} ${sub.student.profile.lastName}`.trim() : (sub.student?.email || 'Alumno'),
         studentEmail: sub.student?.email || ''
         }))
@@ -431,6 +608,11 @@ const TeacherGrades: React.FC = () => {
     if (!selectedStudentForDossier) return null;
     return studentsWithMeta.find(s => s.id === selectedStudentForDossier.id) || selectedStudentForDossier;
   }, [studentsWithMeta, selectedStudentForDossier]);
+
+  const activeStructuredTaskGroups = useMemo(
+    () => activeDossierStudent ? groupStructuredSubmissions(activeDossierStudent.submissions) : [],
+    [activeDossierStudent]
+  );
 
   // Filtrado de Alumnos
   const filteredStudents = useMemo(() => {
@@ -512,7 +694,6 @@ const TeacherGrades: React.FC = () => {
     });
   };
 
-  // Abrir Modal de Calificación
   const openGradingModal = (sub: {
     id: string;
     studentName: string;
@@ -1138,7 +1319,26 @@ const TeacherGrades: React.FC = () => {
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                      {activeDossierStudent.submissions.filter(sub => !termEvaluation?.tasks?.length || termEvaluation.tasks.some(task => sub.assignmentTitle.toLowerCase().includes(task.title.toLowerCase()) || task.title.toLowerCase().includes(sub.assignmentTitle.toLowerCase()))).map(sub => {
+                      {activeStructuredTaskGroups.map((group) => (
+                        <StructuredTaskBlock
+                          key={`${group[0].structuredTaskId}:${group[0].studentId}`}
+                          blockKey={`${group[0].structuredTaskId}:${group[0].studentId}`}
+                          submissions={group}
+                          expanded={expandedStructuredTaskKey === `${group[0].structuredTaskId}:${group[0].studentId}`}
+                          onToggle={(blockKey) => setExpandedStructuredTaskKey((current) => current === blockKey ? null : blockKey)}
+                          onEdit={openGradingModal}
+                          onReviewExam={(submission, examData) => setReviewingExam({
+                            subId: submission.id,
+                            title: submission.assignmentTitle,
+                            questions: submission.materialFormData?.questions || [],
+                            answers: examData.answers,
+                            score: submission.grade,
+                            total: examData.total,
+                            feedback: submission.feedback
+                          })}
+                        />
+                      ))}
+                      {activeDossierStudent.submissions.filter(sub => !sub.structuredTaskId && (!termEvaluation?.tasks?.length || termEvaluation.tasks.some(task => sub.assignmentTitle.toLowerCase().includes(task.title.toLowerCase()) || task.title.toLowerCase().includes(sub.assignmentTitle.toLowerCase())))).map(sub => {
                         const examData = parseSavedExam(sub.content);
                         const isExam = sub.materialType === 'FORM' || Boolean(examData);
                         const hasGrade = sub.grade !== null && sub.grade !== undefined;
@@ -1168,7 +1368,7 @@ const TeacherGrades: React.FC = () => {
                                 {isLate && <span style={{ display: 'inline-flex', alignItems: 'center', marginTop: '0.3rem', padding: '0.18rem 0.45rem', borderRadius: '10px', background: '#fef3c7', border: '1px solid #fde68a', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}>Entregada fuera de plazo</span>}
                               </div>
 
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                                 {hasGrade ? (
                                   <span style={{
                                     display: 'inline-flex',
@@ -1200,11 +1400,20 @@ const TeacherGrades: React.FC = () => {
                                     <Clock3 size={14} /> Pendiente de evaluar
                                   </span>
                                 )}
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedSubmissionDetailsId(expandedSubmissionDetailsId === sub.id ? null : sub.id)}
+                                  className="btn-secondary"
+                                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.35rem 0.65rem', fontSize: '0.78rem' }}
+                                >
+                                  {expandedSubmissionDetailsId === sub.id ? 'Ocultar detalle' : 'Ver detalle'}
+                                  {expandedSubmissionDetailsId === sub.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                </button>
                               </div>
                             </div>
 
                             {/* Contenido / Texto entregado o Examen */}
-                            {sub.content && (() => {
+                            {expandedSubmissionDetailsId === sub.id && sub.content && (() => {
                               if (examData) {
                                 return (
                                   <div style={{
@@ -1342,7 +1551,7 @@ const TeacherGrades: React.FC = () => {
                             })()}
 
                             {/* Feedback del profesor */}
-                            {sub.feedback && (
+                            {expandedSubmissionDetailsId === sub.id && sub.feedback && (
                               <div style={{ marginTop: '0.65rem', padding: '0.65rem 0.85rem', background: '#eff6ff', borderRadius: '8px', border: '1px solid #bfdbfe', fontSize: '0.86rem' }}>
                                 <strong style={{ color: '#1d4ed8', display: 'block', marginBottom: '0.25rem', fontSize: '0.78rem', fontWeight: 700 }}>
                                   💬 Comentarios y observaciones del profesor:
@@ -1352,7 +1561,7 @@ const TeacherGrades: React.FC = () => {
                             )}
 
                             {/* Botones de acción (para tareas manuales o documentos adjuntos) */}
-                            {(!isExam || documentUrl) && (
+                            {expandedSubmissionDetailsId === sub.id && (!isExam || documentUrl) && (
                               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border)' }}>
                                 {documentUrl && (
                                   <a
@@ -1378,6 +1587,7 @@ const TeacherGrades: React.FC = () => {
                                 )}
                               </div>
                             )}
+
                           </div>
                         );
                       })}
@@ -1413,6 +1623,7 @@ const TeacherGrades: React.FC = () => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
               {filteredCourses.map(course => {
                 const isExpanded = selectedClassId === course.id;
+                const structuredGroups = groupStructuredSubmissions(course.submissions);
 
                 return (
                   <div key={course.id} className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
@@ -1493,6 +1704,26 @@ const TeacherGrades: React.FC = () => {
                             Aún no hay entregas de tareas ni exámenes en esta clase.
                           </div>
                         ) : (
+                          <>
+                          {structuredGroups.map((group) => (
+                            <StructuredTaskBlock
+                              key={`${group[0].structuredTaskId}:${group[0].studentId}`}
+                              blockKey={`${group[0].structuredTaskId}:${group[0].studentId}`}
+                              submissions={group}
+                              expanded={expandedStructuredTaskKey === `${group[0].structuredTaskId}:${group[0].studentId}`}
+                              onToggle={(blockKey) => setExpandedStructuredTaskKey((current) => current === blockKey ? null : blockKey)}
+                              onEdit={openGradingModal}
+                              onReviewExam={(submission, examData) => setReviewingExam({
+                                subId: submission.id,
+                                title: submission.assignmentTitle,
+                                questions: submission.materialFormData?.questions || [],
+                                answers: examData.answers,
+                                score: submission.grade,
+                                total: examData.total,
+                                feedback: submission.feedback
+                              })}
+                            />
+                          ))}
                           <div className="table-responsive">
                             <table style={{ width: '100%', minWidth: '700px', borderCollapse: 'collapse', textAlign: 'left', background: 'var(--surface)', borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--border)' }}>
                               <thead>
@@ -1506,14 +1737,16 @@ const TeacherGrades: React.FC = () => {
                                 </tr>
                               </thead>
                               <tbody>
-                                {course.submissions.map(sub => {
+                                {course.submissions.filter(sub => !sub.structuredTaskId).map(sub => {
                                   const examData = parseSavedExam(sub.content);
                                   const isExam = sub.materialType === 'FORM' || Boolean(examData);
                                   const hasGrade = sub.grade !== null && sub.grade !== undefined;
+                                  const submissionDetails = parseSubmissionContent(sub.content);
                                   const documentUrl = (sub.content && /^https?:\/\//i.test(sub.content)) ? sub.content : sub.materialUrl;
 
                                   return (
-                                    <tr key={sub.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                                    <React.Fragment key={sub.id}>
+                                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
                                       <td style={{ padding: '0.85rem 1rem', fontWeight: 600, color: 'var(--text-main)', fontSize: '0.9rem' }}>
                                         {sub.studentName}
                                       </td>
@@ -1550,6 +1783,15 @@ const TeacherGrades: React.FC = () => {
                                       </td>
                                       <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
                                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.4rem' }}>
+                                          <button
+                                            type="button"
+                                            onClick={() => setExpandedSubmissionDetailsId(expandedSubmissionDetailsId === sub.id ? null : sub.id)}
+                                            className="btn-secondary"
+                                            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem', padding: '0.3rem 0.6rem', fontSize: '0.78rem' }}
+                                          >
+                                            {expandedSubmissionDetailsId === sub.id ? 'Ocultar detalle' : 'Ver detalle'}
+                                            {expandedSubmissionDetailsId === sub.id ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                                          </button>
                                           {documentUrl && (
                                             <a
                                               href={documentUrl}
@@ -1602,11 +1844,43 @@ const TeacherGrades: React.FC = () => {
                                         </div>
                                       </td>
                                     </tr>
+                                    {expandedSubmissionDetailsId === sub.id && (
+                                      <tr>
+                                        <td colSpan={6} style={{ padding: '0.85rem 1rem', background: 'var(--surface-alt)', borderBottom: '1px solid var(--border)' }}>
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
+                                            <div style={{ flex: '1 1 420px' }}>
+                                              <strong style={{ display: 'block', marginBottom: '0.45rem', color: 'var(--text-main)', fontSize: '0.85rem' }}>Respuesta del alumno</strong>
+                                              {isExam ? (
+                                                <div style={{ padding: '0.65rem 0.8rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                                                  Cuestionario respondido. Pulsa «Ver Test» para revisar sus respuestas.
+                                                </div>
+                                              ) : (
+                                                <div style={{ padding: '0.65rem 0.8rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-main)', fontSize: '0.84rem', whiteSpace: 'pre-wrap' }}>
+                                                  {submissionDetails.text || submissionDetails.link || (submissionDetails.attachment ? `Archivo: ${submissionDetails.attachment.name}` : 'Sin contenido textual.')}
+                                                </div>
+                                              )}
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.4rem' }}>
+                                              {isExam && (
+                                                <button type="button" onClick={() => setReviewingExam({ subId: sub.id, title: sub.assignmentTitle, questions: sub.materialFormData?.questions || [], answers: examData?.answers || {}, score: sub.grade, total: examData?.total, feedback: sub.feedback })} className="btn-secondary" style={{ padding: '0.4rem 0.7rem', fontSize: '0.78rem' }}>
+                                                  <FileText size={13} /> Ver Test
+                                                </button>
+                                              )}
+                                              <button type="button" onClick={() => openGradingModal(sub)} className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.4rem 0.7rem', fontSize: '0.78rem' }}>
+                                                <Edit3 size={13} /> Editar Nota y Feedback
+                                              </button>
+                                            </div>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    )}
+                                    </React.Fragment>
                                   );
                                 })}
                               </tbody>
                             </table>
                           </div>
+                          </>
                         )}
                       </div>
                     )}

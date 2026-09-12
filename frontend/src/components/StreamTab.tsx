@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Download, ImagePlus, Link, MessageSquare, Send, Trash2, Video, X } from 'lucide-react';
-import { getPostMediaDownloadUrl, getPostMediaUrl } from '../utils/postMedia';
+import { getPostMediaDownloadUrl, getPostMediaFallbackUrl, getPostMediaUrl } from '../utils/postMedia';
 
 const StreamTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const [posts, setPosts] = useState<any[]>([]);
@@ -215,6 +215,7 @@ const StreamTab: React.FC<{ courseId: string }> = ({ courseId }) => {
             {post.content && <p style={{ margin: post.mediaUrl ? '0 0 1rem' : 0, color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>{post.content}</p>}
             {post.mediaUrl && (() => {
               const mediaUrl = post.mediaUrl.startsWith('http') ? getPostMediaUrl(post.mediaUrl, post.mediaType) : `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${post.mediaUrl}`;
+              const fallbackUrl = getPostMediaFallbackUrl(post.mediaUrl, post.mediaType);
               const isVideo = post.mediaType?.startsWith('video/');
               return (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.75rem' }}>
@@ -224,7 +225,15 @@ const StreamTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                       Tu navegador no puede reproducir este vídeo.
                     </video>
                   ) : (
-                    <img src={mediaUrl} alt={post.mediaName || 'Imagen compartida en el tablón'} style={{ display: 'block', width: '100%', maxWidth: '720px', maxHeight: '560px', objectFit: 'contain', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)' }} />
+                    <img
+                      src={mediaUrl}
+                      alt={post.mediaName || 'Imagen compartida en el tablón'}
+                      referrerPolicy="no-referrer"
+                      onError={(event) => {
+                        if (fallbackUrl && event.currentTarget.src !== fallbackUrl) event.currentTarget.src = fallbackUrl;
+                      }}
+                      style={{ display: 'block', width: '100%', maxWidth: '720px', maxHeight: '560px', objectFit: 'contain', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)' }}
+                    />
                   )}
                   <a
                     href={post.mediaUrl.startsWith('http') ? getPostMediaDownloadUrl(post.mediaUrl) : mediaUrl}

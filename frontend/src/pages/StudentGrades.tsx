@@ -8,6 +8,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import TaskDeliveryReviewModal, { type TaskForReview } from '../components/TaskDeliveryReviewModal';
+import StudentCompetencyGrades from '../components/StudentCompetencyGrades';
 import { generateReportCardPDF, type ReportCardData, type ReportCardTaskItem } from '../utils/reportCard';
 import { useParent } from '../context/ParentContext';
 
@@ -50,12 +51,6 @@ const StudentGrades: React.FC = () => {
 
   const currentTermInfo = termGradesData?.[selectedTerm];
   const isOnline = studentInfo?.modality === 'ONLINE';
-  const displayedOverallGrade = isOnline
-    ? currentTermInfo?.overallGrade
-    : [currentTermInfo?.middleExamGrade, currentTermInfo?.finalExamGrade, currentTermInfo?.tasksAverage].some((value) => typeof value === 'number')
-      ? Number(((currentTermInfo?.middleExamGrade || 0) * 0.35 + (currentTermInfo?.finalExamGrade || 0) * 0.35 + (currentTermInfo?.tasksAverage || 0) * 0.3).toFixed(2))
-      : null;
-
   // Descargar Boletín Trimestral PDF
   const handleDownloadReportCard = () => {
     if (!currentTermInfo || !studentInfo) return;
@@ -179,81 +174,14 @@ const StudentGrades: React.FC = () => {
           )}
         </div>
 
-        {/* Resumen de Notas */}
-        <div style={{ display: 'grid', gridTemplateColumns: isOnline ? 'repeat(1, minmax(0, 1fr))' : 'repeat(4, minmax(0, 1fr))', gap: '0.75rem', marginBottom: '1.25rem', overflowX: 'auto' }}>
-          {!isOnline && (
-            <>
-              <div style={{ padding: '0.85rem', background: 'var(--surface-alt)', borderRadius: '10px', border: '1px solid var(--border)', textAlign: 'center' }}>
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>MIDDLE TERM</span>
-                <strong style={{ fontSize: '1.25rem', color: 'var(--text-main)', display: 'block', marginTop: '0.2rem' }}>
-                  {currentTermInfo?.middleExamGrade !== null && currentTermInfo?.middleExamGrade !== undefined
-                    ? `${currentTermInfo.middleExamGrade.toFixed(1)} / 10`
-                    : '- / 10'}
-                </strong>
-                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Examen parcial</span>
-              </div>
-
-              <div style={{ padding: '0.85rem', background: 'var(--surface-alt)', borderRadius: '10px', border: '1px solid var(--border)', textAlign: 'center' }}>
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>FINAL TERM</span>
-                <strong style={{ fontSize: '1.25rem', color: 'var(--text-main)', display: 'block', marginTop: '0.2rem' }}>
-                  {currentTermInfo?.finalExamGrade !== null && currentTermInfo?.finalExamGrade !== undefined
-                    ? `${currentTermInfo.finalExamGrade.toFixed(1)} / 10`
-                    : '- / 10'}
-                </strong>
-                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Examen final</span>
-              </div>
-            </>
-          )}
-
-          {!isOnline && <div style={{ padding: '0.85rem', background: 'var(--surface-alt)', borderRadius: '10px', border: '1px solid var(--border)', textAlign: 'center' }}>
-            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>MEDIA TAREAS</span>
-            <strong style={{ fontSize: '1.25rem', color: 'var(--text-main)', display: 'block', marginTop: '0.2rem' }}>
-              {currentTermInfo?.tasksAverage !== null && currentTermInfo?.tasksAverage !== undefined
-                ? `${currentTermInfo.tasksAverage.toFixed(1)} / 10`
-                : '- / 10'}
-            </strong>
-            <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-              {isOnline ? '100% nota final' : '30% nota final'}
-            </span>
-          </div>}
-
-          <div style={{ padding: '0.85rem', background: 'var(--primary-light)', borderRadius: '10px', border: '1px solid var(--primary-border)', textAlign: 'center' }}>
-            <span style={{ fontSize: '0.72rem', color: 'var(--primary-text)', display: 'block', fontWeight: 700 }}>CALIFICACIÓN TRIMESTRAL</span>
-            <strong style={{ fontSize: '1.35rem', color: 'var(--primary-text)', display: 'block', marginTop: '0.2rem' }}>
-              {displayedOverallGrade !== null && displayedOverallGrade !== undefined
-                ? `${displayedOverallGrade.toFixed(1)} / 10`
-                : '- / 10'}
-            </strong>
-            <span style={{ fontSize: '0.68rem', color: 'var(--primary-text)', fontWeight: 600 }}>
-              {isOnline ? 'Media continua' : '35% Mid + 35% Final + 30% Tareas'}
-            </span>
-          </div>
-        </div>
-
-        {/* Competencias CEFR */}
-        {isOnline && currentTermInfo && (currentTermInfo.grammar !== null || currentTermInfo.reading !== null || currentTermInfo.writing !== null || currentTermInfo.listening !== null || currentTermInfo.speaking !== null) && (
-          <div style={{ marginBottom: '1rem' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '0.4rem' }}>
-              Desglose por Competencias Lingüísticas CEFR
-            </span>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', gap: '0.5rem' }}>
-              {[
-                { key: 'grammar', label: 'Grammar', val: currentTermInfo.grammar },
-                { key: 'reading', label: 'Reading', val: currentTermInfo.reading },
-                { key: 'writing', label: 'Writing', val: currentTermInfo.writing },
-                { key: 'listening', label: 'Listening', val: currentTermInfo.listening },
-                { key: 'speaking', label: 'Speaking', val: currentTermInfo.speaking }
-              ].map(({ key, label, val }) => (
-                <div key={key} style={{ padding: '0.5rem', background: 'var(--surface-alt)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
-                  <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>{label}</span>
-                  <strong style={{ fontSize: '1rem', color: 'var(--primary)' }}>
-                    {val !== null && val !== undefined ? `${val.toFixed(1)}` : '-'}
-                  </strong>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        <StudentCompetencyGrades
+          grammar={currentTermInfo?.grammar}
+          reading={currentTermInfo?.reading}
+          writing={currentTermInfo?.writing}
+          listening={currentTermInfo?.listening}
+          speaking={currentTermInfo?.speaking}
+          overallGrade={currentTermInfo?.overallGrade}
+        />
 
         {/* Observaciones del profesor */}
         {currentTermInfo?.observations && (

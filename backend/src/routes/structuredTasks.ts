@@ -40,18 +40,19 @@ const serializeTask = (task: any, isTeacherView = false) => ({
   assignedStudentIds: Array.isArray(task.assignedStudents) ? task.assignedStudents.map((item: any) => item.studentId) : (task.assignedStudentId ? [task.assignedStudentId] : []),
   assignedStudentNames: Array.isArray(task.assignedStudents) ? task.assignedStudents.map((item: any) => getStudentName(item.student)).filter(Boolean) : [],
   steps: (task.steps || []).map((step: any) => {
-    const isPassiveMedia = Boolean(step.material && ['VIDEO', 'AUDIO', 'IMAGE'].includes(step.material.type));
-    const isEvaluable = !isPassiveMedia && Boolean(step.requiresSubmission || step.material?.type === 'FORM');
+    const isEvaluable = Boolean(step.requiresSubmission || step.material?.type === 'FORM');
+    const submission = step.assignment?.submissions?.[0] || null;
     return {
       id: step.id,
       order: step.order,
       title: step.title,
       materialId: step.materialId,
       material: step.material,
-      requiresSubmission: !isPassiveMedia && Boolean(step.requiresSubmission),
+      requiresSubmission: Boolean(step.requiresSubmission),
       isEvaluable,
       isCompleted: isTeacherView ? false : ((Array.isArray(step.progress) && step.progress.length > 0) || Boolean(step.assignment?.submissions?.[0])),
-      submission: isTeacherView ? null : (step.assignment?.submissions?.[0] || null)
+      completedAt: isTeacherView ? null : (step.progress?.[0]?.completedAt || submission?.submittedAt || null),
+      submission: isTeacherView ? null : submission
     };
   })
 });
@@ -107,8 +108,7 @@ const syncTaskDeliveryOnStepCompletion = async (taskId: string, studentId: strin
 
     const existingDelivery = task.deliveries[0];
     const evaluableSteps = task.steps.filter((s) => {
-      const isPassiveMedia = Boolean(s.material && ['VIDEO', 'AUDIO', 'IMAGE'].includes(s.material.type));
-      return !isPassiveMedia && (s.requiresSubmission || s.material?.type === 'FORM');
+      return s.requiresSubmission || s.material?.type === 'FORM';
     });
     const gradedSubmissions = evaluableSteps
       .map((s) => s.assignment?.submissions[0]?.grade)
@@ -245,6 +245,18 @@ const hasStudentCompletedStep = (step: any, studentId: string) => {
   return hasProgress || hasSubmission;
 };
 
+const getStudentStepCompletionDate = (step: any, studentId: string) => {
+  const dates = [
+    ...(Array.isArray(step.progress) ? step.progress.filter((p: any) => p.studentId === studentId).map((p: any) => p.completedAt) : []),
+    ...(Array.isArray(step.assignment?.submissions) ? step.assignment.submissions.filter((s: any) => s.studentId === studentId).map((s: any) => s.submittedAt) : [])
+  ]
+    .filter(Boolean)
+    .map((value: string) => new Date(value))
+    .filter((date: Date) => !Number.isNaN(date.getTime()));
+
+  return dates.length > 0 ? new Date(Math.max(...dates.map((date) => date.getTime()))) : null;
+};
+
 const buildTaskStats = (task: any, courseStudents: StudentRef[] = []) => {
   const targetStudents = getTargetStudents(task, courseStudents);
   const totalSteps = task.steps?.length || 0;
@@ -259,7 +271,22 @@ const buildTaskStats = (task: any, courseStudents: StudentRef[] = []) => {
     totalTargetStudents: targetStudents.length,
     completedStudentsCount: completedStudents.length,
     completionRate: targetStudents.length > 0 ? Math.round((completedStudents.length / targetStudents.length) * 100) : 0,
-    completedStudents: completedStudents.map((s) => ({ id: s.id, name: s.name, email: s.email })),
+    completedStudents: completedStudents.map((s) => {
+      const completionDates = task.steps
+        .map((step: any) => getStudentStepCompletionDate(step, s.id))
+        .filter((date: Date | null): date is Date => Boolean(date));
+      const completedAt = completionDates.length > 0
+        ? new Date(Math.max(...completionDates.map((date: Date) => date.getTime())))
+        : null;
+
+      return {
+        id: s.id,
+        name: s.name,
+        email: s.email,
+        completedAt,
+        isLate: Boolean(task.dueDate && completedAt && completedAt.getTime() > new Date(task.dueDate).getTime())
+      };
+    }),
     pendingStudents: pendingStudents.map((s) => ({ id: s.id, name: s.name, email: s.email }))
   };
 };
@@ -632,7 +659,7 @@ router.post('/steps/:stepId/complete', authenticateToken, async (req: AuthReques
 // 8. Crear nueva tarea o plantilla
 router.post('/', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
   const { title, description, dueDate, publishAt, term, category, isTemplate, courseId, assignmentType, assignedStudentId, assignedStudentIds, isSequential, steps } = req.body;
-  const isTemplateTask = Boolean(isTemplate);
+  const isTemplateTask = Boolean(isTemplate) && !(courseId && assignmentType === 'CLASS');
   const recipientIds = Array.isArray(assignedStudentIds) ? assignedStudentIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0) : (assignedStudentId ? [assignedStudentId] : []);
 
   if (!title?.trim() || !Array.isArray(steps) || steps.length === 0) return res.status(400).json({ error: 'Título y al menos un paso son obligatorios.' });

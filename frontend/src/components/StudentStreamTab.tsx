@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Download, MessageSquare, ShieldCheck } from 'lucide-react';
 import { useParent } from '../context/ParentContext';
-import { getPostMediaDownloadUrl, getPostMediaUrl } from '../utils/postMedia';
+import { getPostMediaDownloadUrl, getPostMediaFallbackUrl, getPostMediaUrl } from '../utils/postMedia';
 
 type Post = {
   id: string;
@@ -15,7 +15,7 @@ type Post = {
 const StudentStreamTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const [posts, setPosts] = useState<Post[]>([]);
   const userRole = localStorage.getItem('userRole');
-  const { selectedStudent } = useParent();
+  const { selectedStudent, selectedStudentId } = useParent();
 
   const activeStudentName = selectedStudent?.profile?.firstName || 'el alumno';
 
@@ -24,7 +24,10 @@ const StudentStreamTab: React.FC<{ courseId: string }> = ({ courseId }) => {
       try {
         const token = localStorage.getItem('token');
         const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-        const postsRes = await fetch(`${apiUrl}/api/courses/${courseId}/posts`, {
+        const studentParam = userRole === 'PARENT' && selectedStudentId
+          ? `?studentId=${encodeURIComponent(selectedStudentId)}`
+          : '';
+        const postsRes = await fetch(`${apiUrl}/api/courses/${courseId}/posts${studentParam}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
 
@@ -38,10 +41,10 @@ const StudentStreamTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     };
 
     fetchPosts();
-  }, [courseId]);
+  }, [courseId, selectedStudentId]);
 
   return (
-    <div className="page-container" style={{ maxWidth: '1000px' }}>
+    <div className="page-container" style={{ maxWidth: '1200px' }}>
       {userRole === 'PARENT' && (
         <div style={{
           padding: '0.85rem 1.25rem',
@@ -96,6 +99,7 @@ const StudentStreamTab: React.FC<{ courseId: string }> = ({ courseId }) => {
             {post.content && <p style={{ margin: post.mediaUrl ? '0 0 1rem' : 0, color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>{post.content}</p>}
             {post.mediaUrl && (() => {
               const mediaUrl = post.mediaUrl.startsWith('http') ? getPostMediaUrl(post.mediaUrl, post.mediaType) : `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${post.mediaUrl}`;
+              const fallbackUrl = getPostMediaFallbackUrl(post.mediaUrl, post.mediaType);
               const isVideo = post.mediaType?.startsWith('video/');
               return (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.75rem' }}>
@@ -105,7 +109,15 @@ const StudentStreamTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                       Tu navegador no puede reproducir este vídeo.
                     </video>
                   ) : (
-                    <img src={mediaUrl} alt={post.mediaName || 'Imagen compartida en el tablón'} style={{ display: 'block', width: '100%', maxWidth: '720px', maxHeight: '560px', objectFit: 'contain', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)' }} />
+                    <img
+                      src={mediaUrl}
+                      alt={post.mediaName || 'Imagen compartida en el tablón'}
+                      referrerPolicy="no-referrer"
+                      onError={(event) => {
+                        if (fallbackUrl && event.currentTarget.src !== fallbackUrl) event.currentTarget.src = fallbackUrl;
+                      }}
+                      style={{ display: 'block', width: '100%', maxWidth: '720px', maxHeight: '560px', objectFit: 'contain', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)' }}
+                    />
                   )}
                   <a
                     href={post.mediaUrl.startsWith('http') ? getPostMediaDownloadUrl(post.mediaUrl) : mediaUrl}

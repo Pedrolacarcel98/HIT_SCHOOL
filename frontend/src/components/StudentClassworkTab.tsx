@@ -22,6 +22,7 @@ const SKILL_CATEGORIES = [
 
 interface AssignedMaterial {
   id: string;
+  materialId?: string;
   title: string;
   description: string;
   level: string;
@@ -31,6 +32,7 @@ interface AssignedMaterial {
   deadline?: string;
   rawDeadline?: string;
   status: 'PENDING' | 'COMPLETED';
+  isEvaluable?: boolean;
   url: string;
   type?: string;
   formData?: any;
@@ -57,6 +59,7 @@ interface StructuredTask {
     requiresSubmission?: boolean;
     isEvaluable?: boolean;
     isCompleted?: boolean;
+    completedAt?: string | null;
     submission?: any;
     material?: { id: string; title: string; type: string; url?: string | null; description?: string; level?: string; category?: string; formData?: any } | null;
   }>;
@@ -163,19 +166,34 @@ const getImageDisplayUrl = (url?: string | null) => {
   return driveFileId ? `https://lh3.googleusercontent.com/d/${driveFileId}=w1600` : url;
 };
 
+const openAttachmentInNewTab = (dataUrl: string) => {
+  try {
+    const [metadata, encodedData] = dataUrl.split(',', 2);
+    if (!metadata || !encodedData) throw new Error('Formato de archivo no válido');
+    const mimeType = metadata.match(/data:([^;]+)/)?.[1] || 'application/octet-stream';
+    const binary = metadata.includes(';base64') ? atob(encodedData) : decodeURIComponent(encodedData);
+    const bytes = metadata.includes(';base64')
+      ? Uint8Array.from(binary, (character) => character.charCodeAt(0))
+      : new TextEncoder().encode(binary);
+    const blobUrl = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+    window.open(blobUrl, '_blank');
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+  } catch {
+    window.open(dataUrl, '_blank');
+  }
+};
+
 interface StudentClassworkTabProps {
   courseId: string;
   viewMode?: 'PENDING' | 'COMPLETED';
 }
 
 const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, viewMode = 'PENDING' }) => {
-  const [assignedMaterials] = useState<AssignedMaterial[]>([]);
   const [structuredTasks, setStructuredTasks] = useState<StructuredTask[]>([]);
   const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | AssignedMaterial['status']>('ALL');
-  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>(() => Object.fromEntries(SKILL_CATEGORIES.map((category) => [category.id, true])));
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>(() => Object.fromEntries(SKILL_CATEGORIES.map((category) => [category.id, false])));
   const [viewingMaterial, setViewingMaterial] = useState<AssignedMaterial | null>(null);
   const [reviewingMaterial, setReviewingMaterial] = useState<AssignedMaterial | null>(null);
   const [viewingAttachment, setViewingAttachment] = useState<AttachmentData | null>(null);
@@ -200,9 +218,9 @@ const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, vie
       const token = localStorage.getItem('token');
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
       const studentParam = selectedStudentId ? `?studentId=${selectedStudentId}` : '';
-      const structuredTasksResponse = await fetch(`${apiUrl}/api/structured-tasks/course/${courseId}${studentParam}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const headers = { Authorization: `Bearer ${token}` };
+      const structuredTasksResponse = await fetch(`${apiUrl}/api/structured-tasks/course/${courseId}${studentParam}`, { headers });
+
       if (structuredTasksResponse.ok) setStructuredTasks(await structuredTasksResponse.json());
     } catch (err) {
       console.error(err);
@@ -215,45 +233,45 @@ const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, vie
     fetchAssignedMaterials();
   }, [courseId, selectedStudentId]);
 
-  const isTaskCompleted = (task: StructuredTask) => {
-    return task.steps.length > 0 && task.steps.every((s) => Boolean(s.isCompleted));
+  useEffect(() => {
+    setExpandedCategories(Object.fromEntries(SKILL_CATEGORIES.map((category) => [category.id, false])));
+    setExpandedTasks({});
+  }, [courseId, selectedStudentId, viewMode]);
+
+  const isStepCompleted = (step: StructuredTask['steps'][number]) => Boolean(step.isCompleted || step.submission);
+
+  const getTaskCompletionTimestamp = (task: StructuredTask) => {
+    const completionDates = task.steps
+      .filter((step) => step.isCompleted)
+      .map((step) => step.completedAt || step.submission?.submittedAt)
+      .filter(Boolean)
+      .map((value) => new Date(value as string))
+      .filter((date) => !Number.isNaN(date.getTime()));
+
+    return completionDates.length > 0
+      ? Math.max(...completionDates.map((date: Date) => date.getTime()))
+      : null;
   };
 
   const filteredTasksByMode = useMemo(() => {
-    return structuredTasks.filter((task) => {
-      const isDone = isTaskCompleted(task);
-      return viewMode === 'COMPLETED' ? isDone : !isDone;
-    });
-  }, [structuredTasks, viewMode]);
+    return structuredTasks.reduce<StructuredTask[]>((tasks, task) => {
+      const steps = task.steps
+        .filter((step) => viewMode === 'COMPLETED' ? isStepCompleted(step) : !isStepCompleted(step))
+        .map((step) => viewMode === 'COMPLETED' ? { ...step, isCompleted: true } : step);
 
-  const filteredMaterials = useMemo(() => {
-    const query = searchTerm.trim().toLowerCase();
-    return assignedMaterials.filter((material) => {
-      const matchesSearch = !query || `${material.title} ${material.description} ${material.category}`.toLowerCase().includes(query);
-      const matchesStatus = statusFilter === 'ALL' || material.status === statusFilter;
-      const matchesMode = viewMode === 'COMPLETED' ? material.status === 'COMPLETED' : material.status !== 'COMPLETED';
-      return matchesSearch && matchesStatus && matchesMode;
-    });
-  }, [searchTerm, statusFilter, assignedMaterials, viewMode]);
+      if (steps.length > 0) tasks.push({ ...task, steps });
+      return tasks;
+    }, []);
+  }, [structuredTasks, viewMode]);
 
   const groupedMaterials = useMemo(() => SKILL_CATEGORIES.map((category) => ({
     ...category,
-    materials: filteredMaterials.filter((material) => material.category === category.id),
     structuredTasks: filteredTasksByMode.filter((task) => (task.category || 'GRAMMAR_VOCABULARY') === category.id)
-  })), [filteredMaterials, filteredTasksByMode]);
+  })), [filteredTasksByMode]);
 
   const uncategorizedStructuredTasks = useMemo(() => filteredTasksByMode.filter((task) => !SKILL_CATEGORIES.some((category) => category.id === (task.category || 'GRAMMAR_VOCABULARY'))), [filteredTasksByMode]);
 
   const toggleCategory = (categoryId: string) => setExpandedCategories((categories) => ({ ...categories, [categoryId]: !categories[categoryId] }));
-
-  const openMaterialModal = (material: AssignedMaterial) => {
-    setViewingMaterial(material);
-    setTextSubmission('');
-    setUrlSubmission('');
-    setAttachmentFile(null);
-    setSubmitError('');
-    setDeliveryType('TEXT');
-  };
 
   const isStepBlocked = (step: any, task: StructuredTask) => {
     if (!task.isSequential || step.isCompleted) return false;
@@ -272,6 +290,7 @@ const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, vie
       teacher: '',
       assignedAt: '',
       status: step.isCompleted ? 'COMPLETED' : 'PENDING',
+      isEvaluable: Boolean(step.isEvaluable),
       url: step.material?.url || '',
       type: step.material?.type || 'DOCUMENT',
       formData: step.material?.formData,
@@ -307,10 +326,18 @@ const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, vie
       });
       if (res.ok) {
         await fetchAssignedMaterials(true);
+        return true;
       }
     } catch (err) {
       console.error(err);
     }
+    return false;
+  };
+
+  const continueFormativeStep = async () => {
+    if (!viewingMaterial?.structuredStepId) return;
+    const completed = await submitDirectly(viewingMaterial.structuredStepId);
+    if (completed) setViewingMaterial(null);
   };
 
   const handleTick = (step: any, task: StructuredTask) => {
@@ -486,37 +513,14 @@ const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, vie
             type="search"
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Buscar tarea o material..."
+            placeholder="Buscar tarea..."
             style={{ width: '100%', padding: '0.7rem 1rem 0.7rem 2.5rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', outline: 'none' }}
           />
-        </div>
-        <div className="scrollable-tabs" style={{ flexWrap: 'wrap' }}>
-          {([['ALL', 'Todas'], ['PENDING', 'Pendientes'], ['COMPLETED', 'Completadas']] as const).map(([value, label]) => (
-            <button key={value} onClick={() => setStatusFilter(value)} style={{ padding: '0.6rem 0.9rem', borderRadius: '18px', border: statusFilter === value ? '1px solid var(--primary)' : '1px solid var(--border)', background: statusFilter === value ? 'var(--primary-light)' : 'var(--surface)', color: statusFilter === value ? 'var(--primary-text)' : 'var(--text-muted)', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
-              {label}
-            </button>
-          ))}
         </div>
       </div>
 
       {loading ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: '4rem 2rem', color: 'var(--text-muted)' }}>Cargando tareas de la clase...</div>
-      ) : filteredMaterials.length === 0 && filteredTasksByMode.length === 0 ? (
-        <div className="glass-panel" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-          {viewMode === 'COMPLETED' ? (
-            <>
-              <CheckCircle2 size={46} style={{ color: '#16a34a', opacity: 0.7, marginBottom: '1rem' }} />
-              <h2 style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>No hay tareas completadas todavía</h2>
-              <p style={{ color: 'var(--text-muted)' }}>Cuando completes todos los pasos de una tarea de clase, se trasladará automáticamente a esta pestaña.</p>
-            </>
-          ) : (
-            <>
-              <FileText size={46} style={{ color: 'var(--primary)', opacity: 0.45, marginBottom: '1rem' }} />
-              <h2 style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>No hay tareas pendientes</h2>
-              <p style={{ color: 'var(--text-muted)' }}>{searchTerm ? 'Prueba con otra búsqueda o cambia el filtro de estado.' : '¡Genial! Todas las tareas de esta clase están al día.'}</p>
-            </>
-          )}
-        </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           {groupedMaterials.map((group) => {
@@ -526,53 +530,26 @@ const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, vie
               <header onClick={() => toggleCategory(group.id)} role="button" tabIndex={0} aria-expanded={isExpanded} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleCategory(group.id); } }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.65rem', cursor: 'pointer', userSelect: 'none' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
                   <h2 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-main)' }}>{group.label}</h2>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.2rem 0.6rem', borderRadius: '12px', background: group.materials.length + group.structuredTasks.length ? 'var(--primary-light)' : 'var(--surface-alt)', color: group.materials.length + group.structuredTasks.length ? 'var(--primary-text)' : 'var(--text-muted)' }}>{group.materials.length + group.structuredTasks.length} {group.materials.length + group.structuredTasks.length === 1 ? 'tarea' : 'tareas'}</span>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.2rem 0.6rem', borderRadius: '12px', background: group.structuredTasks.length ? 'var(--primary-light)' : 'var(--surface-alt)', color: group.structuredTasks.length ? 'var(--primary-text)' : 'var(--text-muted)' }}>{group.structuredTasks.length} {group.structuredTasks.length === 1 ? 'tarea' : 'tareas'}</span>
                 </div>
                 {isExpanded ? <ChevronUp size={20} style={{ color: 'var(--text-muted)' }} /> : <ChevronDown size={20} style={{ color: 'var(--text-muted)' }} />}
               </header>
               {isExpanded && <>
               <div style={{ borderTop: '1px solid var(--border)', marginTop: '0.85rem', paddingTop: '1rem' }}>
-              {group.materials.length === 0 && group.structuredTasks.length === 0 ? (
+              {group.structuredTasks.length === 0 ? (
                 <p style={{ margin: 0, padding: '0.5rem 0', color: 'var(--text-muted)', fontSize: '0.88rem', fontStyle: 'italic' }}>No hay tareas asignadas en esta materia.</p>
               ) : (
-              <><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '1.25rem' }}>
-          {group.materials.map((material) => {
-            const examData = parseSavedExam(material.submissionContent);
-            const isExam = material.type === 'FORM' || Boolean(examData);
-
-            return (
-              <article key={material.id} className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: '310px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.15rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#2b6cb0', fontSize: '0.76rem', fontWeight: 700, textTransform: 'uppercase' }}>
-                    <span style={{ padding: '0.45rem', borderRadius: '8px', background: '#eef6fc', display: 'flex' }}><FileText size={18} /></span>
-                    {isExam ? 'Examen Interactivo' : material.type === 'VIDEO' ? 'Vídeo' : 'Tarea / Redacción'}
-                  </div>
-                  <span style={{ padding: '0.2rem 0.55rem', borderRadius: '12px', background: 'var(--primary-light)', color: 'var(--primary-text)', border: '1px solid var(--primary-border)', fontSize: '0.72rem', fontWeight: 700 }}>{material.level}</span>
-                </div>
-                <h2 style={{ fontSize: '1.1rem', lineHeight: 1.35, marginBottom: '0.55rem' }}>{material.title}</h2>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', lineHeight: 1.5, margin: '0 0 1.25rem', flex: 1 }}>{material.description || 'Sin descripción adicional para este recurso.'}</p>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '1rem', borderTop: '1px solid var(--border)', marginTop: 'auto' }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', color: material.status === 'COMPLETED' ? '#2f855a' : '#c05621', fontWeight: 600 }}>
-                    {material.status === 'COMPLETED' ? <CheckCircle2 size={16} /> : <Clock3 size={16} />}
-                    {material.status === 'COMPLETED' ? 'Completado' : 'Pendiente'}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => openMaterialModal(material)}
-                    className="btn-primary"
-                    style={{ padding: '0.55rem 0.9rem', fontSize: '0.84rem' }}
-                  >
-                    {material.status === 'COMPLETED' ? (isExam ? 'Ver Examen' : 'Ver Entrega') : (userRole === 'PARENT' ? 'Ver Detalle' : 'Realizar Tarea')}
-                  </button>
-                </div>
-              </article>
-            );
-          })}
-              </div>
-              {group.structuredTasks.map((task) => {
+              <>{group.structuredTasks.map((task) => {
                 const completedCount = task.steps.filter((step) => step.isCompleted).length;
                 const progress = task.steps.length ? Math.round((completedCount / task.steps.length) * 100) : 0;
                 const isTaskExpanded = Boolean(expandedTasks[task.id]);
+                const completedAt = getTaskCompletionTimestamp(task);
+                const isLate = Boolean(
+                  viewMode === 'COMPLETED'
+                  && task.dueDate
+                  && completedAt
+                  && completedAt > new Date(task.dueDate).getTime()
+                );
                 return (
                 <article key={task.id} className="glass-panel" style={{ marginTop: '1rem', padding: '1rem 1.15rem', border: '1px solid var(--primary-border)' }}>
                   <header
@@ -594,6 +571,7 @@ const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, vie
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
                       {task.publishAt && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.55rem', borderRadius: '12px', background: '#eef2ff', border: '1px solid #c7d2fe', color: '#3730a3', fontSize: '0.72rem', fontWeight: 700 }}><Clock3 size={13} /> Programada: {formatDateTime(task.publishAt)}</span>}
                       {task.dueDate && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.55rem', borderRadius: '12px', background: '#fef3c7', border: '1px solid #fde68a', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}><CalendarDays size={13} /> Entrega: {formatDateTime(task.dueDate)}</span>}
+                      {isLate && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.55rem', borderRadius: '12px', background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: '0.72rem', fontWeight: 700 }}><Clock3 size={13} /> Fuera de plazo</span>}
                       {task.isSequential && (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.55rem', borderRadius: '12px', background: '#fef3c7', border: '1px solid #fde68a', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}>
                           <Layers size={13} /> Paso a paso
@@ -767,7 +745,19 @@ const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, vie
                                         </div>
                                         {submission.text && <span style={{ display: 'block', whiteSpace: 'pre-wrap' }}>{submission.text}</span>}
                                         {submission.link && <a href={submission.link} target="_blank" rel="noopener noreferrer" style={{ display: 'block', color: 'var(--primary)', fontWeight: 700, textDecoration: 'none' }}>Abrir enlace entregado</a>}
-                                        {submission.attachment?.name && <span style={{ display: 'block', color: 'var(--primary-text)', fontWeight: 600 }}>Archivo: {submission.attachment.name}</span>}
+                                        {submission.attachment?.name && submission.attachment.dataUrl && (
+                                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.6rem', flexWrap: 'wrap', marginTop: '0.35rem' }}>
+                                            <span style={{ color: 'var(--primary-text)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={submission.attachment.name}>Archivo: {submission.attachment.name}</span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                              <button type="button" onClick={() => openAttachmentInNewTab(submission.attachment!.dataUrl)} className="btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.25rem 0.5rem', fontSize: '0.74rem' }}>
+                                                <ExternalLink size={13} /> Abrir
+                                              </button>
+                                              <a href={submission.attachment.dataUrl} download={submission.attachment.name} target="_blank" rel="noopener noreferrer" className="btn-secondary" aria-label={`Descargar ${submission.attachment.name}`} title="Descargar archivo" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0.32rem', textDecoration: 'none' }}>
+                                                <Download size={15} />
+                                              </a>
+                                            </div>
+                                          </div>
+                                        )}
                                       </div>
                                     );
                                   }
@@ -797,7 +787,7 @@ const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, vie
               </>}
             </section>
             );
-          })}
+              })}
         </div>
       )}
 
@@ -811,6 +801,13 @@ const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, vie
               const completedCount = task.steps.filter((step) => step.isCompleted).length;
               const progress = task.steps.length ? Math.round((completedCount / task.steps.length) * 100) : 0;
               const isTaskExpanded = Boolean(expandedTasks[task.id]);
+              const completedAt = getTaskCompletionTimestamp(task);
+              const isLate = Boolean(
+                viewMode === 'COMPLETED'
+                && task.dueDate
+                && completedAt
+                && completedAt > new Date(task.dueDate).getTime()
+              );
               return (
               <article key={task.id} className="glass-panel" style={{ padding: '1rem 1.15rem', border: '1px solid var(--primary-border)' }}>
                 <header
@@ -832,6 +829,7 @@ const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, vie
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
                     {task.publishAt && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.55rem', borderRadius: '12px', background: '#eef2ff', border: '1px solid #c7d2fe', color: '#3730a3', fontSize: '0.72rem', fontWeight: 700 }}><Clock3 size={13} /> Programada: {formatDateTime(task.publishAt)}</span>}
                     {task.dueDate && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.55rem', borderRadius: '12px', background: '#fef3c7', border: '1px solid #fde68a', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}><CalendarDays size={13} /> Entrega: {formatDateTime(task.dueDate)}</span>}
+                    {isLate && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.55rem', borderRadius: '12px', background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: '0.72rem', fontWeight: 700 }}><Clock3 size={13} /> Fuera de plazo</span>}
                     {task.isSequential && (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.55rem', borderRadius: '12px', background: '#fef3c7', border: '1px solid #fde68a', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}>
                         <Layers size={13} /> Paso a paso
@@ -1004,7 +1002,19 @@ const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, vie
                                       </div>
                                       {submission.text && <span style={{ display: 'block', whiteSpace: 'pre-wrap' }}>{submission.text}</span>}
                                       {submission.link && <a href={submission.link} target="_blank" rel="noopener noreferrer" style={{ display: 'block', color: 'var(--primary)', fontWeight: 700, textDecoration: 'none' }}>Abrir enlace entregado</a>}
-                                      {submission.attachment?.name && <span style={{ display: 'block', color: 'var(--primary-text)', fontWeight: 600 }}>Archivo: {submission.attachment.name}</span>}
+                                      {submission.attachment?.name && submission.attachment.dataUrl && (
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.6rem', flexWrap: 'wrap', marginTop: '0.35rem' }}>
+                                          <span style={{ color: 'var(--primary-text)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={submission.attachment.name}>Archivo: {submission.attachment.name}</span>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                            <button type="button" onClick={() => openAttachmentInNewTab(submission.attachment!.dataUrl)} className="btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.25rem 0.5rem', fontSize: '0.74rem' }}>
+                                              <ExternalLink size={13} /> Abrir
+                                            </button>
+                                            <a href={submission.attachment.dataUrl} download={submission.attachment.name} target="_blank" rel="noopener noreferrer" className="btn-secondary" aria-label={`Descargar ${submission.attachment.name}`} title="Descargar archivo" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0.32rem', textDecoration: 'none' }}>
+                                              <Download size={15} />
+                                            </a>
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
                                   );
                                 }
@@ -1156,7 +1166,7 @@ const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, vie
                         }}>
                           <CheckCircle2 size={15} /> Entregada el {viewingMaterial.submittedAt ? new Date(viewingMaterial.submittedAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'recientemente'}
                         </span>
-                      ) : (
+                      ) : viewingMaterial.isEvaluable ? (
                         <span style={{
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -1170,6 +1180,21 @@ const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, vie
                           fontSize: '0.82rem'
                         }}>
                           <Clock3 size={14} /> Pendiente de entrega
+                        </span>
+                      ) : (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                          padding: '0.3rem 0.75rem',
+                          borderRadius: '16px',
+                          background: 'var(--surface-alt)',
+                          color: 'var(--text-muted)',
+                          border: '1px solid var(--border)',
+                          fontWeight: 600,
+                          fontSize: '0.82rem'
+                        }}>
+                          Pendiente de completar
                         </span>
                       )}
                     </div>
@@ -1302,6 +1327,20 @@ const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, vie
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-muted)', fontSize: '0.84rem', fontStyle: 'italic' }}>
                             <Clock3 size={15} /> Tu profesor revisará y calificará esta entrega próximamente.
                           </div>
+                        )}
+                      </div>
+                    ) : !viewingMaterial.isEvaluable ? (
+                      <div style={{ padding: '1rem 1.25rem', background: 'var(--surface-alt)', borderRadius: '8px', border: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.88rem', fontWeight: 600 }}>
+                        <p style={{ margin: 0 }}>📖 Recurso formativo: consulta el material y continúa para marcar el paso como completado. No requiere entrega.</p>
+                        {userRole !== 'PARENT' && (
+                          <button
+                            type="button"
+                            onClick={continueFormativeStep}
+                            className="btn-primary"
+                            style={{ marginTop: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                          >
+                            Continuar
+                          </button>
                         )}
                       </div>
                     ) : userRole === 'PARENT' ? (

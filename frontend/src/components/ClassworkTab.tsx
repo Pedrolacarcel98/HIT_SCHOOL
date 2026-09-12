@@ -65,7 +65,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const [taskPublishAt, setTaskPublishAt] = useState('');
   const [taskTerm, setTaskTerm] = useState(1);
   const [taskIsSequential, setTaskIsSequential] = useState(false);
-  const [taskIsTemplate, setTaskIsTemplate] = useState(false);
+  const [saveAsTemplate, setSaveAsTemplate] = useState(false);
   const [taskSteps, setTaskSteps] = useState<StepDraft[]>([]);
   const [isSavingTask, setIsSavingTask] = useState(false);
   const [taskFormError, setTaskFormError] = useState('');
@@ -132,7 +132,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     setTaskPublishAt('');
     setTaskTerm(1);
     setTaskIsSequential(false);
-    setTaskIsTemplate(false);
+    setSaveAsTemplate(false);
     setTaskFormError('');
     setTaskSteps([
       { id: crypto.randomUUID(), title: 'Paso 1: Instrucciones / Actividad', materialId: null, requiresSubmission: false }
@@ -152,17 +152,15 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     setTaskPublishAt(toLocalDatetimeInput(orig.publishAt));
     setTaskTerm(orig.term || 1);
     setTaskIsSequential(Boolean(orig.isSequential));
-    setTaskIsTemplate(Boolean(orig.isTemplate));
+    setSaveAsTemplate(false);
     setTaskFormError('');
     setTaskSteps(
       (orig.steps || []).map((s: any) => {
-        const mat = materials.find(m => m.id === s.materialId) || s.material;
-        const isPassive = mat && (mat.type === 'VIDEO' || mat.type === 'AUDIO' || mat.type === 'IMAGE');
         return {
           id: s.id,
           title: s.title,
           materialId: s.materialId || null,
-          requiresSubmission: !isPassive && Boolean(s.requiresSubmission)
+          requiresSubmission: Boolean(s.requiresSubmission)
         };
       })
     );
@@ -208,23 +206,23 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
         publishAt: toIsoDateString(taskPublishAt) || null,
         term: taskTerm,
         category: taskCategory,
-        isTemplate: taskIsTemplate,
+        isTemplate: false,
         courseId,
         assignmentType: 'CLASS',
         isSequential: taskIsSequential,
         steps: validSteps.map((s, idx) => {
           const mat = materials.find(m => m.id === s.materialId);
-          const isPassive = mat && (mat.type === 'VIDEO' || mat.type === 'AUDIO' || mat.type === 'IMAGE');
           return {
             title: s.title.trim(),
             materialId: s.materialId || null,
             order: idx + 1,
-            requiresSubmission: !isPassive && (mat?.type === 'FORM' || Boolean(s.requiresSubmission))
+            requiresSubmission: mat?.type === 'FORM' || Boolean(s.requiresSubmission)
           };
         })
       };
 
-      const res = await fetch(`${apiUrl}/api/structured-tasks${editingTask ? `/${editingTask.id}` : ''}`, {
+      const taskUrl = `${apiUrl}/api/structured-tasks${editingTask ? `/${editingTask.id}` : ''}`;
+      const res = await fetch(taskUrl, {
         method: editingTask ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(payload)
@@ -233,6 +231,25 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'No se pudo guardar la tarea.');
+      }
+
+      if (!editingTask && saveAsTemplate) {
+        const templatePayload = {
+          ...payload,
+          isTemplate: true,
+          courseId: undefined,
+          dueDate: undefined,
+          publishAt: undefined
+        };
+        const templateRes = await fetch(`${apiUrl}/api/structured-tasks`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(templatePayload)
+        });
+        if (!templateRes.ok) {
+          const data = await templateRes.json().catch(() => ({}));
+          throw new Error(data.error || 'La tarea se creó, pero no se pudo guardar la plantilla.');
+        }
       }
 
       await fetchStructuredTasks();
@@ -652,21 +669,20 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>
                   <input
                     type="checkbox"
+                    checked={saveAsTemplate}
+                    onChange={(e) => setSaveAsTemplate(e.target.checked)}
+                    style={{ width: '16px', height: '16px', accentColor: 'var(--primary)' }}
+                  />
+                  <span>⭐ Guardar también como Plantilla Reutilizable en el Catálogo</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>
+                  <input
+                    type="checkbox"
                     checked={taskIsSequential}
                     onChange={(e) => setTaskIsSequential(e.target.checked)}
                     style={{ width: '16px', height: '16px', accentColor: 'var(--primary)' }}
                   />
                   <span>Flujo secuencial paso a paso (bloquear paso siguiente hasta completar el anterior)</span>
-                </label>
-
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>
-                  <input
-                    type="checkbox"
-                    checked={taskIsTemplate}
-                    onChange={(e) => setTaskIsTemplate(e.target.checked)}
-                    style={{ width: '16px', height: '16px', accentColor: 'var(--primary)' }}
-                  />
-                  <span>⭐ Guardar también como Plantilla Reutilizable en el Catálogo</span>
                 </label>
               </div>
 
@@ -723,16 +739,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                       </div>
 
                       {(() => {
-                        const isPassive = linkedMaterial && (linkedMaterial.type === 'VIDEO' || linkedMaterial.type === 'AUDIO' || linkedMaterial.type === 'IMAGE');
                         const isForm = linkedMaterial?.type === 'FORM';
-
-                        if (isPassive) {
-                          return (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem', color: 'var(--text-muted)', marginLeft: '36px' }}>
-                              <span>📖 Recurso didáctico (Formativo / No evaluable)</span>
-                            </div>
-                          );
-                        }
 
                         return (
                           <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: isForm ? 'default' : 'pointer', fontSize: '0.78rem', color: 'var(--text-muted)', marginLeft: '36px' }}>
@@ -828,10 +835,9 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                   <button
                     type="button"
                     onClick={() => {
-                      const isPassive = m.type === 'VIDEO' || m.type === 'AUDIO' || m.type === 'IMAGE';
                       updateStep(materialPickerStepIndex, {
                         materialId: m.id,
-                        requiresSubmission: m.type === 'FORM' ? true : (isPassive ? false : undefined)
+                        requiresSubmission: m.type === 'FORM'
                       });
                       setMaterialPickerStepIndex(null);
                     }}
