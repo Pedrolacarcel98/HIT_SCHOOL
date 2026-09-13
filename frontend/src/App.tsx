@@ -11,9 +11,9 @@ import TeacherGrades from './pages/TeacherGrades';
 import StudentGrades from './pages/StudentGrades';
 import StudentsManagement from './pages/StudentsManagement';
 import TeachersManagement from './pages/TeachersManagement';
+import ParentsManagement from './pages/ParentsManagement';
 import EnrollmentsManagement from './pages/EnrollmentsManagement';
 import MaterialsManagement from './pages/MaterialsManagement';
-import TasksManagement from './pages/TasksManagement';
 import CourseView from './pages/CourseView';
 import StudentCourseView from './pages/StudentCourseView';
 import StudentPayments from './pages/StudentPayments';
@@ -32,11 +32,11 @@ function App() {
           <Route path="/teacher" element={<TeacherLayout />}>
             <Route index element={<TeacherDashboard />} />
             <Route path="courses" element={<TeacherCourses />} />
-            <Route path="tasks" element={<TasksManagement />} />
             <Route path="grades" element={<TeacherGrades />} />
             <Route path="materials" element={<MaterialsManagement />} />
             <Route path="students" element={<StudentsManagement />} />
             <Route path="teachers" element={<TeachersManagement />} />
+            <Route path="parents" element={<ParentsManagement />} />
             <Route path="enrollments" element={<EnrollmentsManagement />} />
             <Route path="payments" element={<TeacherPayments />} />
             <Route path="chat" element={<Chat role="TEACHER" />} />

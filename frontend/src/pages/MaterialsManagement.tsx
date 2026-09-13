@@ -17,7 +17,8 @@ import {
   ListChecks,
   CheckSquare,
   ClipboardCheck,
-  Pencil
+  Pencil,
+  BookOpen
 } from 'lucide-react';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -49,6 +50,8 @@ interface Course {
 interface StructuredTask {
   id: string;
   title: string;
+  description?: string | null;
+  category?: string;
   courseId: string | null;
   assignmentType: 'CLASS' | 'INDIVIDUAL';
   assignedStudentId: string | null;
@@ -98,6 +101,7 @@ const MaterialsManagement: React.FC = () => {
   const [structuredTaskSteps, setStructuredTaskSteps] = useState<StructuredTaskStep[]>([]);
   const [structuredTaskCourseId, setStructuredTaskCourseId] = useState('');
   const [structuredTaskAssignmentType, setStructuredTaskAssignmentType] = useState<'CLASS' | 'INDIVIDUAL'>('CLASS');
+  const [structuredTaskIsTemplate, setStructuredTaskIsTemplate] = useState(false);
   const [structuredTaskIsSequential, setStructuredTaskIsSequential] = useState(false);
   const [structuredTaskPublishAt, setStructuredTaskPublishAt] = useState('');
   const [assignedStudentIds, setAssignedStudentIds] = useState<string[]>([]);
@@ -112,6 +116,8 @@ const MaterialsManagement: React.FC = () => {
   // Modales
   const [showAddResourceModal, setShowAddResourceModal] = useState(false);
   const [showFormBuilder, setShowFormBuilder] = useState(false);
+  const [showStructuredTemplates, setShowStructuredTemplates] = useState(false);
+  const [templateSearchTerm, setTemplateSearchTerm] = useState('');
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
   const [editingStandardMaterial, setEditingStandardMaterial] = useState<Material | null>(null);
   const [viewingMaterialState, setViewingMaterial] = useState<Material | null>(null);
@@ -275,13 +281,14 @@ const MaterialsManagement: React.FC = () => {
     return names.length > 2 ? `${names.slice(0, 2).join(', ')}...` : names.join(', ');
   };
 
-  const getMaterialIcon = (type: Material['type']) => {
-    if (type === 'FORM') return <ClipboardCheck size={16} />;
-    if (type === 'VIDEO') return <Video size={16} />;
-    if (type === 'AUDIO') return <Headphones size={16} />;
-    return <FileText size={16} />;
+  const getMaterialIcon = (type: Material['type'], _size?: number) => {
+    if (type === 'FORM') return <ClipboardCheck size={16} style={{ color: '#10b981' }} />;
+    if (type === 'IMAGE') return <Image size={16} style={{ color: '#ec4899' }} />;
+    if (type === 'VIDEO') return <Video size={16} style={{ color: '#ef4444' }} />;
+    if (type === 'AUDIO') return <Headphones size={16} style={{ color: '#f59e0b' }} />;
+    return <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 5, background: '#dbeafe' }}><FileText size={14} style={{ color: '#2563eb' }} /></span>;
   };
-
+  
   const getMaterialTypeLabel = (type: Material['type']) => {
     if (type === 'FORM') return 'EXAMEN INTERACTIVO';
     if (type === 'VIDEO') return 'VÍDEO';
@@ -291,10 +298,11 @@ const MaterialsManagement: React.FC = () => {
 
   const openStructuredTaskModal = (task?: StructuredTask) => {
     setEditingStructuredTask(task || null);
+    setStructuredTaskIsTemplate(Boolean(task?.isTemplate));
     setStructuredTaskTitle(task?.title || '');
     setStructuredTaskSteps(task?.steps.map((step, index) => ({ ...step, order: index + 1 })) || [{ id: `step-${Date.now()}`, order: 1, title: '', materialId: null }]);
     const assignmentType = task?.assignmentType || 'CLASS';
-    const courseId = task?.courseId || (assignmentType === 'CLASS' ? courses[0]?.id || '' : '');
+    const courseId = task?.courseId || (assignmentType === 'CLASS' && !task?.isTemplate ? courses[0]?.id || '' : '');
     setStructuredTaskCourseId(courseId);
     setStructuredTaskAssignmentType(assignmentType);
     setStructuredTaskIsSequential(task?.isSequential || false);
@@ -306,7 +314,9 @@ const MaterialsManagement: React.FC = () => {
   };
 
   const useTemplateForIndividualTask = (template: StructuredTask) => {
+    setShowStructuredTemplates(false);
     setEditingStructuredTask(null);
+    setStructuredTaskIsTemplate(false);
     setStructuredTaskTitle(template.title.replace(/^\[Plantilla\]\s*/i, ''));
     setStructuredTaskSteps(template.steps.map((step, index) => ({ ...step, order: index + 1 })));
     setStructuredTaskCourseId('');
@@ -316,6 +326,19 @@ const MaterialsManagement: React.FC = () => {
     setAssignedStudentIds([]);
     setStudentSearch('');
     setIsStudentPickerOpen(false);
+    setIsStructuredTaskModalOpen(true);
+  };
+
+  const useTemplateForClassTask = (template: StructuredTask) => {
+    setEditingStructuredTask(null);
+    setStructuredTaskIsTemplate(false);
+    setStructuredTaskTitle(template.title.replace(/^\[Plantilla\]\s*/i, ''));
+    setStructuredTaskSteps(template.steps.map((step, index) => ({ ...step, order: index + 1 })));
+    setStructuredTaskCourseId('');
+    setStructuredTaskAssignmentType('CLASS');
+    setStructuredTaskIsSequential(template.isSequential || false);
+    setStructuredTaskPublishAt('');
+    setAssignedStudentIds([]);
     setIsStructuredTaskModalOpen(true);
   };
 
@@ -338,8 +361,8 @@ const MaterialsManagement: React.FC = () => {
       .map((step, index) => ({ ...step, title: step.title.trim(), order: index + 1 }))
       .filter((step) => step.title);
     if (!title || steps.length === 0) return;
-    if (structuredTaskAssignmentType === 'CLASS' && !structuredTaskCourseId) return;
-    if (structuredTaskAssignmentType === 'INDIVIDUAL' && assignedStudentIds.length === 0) return;
+    if (!structuredTaskIsTemplate && structuredTaskAssignmentType === 'CLASS' && !structuredTaskCourseId) return;
+    if (!structuredTaskIsTemplate && structuredTaskAssignmentType === 'INDIVIDUAL' && assignedStudentIds.length === 0) return;
 
     try {
       const token = localStorage.getItem('token');
@@ -347,7 +370,7 @@ const MaterialsManagement: React.FC = () => {
       const res = await fetch(`${apiUrl}/api/structured-tasks${editingStructuredTask ? `/${editingStructuredTask.id}` : ''}`, {
         method: editingStructuredTask ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ title, courseId: structuredTaskAssignmentType === 'CLASS' ? structuredTaskCourseId : null, assignmentType: structuredTaskAssignmentType, isSequential: structuredTaskIsSequential, publishAt: toIsoDateString(structuredTaskPublishAt) || null, assignedStudentIds: structuredTaskAssignmentType === 'INDIVIDUAL' ? assignedStudentIds : [], steps })
+        body: JSON.stringify({ title, isTemplate: structuredTaskIsTemplate, courseId: structuredTaskIsTemplate ? null : (structuredTaskAssignmentType === 'CLASS' ? structuredTaskCourseId : null), assignmentType: structuredTaskIsTemplate ? 'CLASS' : structuredTaskAssignmentType, isSequential: structuredTaskIsSequential, publishAt: structuredTaskIsTemplate ? null : (toIsoDateString(structuredTaskPublishAt) || null), assignedStudentIds: structuredTaskIsTemplate || structuredTaskAssignmentType === 'CLASS' ? [] : assignedStudentIds, steps })
       });
       if (!res.ok) throw new Error('No se pudo guardar la tarea estructurada.');
       await fetchStructuredTasks();
@@ -365,6 +388,11 @@ const MaterialsManagement: React.FC = () => {
   });
   const individualStructuredTasks: StructuredTask[] = [];
   const structuredTaskTemplates = structuredTasks.filter((task) => task.isTemplate);
+  const filteredStructuredTaskTemplates = structuredTaskTemplates.filter((template) => {
+    const query = templateSearchTerm.trim().toLowerCase();
+    if (!query) return true;
+    return `${template.title} ${template.steps.map((step) => step.title).join(' ')}`.toLowerCase().includes(query);
+  });
 
   const duplicateStructuredTask = async (task: StructuredTask) => {
     try {
@@ -374,9 +402,9 @@ const MaterialsManagement: React.FC = () => {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           title: `[Copia] ${task.title}`,
-          assignmentType: 'INDIVIDUAL',
-          assignedStudentIds: task.assignedStudentIds?.length ? task.assignedStudentIds : (task.assignedStudentId ? [task.assignedStudentId] : []),
-          isTemplate: false
+          assignmentType: task.isTemplate ? 'CLASS' : 'INDIVIDUAL',
+          assignedStudentIds: task.isTemplate ? [] : (task.assignedStudentIds?.length ? task.assignedStudentIds : (task.assignedStudentId ? [task.assignedStudentId] : [])),
+          isTemplate: Boolean(task.isTemplate)
         })
       });
       if (!res.ok) throw new Error('No se pudo duplicar la tarea.');
@@ -559,17 +587,17 @@ const MaterialsManagement: React.FC = () => {
         ].map(tab => (
           <button
             key={tab.id}
-            onClick={() => setTypeFilter(tab.id)}
+            onClick={() => { setShowStructuredTemplates(false); setTemplateSearchTerm(''); setTypeFilter(tab.id); }}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '0.5rem',
               padding: '0.6rem 1.2rem',
               borderRadius: '20px',
-              border: typeFilter === tab.id ? '1px solid var(--primary)' : '1px solid var(--border)',
-              background: typeFilter === tab.id ? 'var(--primary-light)' : 'var(--surface)',
-              color: typeFilter === tab.id ? 'var(--primary-text)' : 'var(--text-muted)',
-              fontWeight: typeFilter === tab.id ? '600' : '500',
+              border: !showStructuredTemplates && typeFilter === tab.id ? '1px solid var(--primary)' : '1px solid var(--border)',
+              background: !showStructuredTemplates && typeFilter === tab.id ? 'var(--primary-light)' : 'var(--surface)',
+              color: !showStructuredTemplates && typeFilter === tab.id ? 'var(--primary-text)' : 'var(--text-muted)',
+              fontWeight: !showStructuredTemplates && typeFilter === tab.id ? '600' : '500',
               cursor: 'pointer',
               whiteSpace: 'nowrap',
               fontSize: '0.85rem'
@@ -578,9 +606,64 @@ const MaterialsManagement: React.FC = () => {
             {tab.icon} {tab.label}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => { setShowStructuredTemplates(true); setTemplateSearchTerm(''); }}
+          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1.2rem', borderRadius: '20px', border: showStructuredTemplates ? '1px solid var(--primary)' : '1px solid var(--border)', background: showStructuredTemplates ? 'var(--primary-light)' : 'var(--surface)', color: showStructuredTemplates ? 'var(--primary-text)' : 'var(--text-muted)', fontWeight: showStructuredTemplates ? 700 : 500, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: '0.85rem' }}
+        >
+          <ListChecks size={16} /> Plantillas ({structuredTaskTemplates.length})
+        </button>
       </div>
 
+      {showStructuredTemplates && (
+        <section style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+            <div>
+              <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.55rem', color: 'var(--text-main)', fontSize: '1.35rem' }}><ListChecks size={22} style={{ color: 'var(--primary)' }} /> Plantillas de Tareas</h2>
+              <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)', fontSize: '0.88rem' }}>Diseña y reutiliza tareas estructuradas desde Material de Clase.</p>
+            </div>
+            <span style={{ padding: '0.2rem 0.55rem', borderRadius: '12px', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.75rem', fontWeight: 700 }}>{structuredTaskTemplates.length}</span>
+          </div>
+          <div className="glass-panel" style={{ padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <div style={{ position: 'relative', flex: 1 }}>
+              <Search size={18} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input type="search" value={templateSearchTerm} onChange={(event) => setTemplateSearchTerm(event.target.value)} placeholder="Buscar plantilla por nombre o paso..." style={{ width: '100%', padding: '0.65rem 1rem 0.65rem 2.5rem', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text-main)' }} />
+            </div>
+          </div>
+          {filteredStructuredTaskTemplates.length === 0 ? (
+            <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem 2rem', color: 'var(--text-muted)' }}>No hay plantillas creadas.</div>
+          ) : filteredStructuredTaskTemplates.map((template) => (
+            <article key={template.id} style={{ padding: '1.25rem 1.5rem', borderRadius: '12px', border: '1px solid var(--border)', borderLeft: '5px solid var(--primary)', background: 'var(--surface)', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.2rem 0.55rem', borderRadius: '6px', background: 'var(--primary-light)', color: 'var(--primary)' }}>{template.category || 'GRAMMAR_VOCABULARY'}</span>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.2rem 0.55rem', borderRadius: '6px', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }}>⭐ Plantilla Catálogo</span>
+                    {template.isSequential && <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.2rem 0.55rem', borderRadius: '6px', background: '#fef3c7', color: '#92400e' }}>Paso a paso (secuencial)</span>}
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{template.steps.length} {template.steps.length === 1 ? 'paso' : 'pasos'}</span>
+                  </div>
+                  <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--text-main)' }}>{template.title}</h3>
+                  {template.description && <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)', fontSize: '0.85rem', lineHeight: 1.4 }}>{template.description}</p>}
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <button type="button" onClick={() => useTemplateForClassTask(template)} className="btn-primary" style={{ padding: '0.45rem 0.9rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', borderRadius: '8px', fontWeight: 600 }}><BookOpen size={15} /> Asignar a Clase</button>
+                  <button type="button" onClick={() => openStructuredTaskModal(template)} style={{ padding: '0.45rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)', cursor: 'pointer', fontWeight: 600 }}><Pencil size={14} /> Editar</button>
+                  <button type="button" onClick={() => duplicateStructuredTask(template)} style={{ padding: '0.45rem 0.85rem', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)', cursor: 'pointer', fontWeight: 600 }}><Copy size={14} /> Duplicar</button>
+                  <button type="button" onClick={() => deleteStructuredTask(template)} style={{ padding: '0.45rem', borderRadius: '8px', border: '1px solid #fecaca', background: '#fff5f5', color: '#dc2626', cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }} title="Eliminar plantilla" aria-label="Eliminar plantilla"><Trash2 size={16} /></button>
+                </div>
+              </div>
+              <div style={{ marginTop: '0.85rem', paddingTop: '0.75rem', borderTop: '1px dashed var(--border)', display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.5px' }}>Pasos estructurados configurados:</span>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.6rem' }}>{template.steps.map((step, index) => { const material = getMaterial(step.materialId); return <div key={step.id || index} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.45rem 0.75rem', borderRadius: '8px', background: 'var(--surface-alt)', border: '1px solid var(--border)', fontSize: '0.82rem' }}><span style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'var(--primary-light)', color: 'var(--primary-text)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700 }}>{index + 1}</span><div style={{ flex: 1, minWidth: 0 }}><strong style={{ display: 'block', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{step.title}</strong>{material && <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '0.2rem', color: 'var(--text-muted)', fontSize: '0.74rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{getMaterialIcon(material.type, 13)} {material.title}</span>}</div></div>; })}</div>
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
+
       {/* Filtros de Nivel, Skill y Buscador */}
+      {!showStructuredTemplates && (
+        <>
       <div className="glass-panel" style={{ padding: '1rem 1.5rem', marginBottom: '2rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ position: 'relative', flex: 1, minWidth: '260px' }}>
           <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
@@ -736,7 +819,10 @@ const MaterialsManagement: React.FC = () => {
         )
       )}
 
-      {structuredTaskTemplates.length > 0 && (
+        </>
+      )}
+
+      {false && structuredTaskTemplates.length > 0 && (
         <section style={{ marginTop: typeFilter === 'ALL' ? '2.5rem' : '0', paddingTop: typeFilter === 'ALL' ? '2rem' : '0', borderTop: typeFilter === 'ALL' ? '1px solid var(--border)' : 'none' }}>
           <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
             <div>
@@ -837,6 +923,28 @@ const MaterialsManagement: React.FC = () => {
             </div>
           )}
         </section>
+      )}
+
+      {false && showStructuredTemplates && (
+        <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'grid', placeItems: 'center', padding: '1rem', background: 'rgba(34, 49, 43, 0.35)' }} onClick={() => setShowStructuredTemplates(false)}>
+          <div className="glass-panel modal-card" onClick={(event) => event.stopPropagation()} style={{ width: 'min(100%, 620px)', maxHeight: '85vh', overflowY: 'auto', padding: '1.5rem' }}>
+            <button type="button" onClick={() => setShowStructuredTemplates(false)} aria-label="Cerrar plantillas" className="modal-close"><X size={19} /></button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '0.35rem' }}><ListChecks size={21} style={{ color: 'var(--primary)' }} /><h2 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.35rem' }}>Plantillas guardadas</h2></div>
+            <p style={{ margin: '0 0 1.1rem', color: 'var(--text-muted)', fontSize: '0.88rem' }}>Selecciona una plantilla para reutilizarla en una tarea estructurada.</p>
+            {structuredTaskTemplates.length === 0 ? (
+              <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--text-muted)', background: 'var(--surface-alt)', borderRadius: '8px' }}>No hay plantillas guardadas.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                {structuredTaskTemplates.map((template) => (
+                  <div key={template.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', padding: '0.8rem 0.9rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface)' }}>
+                    <div style={{ minWidth: 0 }}><strong style={{ color: 'var(--text-main)', fontSize: '0.92rem' }}>{template.title}</strong><span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: '0.2rem' }}>{template.steps.length} {template.steps.length === 1 ? 'paso' : 'pasos'}{template.isSequential ? ' · Secuencial' : ''}</span></div>
+                    <button type="button" onClick={() => useTemplateForIndividualTask(template)} className="btn-secondary" style={{ padding: '0.4rem 0.7rem', fontSize: '0.78rem', whiteSpace: 'nowrap' }}><Copy size={14} /> Usar plantilla</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {previewingForm && (

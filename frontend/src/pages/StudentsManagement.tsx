@@ -22,6 +22,7 @@ import {
 interface ParentData {
   id: string;
   email: string;
+  status?: 'ACTIVE' | 'INACTIVE';
   createdAt?: string;
   profile?: {
     firstName: string;
@@ -106,6 +107,7 @@ const StudentsManagement: React.FC = () => {
   const navigate = useNavigate();
   const [students, setStudents] = useState<Student[]>([]);
   const [parents, setParents] = useState<ParentData[]>([]);
+  const [parentSearchTerm, setParentSearchTerm] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [modalityFilter, setModalityFilter] = useState<'ALL' | 'PRESENCIAL' | 'ONLINE'>('ALL');
   const [familyFilter, setFamilyFilter] = useState<'ALL' | 'WITH_PARENT' | 'INDEPENDENT'>('ALL');
@@ -166,6 +168,19 @@ const StudentsManagement: React.FC = () => {
   useEffect(() => {
     fetchStudents();
     fetchParents();
+  }, []);
+
+  useEffect(() => {
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('[style*="position: fixed"]') || target.closest('.glass-panel')) return;
+      setViewingStudent(null);
+      setEditingStudent(null);
+      setDeletingStudent(null);
+      setShowCreateModal(false);
+    };
+    document.addEventListener('click', closeOnOutsideClick);
+    return () => document.removeEventListener('click', closeOnOutsideClick);
   }, []);
 
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
@@ -298,6 +313,7 @@ const StudentsManagement: React.FC = () => {
     setNewObservaciones('');
     setNewModality('PRESENCIAL');
     setHasParent(false);
+    setParentSearchTerm('');
     setSelectedParentId('');
     setNewParentFirstName('');
     setNewParentLastName('');
@@ -323,6 +339,7 @@ const StudentsManagement: React.FC = () => {
     setEditAutorizacionImagen(getImageAuthorizationValue(student.profile));
     setEditObservaciones(student.profile?.observations || '');
     setEditParentId(student.parentId || '');
+    setParentSearchTerm('');
     setEditModality(student.modality || 'PRESENCIAL');
     setEditBillingPeriod(activeEnrollment?.billingPeriod || 'MONTHLY');
     setEditBillingAmount(activeEnrollment ? String(activeEnrollment.monthlyFee) : '');
@@ -427,6 +444,14 @@ const StudentsManagement: React.FC = () => {
     if (familyFilter === 'INDEPENDENT' && s.parentId) return false;
 
     return matchesSearch;
+  });
+
+  const filteredParents = parents.filter((parent) => {
+    const currentParentId = editingStudent ? editParentId : selectedParentId;
+    if (parent.status === 'INACTIVE' && parent.id !== currentParentId) return false;
+    const name = `${parent.profile?.firstName || ''} ${parent.profile?.lastName || ''}`.toLowerCase();
+    const query = parentSearchTerm.trim().toLowerCase();
+    return !query || name.includes(query) || parent.email.toLowerCase().includes(query) || (parent.profile?.dni || '').toLowerCase().includes(query);
   });
 
   const handleExportExcel = () => {
@@ -1127,6 +1152,13 @@ const StudentsManagement: React.FC = () => {
                     {parentOption === 'EXISTING' ? (
                       <div>
                         <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.82rem', color: 'var(--text-muted)' }}>Selecciona el tutor de la lista</label>
+                        <input
+                          type="search"
+                          value={parentSearchTerm}
+                          onChange={(e) => setParentSearchTerm(e.target.value)}
+                          placeholder="Filtrar tutor por nombre, DNI o correo..."
+                          style={{ width: '100%', marginBottom: '0.5rem', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}
+                        />
                         <select
                           value={selectedParentId}
                           onChange={(e) => setSelectedParentId(e.target.value)}
@@ -1134,7 +1166,7 @@ const StudentsManagement: React.FC = () => {
                           style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}
                         >
                           <option value="">-- Seleccionar Padre/Tutor --</option>
-                          {parents.map(p => (
+                          {filteredParents.map(p => (
                             <option key={p.id} value={p.id}>
                               {p.profile?.firstName} {p.profile?.lastName} ({p.email}) - {p.children?.length || 0} hijos
                             </option>
@@ -1313,13 +1345,20 @@ const StudentsManagement: React.FC = () => {
 
               <div>
                 <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Padre / Tutor Responsable</label>
+                <input
+                  type="search"
+                  value={parentSearchTerm}
+                  onChange={(e) => setParentSearchTerm(e.target.value)}
+                  placeholder="Filtrar tutor por nombre, DNI o correo..."
+                  style={{ width: '100%', marginBottom: '0.5rem', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
+                />
                 <select
                   value={editParentId}
                   onChange={(e) => setEditParentId(e.target.value)}
                   style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
                 >
                   <option value="">-- Sin tutor asignado (Alumno Independiente) --</option>
-                  {parents.map(p => (
+                  {filteredParents.map(p => (
                     <option key={p.id} value={p.id}>
                       👨‍👧 {p.profile?.firstName} {p.profile?.lastName} ({p.email})
                     </option>

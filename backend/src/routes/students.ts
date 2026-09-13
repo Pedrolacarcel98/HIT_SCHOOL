@@ -4,6 +4,8 @@ import bcrypt from 'bcrypt';
 import { authenticateToken, requireTeacher, AuthRequest } from '../middleware/auth';
 import { getChildrenForParent } from './auth';
 import { ensureStudentPaymentScheduleById } from '../services/payments';
+import { sendParentWelcomeEmail } from '../services/email';
+import { deactivateParentIfNoActiveChildren } from '../services/parentStatus';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -16,6 +18,7 @@ router.get('/parents', authenticateToken, requireTeacher, async (req, res) => {
       select: {
         id: true,
         email: true,
+        status: true,
         createdAt: true,
         profile: {
           select: {
@@ -189,6 +192,7 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
             email: parentData.email.trim().toLowerCase(),
             passwordHash: parentPasswordHash,
             role: 'PARENT',
+            status: 'ACTIVE',
             profile: {
               create: {
                 firstName: parentData.firstName.trim(),
@@ -248,7 +252,19 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
 
 
 
-    // Intentar notificar a n8n para que envíe el correo con las credenciales
+    if (createdParentInfo) {
+      try {
+        await sendParentWelcomeEmail(
+          createdParentInfo.email,
+          createdParentInfo.name,
+          createdParentInfo.generatedPassword
+        );
+      } catch (mailError) {
+        console.error('El tutor fue creado, pero no se pudo enviar el correo SMTP:', mailError);
+      }
+    }
+
+    // El alumno nuevo continúa usando la automatización existente de n8n.
     try {
       await fetch('http://n8n:5678/webhook-test/nuevo-alumno', {
         method: 'POST',
@@ -260,7 +276,7 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
           dni: newStudent.profile?.dni,
           phone: newStudent.profile?.phone,
           generatedPassword: autoPassword,
-          parent: createdParentInfo || (newStudent.parent ? {
+          parent: createdParentInfo ? null : (newStudent.parent ? {
             email: newStudent.parent.email,
             name: `${newStudent.parent.profile?.firstName} ${newStudent.parent.profile?.lastName}`
           } : null)
@@ -510,6 +526,7 @@ router.delete('/:id', authenticateToken, requireTeacher, async (req, res) => {
   const studentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
   try {
+    const studentToDelete = await prisma.user.findUnique({ where: { id: studentId }, select: { parentId: true } });
     await prisma.$transaction([
       prisma.paymentStatus.deleteMany({ where: { studentId } }),
       prisma.academyEnrollment.deleteMany({ where: { studentId } }),
@@ -520,6 +537,8 @@ router.delete('/:id', authenticateToken, requireTeacher, async (req, res) => {
       prisma.profile.deleteMany({ where: { userId: studentId } }),
       prisma.user.delete({ where: { id: studentId } })
     ]);
+
+    await deactivateParentIfNoActiveChildren(prisma, studentToDelete?.parentId);
 
     res.json({ message: 'Alumno eliminado con éxito' });
   } catch (error) {

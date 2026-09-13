@@ -2,6 +2,9 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken, requireTeacher } from '../middleware/auth';
 import { ensureStudentPaymentScheduleById } from '../services/payments';
+import { sendAccountReactivationEmail } from '../services/email';
+import bcrypt from 'bcrypt';
+import { deactivateParentIfNoActiveChildren } from '../services/parentStatus';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -26,6 +29,7 @@ router.post('/enroll', authenticateToken, requireTeacher, async (req, res) => {
       return res.status(400).json({ error: 'El alumno ya está dado de alta.' });
     }
 
+    const temporaryPassword = `hit${Math.floor(1000 + Math.random() * 9000)}`;
     const enrollment = await prisma.academyEnrollment.create({
       data: {
         studentId,
@@ -37,10 +41,31 @@ router.post('/enroll', authenticateToken, requireTeacher, async (req, res) => {
 
     const updatedUser = await prisma.user.update({
       where: { id: studentId },
-      data: { status: 'ACTIVE' }
+      data: {
+        status: 'ACTIVE',
+        passwordHash: await bcrypt.hash(temporaryPassword, 10)
+      },
+      select: {
+        id: true,
+        email: true,
+        status: true,
+        modality: true,
+        profile: true
+      }
     });
 
     await ensureStudentPaymentScheduleById(prisma, studentId);
+
+    try {
+      await sendAccountReactivationEmail(
+        updatedUser.email,
+        updatedUser.profile?.firstName || 'alumno',
+        temporaryPassword,
+        'alumno'
+      );
+    } catch (mailError) {
+      console.error('El alumno fue reactivado, pero no se pudo enviar el correo SMTP:', mailError);
+    }
 
     return res.json({ message: 'Alumno dado de alta exitosamente', enrollment, user: updatedUser });
   } catch (error) {
@@ -79,6 +104,8 @@ router.post('/unenroll', authenticateToken, requireTeacher, async (req, res) => 
       where: { id: studentId },
       data: { status: 'INACTIVE' }
     });
+
+    await deactivateParentIfNoActiveChildren(prisma, student.parentId);
 
     // Eliminar pagos pendientes futuros que se hubieran generado.
     // Solo borramos los que tengan dueDate posterior a hoy Y que sigan en estado PENDING.

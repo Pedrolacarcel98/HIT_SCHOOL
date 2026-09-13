@@ -22,7 +22,7 @@ router.get('/contacts', authenticateToken, async (req: AuthRequest, res: Respons
 
     if (role === 'TEACHER' || role === 'ADMIN') {
       const students = await prisma.user.findMany({
-        where: { role: 'STUDENT' },
+        where: { role: 'STUDENT', status: 'ACTIVE' },
         select: {
           id: true,
           email: true,
@@ -31,6 +31,7 @@ router.get('/contacts', authenticateToken, async (req: AuthRequest, res: Respons
             select: {
               id: true,
               email: true,
+              status: true,
               profile: { select: { firstName: true, lastName: true, avatarUrl: true } }
             }
           }
@@ -56,7 +57,7 @@ router.get('/contacts', authenticateToken, async (req: AuthRequest, res: Respons
         });
 
         // 2. Tutor (si existe, renderizar elemento separado)
-        if (s.parent) {
+        if (s.parent && s.parent.status === 'ACTIVE') {
           const parentName = s.parent.profile
             ? `${s.parent.profile.firstName} ${s.parent.profile.lastName}`.trim() || s.parent.email
             : s.parent.email;
@@ -91,6 +92,7 @@ router.get('/contacts', authenticateToken, async (req: AuthRequest, res: Respons
           const child = await prisma.user.findFirst({
             where: {
               role: 'STUDENT',
+              status: 'ACTIVE',
               OR: [
                 { parentId: userId },
                 { parent: { email: { equals: userEmail, mode: 'insensitive' } } }

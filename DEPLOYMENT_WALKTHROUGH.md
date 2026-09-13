@@ -99,6 +99,10 @@ Las publicaciones del tablón también generan notificaciones directamente desde
 
 Las tareas estructuradas/multistep también generan notificaciones directamente desde el backend mediante SMTP. Las tareas de clase se envían a todos los alumnos matriculados y a sus tutores activos; las tareas individuales solo se envían a los alumnos asignados y a sus tutores activos. Las plantillas no generan correos y el profesor no recibe copia. Si `publishAt` tiene una fecha futura, el backend espera hasta esa fecha; si está vacío, se notifica inmediatamente. El backend revisa las tareas pendientes cada minuto y guarda la fecha de envío para evitar duplicados tras reinicios. Si SMTP falla, la tarea se conserva y queda pendiente para reintento.
 
+Cuando se reactiva un alumno o un profesor dado de baja, el backend genera una nueva contraseña temporal, la guarda cifrada y la envía directamente por SMTP al correo de la cuenta reactivada. La reactivación se completa aunque el correo falle; el error queda registrado en los logs y la contraseña nueva deberá comunicarse manualmente si fuera necesario.
+
+Los tutores creados desde Gestión de Alumnos reciben también sus credenciales directamente por SMTP. Los alumnos nuevos continúan usando el webhook de n8n para el correo de alta; el tutor nuevo no se envía a n8n para evitar duplicar su notificación. Cuando un alumno se da de baja, el backend oculta ese alumno del portal del tutor y, si el tutor ya no tiene ningún alumno activo, desactiva automáticamente su cuenta. La gestión de tutores está disponible en `/teacher/parents` para listar, buscar, editar, crear, dar de baja/reactivar y eliminar tutores sin alumnos asociados.
+
 ### Paso a Paso en n8n:
 1. Accede a **[http://localhost:5678](http://localhost:5678)** y crea tu cuenta de administrador local.
 2. Crea un nuevo flujo (**"Add workflow"**) y añade un nodo de tipo **Webhook**:

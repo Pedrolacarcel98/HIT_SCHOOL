@@ -4,6 +4,7 @@ export interface ChildStudent {
   id: string;
   email: string;
   role: string;
+  status?: 'ACTIVE' | 'INACTIVE';
   monthlyFee?: number | null;
   courseDurationMonths?: number | null;
   profile?: {
@@ -77,7 +78,7 @@ export const ParentProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (res.ok) {
         const data = await res.json();
         setParentUser(data);
-        const kids = data.children || [];
+        const kids = (data.children || []).filter((child: ChildStudent) => child.status === 'ACTIVE');
         setChildrenList(kids);
 
         // Si no hay id seleccionado o no existe en la lista, elegir el primer hijo

@@ -73,6 +73,20 @@ export const sendTeacherWelcomeEmail = async (email: string, firstName: string, 
   return true;
 };
 
+export const sendParentWelcomeEmail = async (email: string, firstName: string, temporaryPassword: string) => {
+  if (!transporter) {
+    throw new Error('SMTP no configurado');
+  }
+
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    to: email,
+    subject: 'Bienvenido a HitSchool, tutor',
+    text: [`Hola ${firstName},`, '', 'Tu cuenta de tutor de HitSchool ya está disponible.', `Contraseña temporal: ${temporaryPassword}`, `Acceso: ${frontendUrl}`, '', 'Te recomendamos cambiar la contraseña después del primer inicio de sesión.'].join('\n'),
+    html: emailShell(`<h1 style="margin:0 0 12px;color:#26352e;font-size:24px;line-height:32px;">Bienvenido a HitSchool</h1><p style="margin:0 0 18px;font-size:15px;line-height:24px;">Hola ${escapeHtml(firstName)},</p><p style="margin:0 0 20px;font-size:15px;line-height:24px;">Tu cuenta de tutor ya está disponible.</p><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f0f7f4;border:1px solid #4e9b75;border-radius:8px;"><tr><td style="padding:20px;text-align:center;"><div style="margin-bottom:8px;color:#527064;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;">Contraseña temporal</div><div style="color:#26352e;font-family:Consolas,'Courier New',monospace;font-size:24px;line-height:32px;font-weight:700;word-break:break-word;">${escapeHtml(temporaryPassword)}</div></td></tr></table>${emailButton('Iniciar Sesión en HitSchool', frontendUrl)}`)
+  });
+};
+
 export const sendPasswordResetEmail = async (
   email: string,
   firstName: string,
@@ -95,6 +109,33 @@ export const sendPasswordResetEmail = async (
       'Te recomendamos cambiarla después de iniciar sesión.'
     ].join('\n'),
     html: emailShell(`<h1 style="margin:0 0 12px;color:#26352e;font-size:24px;line-height:32px;">Recuperación de contraseña</h1><p style="margin:0 0 18px;font-size:15px;line-height:24px;">Hola ${escapeHtml(firstName || '')},</p><p style="margin:0 0 20px;font-size:15px;line-height:24px;">Hemos generado una nueva contraseña temporal para tu cuenta de HitSchool.</p><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f0f7f4;border:1px solid #4e9b75;border-radius:8px;"><tr><td style="padding:20px;text-align:center;"><div style="margin-bottom:8px;color:#527064;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;">Contraseña temporal</div><div style="color:#26352e;font-family:Consolas,'Courier New',monospace;font-size:24px;line-height:32px;font-weight:700;word-break:break-word;">${escapeHtml(temporaryPassword)}</div></td></tr></table>${emailButton('Iniciar Sesión en HitSchool', frontendUrl)}<p style="margin:18px 0 0;color:#748078;font-size:13px;line-height:20px;">Te recomendamos cambiarla después de iniciar sesión.</p>`)
+  });
+};
+
+export const sendAccountReactivationEmail = async (
+  email: string,
+  firstName: string,
+  temporaryPassword: string,
+  roleLabel: string
+) => {
+  if (!transporter) {
+    throw new Error('SMTP no configurado');
+  }
+
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    to: email,
+    subject: 'Tu cuenta de HitSchool ha sido reactivada',
+    text: [
+      `Hola ${firstName || ''},`,
+      '',
+      `Tu cuenta de ${roleLabel} de HitSchool ha sido reactivada.`,
+      `Contraseña temporal: ${temporaryPassword}`,
+      `Acceso: ${frontendUrl}`,
+      '',
+      'Te recomendamos cambiar la contraseña después de iniciar sesión.'
+    ].join('\n'),
+    html: emailShell(`<h1 style="margin:0 0 12px;color:#26352e;font-size:24px;line-height:32px;">Cuenta reactivada</h1><p style="margin:0 0 18px;font-size:15px;line-height:24px;">Hola ${escapeHtml(firstName || '')},</p><p style="margin:0 0 20px;font-size:15px;line-height:24px;">Tu cuenta de ${escapeHtml(roleLabel)} de HitSchool ha sido reactivada.</p><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f0f7f4;border:1px solid #4e9b75;border-radius:8px;"><tr><td style="padding:20px;text-align:center;"><div style="margin-bottom:8px;color:#527064;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;">Nueva contraseña temporal</div><div style="color:#26352e;font-family:Consolas,'Courier New',monospace;font-size:24px;line-height:32px;font-weight:700;word-break:break-word;">${escapeHtml(temporaryPassword)}</div></td></tr></table>${emailButton('Iniciar Sesión en HitSchool', frontendUrl)}<p style="margin:18px 0 0;color:#748078;font-size:13px;line-height:20px;">Por seguridad, cambia la contraseña después de iniciar sesión.</p>`)
   });
 };
 

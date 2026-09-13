@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import { authenticateToken, requireTeacher } from '../middleware/auth';
-import { sendTeacherWelcomeEmail } from '../services/email';
+import { sendAccountReactivationEmail, sendTeacherWelcomeEmail } from '../services/email';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -110,7 +110,36 @@ router.patch('/:id/status', authenticateToken, requireTeacher, async (req, res) 
   const status = req.body.status === 'ACTIVE' ? 'ACTIVE' : req.body.status === 'INACTIVE' ? 'INACTIVE' : null;
   if (!status) return res.status(400).json({ error: 'Estado no válido' });
   try {
-    const teacher = await prisma.user.update({ where: { id: teacherId, role: 'TEACHER' }, data: { status }, select: teacherSelect });
+    const existingTeacher = await prisma.user.findFirst({
+      where: { id: teacherId, role: 'TEACHER' },
+      include: { profile: true }
+    });
+    if (!existingTeacher) return res.status(404).json({ error: 'Profesor no encontrado' });
+
+    const isReactivation = existingTeacher.status === 'INACTIVE' && status === 'ACTIVE';
+    const temporaryPassword = isReactivation ? `hit${Math.floor(1000 + Math.random() * 9000)}` : null;
+    const teacher = await prisma.user.update({
+      where: { id: teacherId, role: 'TEACHER' },
+      data: {
+        status,
+        ...(temporaryPassword ? { passwordHash: await bcrypt.hash(temporaryPassword, 10) } : {})
+      },
+      select: teacherSelect
+    });
+
+    if (temporaryPassword) {
+      try {
+        await sendAccountReactivationEmail(
+          teacher.email,
+          teacher.profile?.firstName || 'profesor',
+          temporaryPassword,
+          'profesor'
+        );
+      } catch (mailError) {
+        console.error('El profesor fue reactivado, pero no se pudo enviar el correo SMTP:', mailError);
+      }
+    }
+
     res.json({ message: status === 'ACTIVE' ? 'Profesor dado de alta' : 'Profesor dado de baja', teacher });
   } catch (error) {
     console.error('Error al cambiar estado del profesor:', error);

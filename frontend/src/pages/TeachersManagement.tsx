@@ -29,6 +29,18 @@ const TeachersManagement: React.FC = () => {
 
   useEffect(() => { fetchTeachers(); }, []);
 
+  useEffect(() => {
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('[style*="position: fixed"]') || target.closest('.glass-panel')) return;
+      setViewingTeacher(null);
+      setDeletingTeacher(null);
+      closeForm();
+    };
+    document.addEventListener('click', closeOnOutsideClick);
+    return () => document.removeEventListener('click', closeOnOutsideClick);
+  }, []);
+
   const authHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}` });
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setNotification({ text, type });
@@ -97,7 +109,7 @@ const TeachersManagement: React.FC = () => {
     return matchesSearch && (statusFilter === 'ALL' || teacher.status === statusFilter);
   });
 
-  return <div className="page-container">
+  return <div className="page-container teachers-management">
     {notification && <div style={{ position: 'fixed', bottom: 24, right: 24, padding: '1rem 1.5rem', borderRadius: 8, background: notification.type === 'success' ? 'var(--primary)' : '#991b1b', color: '#fff', boxShadow: 'var(--shadow-lg)', display: 'flex', alignItems: 'center', gap: '0.75rem', zIndex: 100 }}>{notification.type === 'success' ? <Check size={18} /> : <AlertTriangle size={18} />}{notification.text}</div>}
 
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>

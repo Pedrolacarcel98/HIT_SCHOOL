@@ -15,6 +15,7 @@ export const getChildrenForParent = async (prisma: PrismaClient, parentId: strin
   const children = await prisma.user.findMany({
     where: {
       role: 'STUDENT',
+      status: 'ACTIVE',
       OR: [
         { parentId },
         { parent: { email: { equals: parentEmail.trim().toLowerCase(), mode: 'insensitive' } } }

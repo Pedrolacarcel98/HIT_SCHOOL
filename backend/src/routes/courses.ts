@@ -85,6 +85,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
             where: {
               id: requestedStudentId,
               role: 'STUDENT',
+              status: 'ACTIVE',
               OR: [
                 { parentId: userId },
                 { parent: { email: { equals: userEmail, mode: 'insensitive' } } }
@@ -96,6 +97,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
           const child = await prisma.user.findFirst({
             where: {
               role: 'STUDENT',
+              status: 'ACTIVE',
               OR: [
                 { parentId: userId },
                 { parent: { email: { equals: userEmail, mode: 'insensitive' } } }
@@ -153,6 +155,7 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
       const child = await prisma.user.findFirst({
         where: {
           role: 'STUDENT',
+          status: 'ACTIVE',
           OR: [{ parentId: userId }, { parent: { email: { equals: userEmail, mode: 'insensitive' } } }],
           enrollments: { some: { courseId } }
         }
@@ -243,6 +246,7 @@ const verifyCourseAccess = async (req: any, res: any, next: any) => {
       const children = await prisma.user.findMany({
         where: {
           role: 'STUDENT',
+          status: 'ACTIVE',
           OR: [
             { parentId: userId },
             { parent: { email: { equals: userEmail, mode: 'insensitive' } } }
