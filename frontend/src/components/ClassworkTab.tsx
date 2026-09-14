@@ -47,6 +47,13 @@ interface StepDraft {
   requiresSubmission: boolean;
 }
 
+const generateStepId = (): string => {
+  if (typeof window !== 'undefined' && window.crypto && typeof window.crypto.randomUUID === 'function') {
+    return window.crypto.randomUUID();
+  }
+  return `step_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+};
+
 const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const [structuredTasks, setStructuredTasks] = useState<any[]>([]);
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
@@ -135,7 +142,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     setSaveAsTemplate(false);
     setTaskFormError('');
     setTaskSteps([
-      { id: crypto.randomUUID(), title: 'Paso 1: Instrucciones / Actividad', materialId: null, requiresSubmission: false }
+      { id: generateStepId(), title: 'Paso 1: Instrucciones / Actividad', materialId: null, requiresSubmission: false }
     ]);
     setIsTaskModalOpen(true);
   };
@@ -171,7 +178,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     const nextOrder = taskSteps.length + 1;
     setTaskSteps(prev => [
       ...prev,
-      { id: crypto.randomUUID(), title: `Paso ${nextOrder}`, materialId: null, requiresSubmission: false }
+      { id: generateStepId(), title: `Paso ${nextOrder}`, materialId: null, requiresSubmission: false }
     ]);
   };
 
