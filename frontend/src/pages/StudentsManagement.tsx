@@ -512,12 +512,9 @@ const StudentsManagement: React.FC = () => {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.8rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <Users style={{ color: 'var(--primary)' }} /> Gestión de Alumnos y Fichas
+          <h1 style={{ margin: 0, fontSize: '1.6rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <Users style={{ color: 'var(--primary)' }} size={24} /> Alumnos
           </h1>
-          <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)', fontSize: '0.95rem' }}>
-            Administra los expedientes, datos de contacto, cuentas familiares y matrículas de la academia
-          </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>

@@ -114,8 +114,7 @@ const TeacherCourses: React.FC = () => {
     <div className="page-container">
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.8rem', color: 'var(--text-main)' }}>Mis Clases</h1>
-          <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)' }}>Crea y gestiona tus aulas virtuales presenciales y online</p>
+          <h1 style={{ margin: 0, fontSize: '1.6rem', color: 'var(--text-main)' }}>Mis Clases</h1>
         </div>
       </header>
 

@@ -6,7 +6,8 @@ Plataforma interactiva de gestión académica, aulas virtuales y exámenes inter
 
 Para ver la guía completa paso a paso con todos los programas necesarios (Git, Docker, Node.js), inicialización de base de datos con seeds y configuración de n8n, consulta la:
 
-👉 **[Guía Completa de Despliegue Local (DEPLOYMENT_WALKTHROUGH.md)](./DEPLOYMENT_WALKTHROUGH.md)**
+👉 **[Guía Completa de Despliegue Local (DEPLOYMENT_WALKTHROUGH.md)](./DEPLOYMENT_WALKTHROUGH.md)**  
+👉 **[Guía Maestra de Despliegue en Servidor Google Cloud VM Debian (DEPLOYMENT_GCP_DEBIAN.md)](./DEPLOYMENT_GCP_DEBIAN.md)**
 
 ### Comandos Rápidos:
 

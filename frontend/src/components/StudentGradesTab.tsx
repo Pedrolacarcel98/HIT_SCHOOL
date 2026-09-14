@@ -112,10 +112,7 @@ const StudentGradesTab: React.FC<{ courseId: string; courseTitle?: string }> = (
               <Award size={24} />
             </div>
             <div>
-              <h2 style={{ margin: 0, fontSize: '1.3rem', color: 'var(--text-main)' }}>Mis Calificaciones y Expediente</h2>
-              <p style={{ margin: '0.15rem 0 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                Progreso continuo, exámenes trimestrales y boletines oficiales
-              </p>
+              <h2 style={{ margin: 0, fontSize: '1.3rem', color: 'var(--text-main)' }}>Mis Calificaciones</h2>
             </div>
           </div>
 

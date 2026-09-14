@@ -95,7 +95,7 @@ const getCategoryLabel = (category?: string) => {
 
 const getMaterialIcon = (type?: string, size = 16) => {
   switch (type) {
-    case 'FORM': return <ClipboardCheck size={size} style={{ color: '#059669' }} />;
+    case 'FORM': return <ClipboardCheck size={size} style={{ color: 'var(--primary)' }} />;
     case 'VIDEO': return <Video size={size} style={{ color: '#ef4444' }} />;
     case 'AUDIO': return <Headphones size={size} style={{ color: '#f59e0b' }} />;
     default: return <FileText size={size} style={{ color: '#0284c7' }} />;
@@ -263,14 +263,14 @@ const TaskCard: React.FC<TaskCardProps> = ({
             <div style={{ marginTop: '0.5rem', maxWidth: '320px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
                 <span>{completedSteps} de {totalSteps} pasos completados</span>
-                <strong style={{ color: isAllCompleted ? '#059669' : 'var(--primary-text)' }}>{progressPercent}%</strong>
+                <strong style={{ color: isAllCompleted ? 'var(--primary)' : 'var(--primary-text)' }}>{progressPercent}%</strong>
               </div>
               <div style={{ width: '100%', height: '6px', borderRadius: '4px', background: 'var(--surface-alt)', overflow: 'hidden' }}>
                 <div
                   style={{
                     width: `${progressPercent}%`,
                     height: '100%',
-                    background: isAllCompleted ? '#10b981' : 'var(--primary)',
+                    background: isAllCompleted ? 'var(--primary-pastel)' : 'var(--primary)',
                     borderRadius: '4px',
                     transition: 'width 0.3s ease'
                   }}
@@ -301,7 +301,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
-                      <Users size={14} style={{ color: task.stats.completionRate >= 100 ? '#059669' : 'var(--primary)' }} />
+                      <Users size={14} style={{ color: task.stats.completionRate >= 100 ? 'var(--primary)' : 'var(--primary)' }} />
                       <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)' }}>
                         Alumnos:
                       </span>
@@ -318,7 +318,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                       >
                         {task.stats.completedStudentsCount}/{task.stats.totalTargetStudents}
                       </span>
-                      <span style={{ fontSize: '0.72rem', color: task.stats.completionRate >= 100 ? '#059669' : 'var(--text-muted)', fontWeight: 500 }}>
+                      <span style={{ fontSize: '0.72rem', color: task.stats.completionRate >= 100 ? 'var(--primary)' : 'var(--text-muted)', fontWeight: 500 }}>
                         ({task.stats.completionRate}% completada)
                       </span>
                     </div>
@@ -352,11 +352,11 @@ const TaskCard: React.FC<TaskCardProps> = ({
 
                   {isStudentsExpanded && (
                     <div style={{ borderTop: '1px solid var(--border)', padding: '0.55rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                      {/* Alumnos con entrega completa (en verde) */}
+                      {/* Alumnos con entrega completa (en verde lima pastel) */}
                       {task.stats.completedStudents && task.stats.completedStudents.length > 0 && (
                         <div>
-                          <strong style={{ fontSize: '0.74rem', color: '#047857', display: 'inline-flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.3rem' }}>
-                            <CheckCircle2 size={13} style={{ color: '#059669' }} /> Entrega completa ({task.stats.completedStudents.length}):
+                          <strong style={{ fontSize: '0.74rem', color: 'var(--primary-text)', display: 'inline-flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.3rem' }}>
+                            <CheckCircle2 size={13} style={{ color: 'var(--primary)' }} /> Entrega completa ({task.stats.completedStudents.length}):
                           </strong>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
                             {task.stats.completedStudents.map(student => (
@@ -368,9 +368,9 @@ const TaskCard: React.FC<TaskCardProps> = ({
                                   gap: '0.3rem',
                                   padding: '0.18rem 0.55rem',
                                   borderRadius: '12px',
-                                  background: '#ecfdf5',
-                                  border: '1px solid #a7f3d0',
-                                  color: '#047857',
+                                  background: 'var(--primary-light)',
+                                  border: '1px solid var(--primary-border)',
+                                  color: 'var(--primary-text)',
                                   fontSize: '0.74rem',
                                   fontWeight: 600
                                 }}
@@ -548,7 +548,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                       justifyContent: 'center',
                       fontSize: '0.78rem',
                       fontWeight: 700,
-                      background: (mode === 'STUDENT' && step.isCompleted) ? '#10b981' : 'var(--primary-light)',
+                      background: (mode === 'STUDENT' && step.isCompleted) ? 'var(--primary)' : 'var(--primary-light)',
                       color: (mode === 'STUDENT' && step.isCompleted) ? '#fff' : 'var(--primary-text)',
                       flexShrink: 0
                     }}

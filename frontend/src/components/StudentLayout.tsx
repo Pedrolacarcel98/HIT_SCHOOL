@@ -174,7 +174,7 @@ const StudentLayout: React.FC = () => {
                     padding: '0.75rem 1rem',
                     borderRadius: '8px',
                     border: 'none',
-                    background: isActive ? '#059669' : 'transparent',
+                    background: isActive ? 'var(--primary)' : 'transparent',
                     color: isActive ? '#ffffff' : 'var(--text-main)',
                     cursor: 'pointer',
                     fontWeight: isActive ? '600' : '500',

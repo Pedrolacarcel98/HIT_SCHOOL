@@ -282,7 +282,7 @@ const MaterialsManagement: React.FC = () => {
   };
 
   const getMaterialIcon = (type: Material['type'], _size?: number) => {
-    if (type === 'FORM') return <ClipboardCheck size={16} style={{ color: '#10b981' }} />;
+    if (type === 'FORM') return <ClipboardCheck size={16} style={{ color: 'var(--primary)' }} />;
     if (type === 'IMAGE') return <Image size={16} style={{ color: '#ec4899' }} />;
     if (type === 'VIDEO') return <Video size={16} style={{ color: '#ef4444' }} />;
     if (type === 'AUDIO') return <Headphones size={16} style={{ color: '#f59e0b' }} />;
@@ -519,14 +519,11 @@ const MaterialsManagement: React.FC = () => {
   return (
     <div className="page-container">
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.8rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <FolderArchive style={{ color: 'var(--primary)' }} /> Material de Clase
+          <h1 style={{ margin: 0, fontSize: '1.6rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <FolderArchive style={{ color: 'var(--primary)' }} size={24} /> Material de Clase
           </h1>
-          <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)' }}>
-            Biblioteca didáctica centralizada: recursos multimedia y exámenes interactivos con audios
-          </p>
         </div>
 
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
@@ -534,7 +531,7 @@ const MaterialsManagement: React.FC = () => {
             onClick={() => { setEditingStandardMaterial(null); setResTitle(''); setResDesc(''); setResType('DOCUMENT'); setResLevel('B2'); setResCategory('GRAMMAR_VOCABULARY'); setResUrl(''); setShowAddResourceModal(true); }}
             className="btn-primary"
             style={{
-              background: '#059669',
+              background: 'var(--primary)',
               color: '#fff',
               display: 'flex',
               alignItems: 'center',
@@ -555,7 +552,7 @@ const MaterialsManagement: React.FC = () => {
             onClick={() => { setEditingMaterial(null); setShowFormBuilder(true); }}
             className="btn-primary"
             style={{
-              background: '#059669',
+              background: 'var(--primary)',
               color: '#fff',
               display: 'flex',
               alignItems: 'center',

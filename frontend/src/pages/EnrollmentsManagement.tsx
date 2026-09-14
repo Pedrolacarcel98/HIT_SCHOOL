@@ -211,12 +211,9 @@ const EnrollmentsManagement: React.FC = () => {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.8rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <FileText style={{ color: 'var(--primary)' }} /> Gestión de Matrículas
+          <h1 style={{ margin: 0, fontSize: '1.6rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <FileText style={{ color: 'var(--primary)' }} size={24} /> Matrículas
           </h1>
-          <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)', fontSize: '0.95rem' }}>
-            Da de alta y baja a los alumnos en el sistema para gestionar su facturación.
-          </p>
         </div>
       </div>
 

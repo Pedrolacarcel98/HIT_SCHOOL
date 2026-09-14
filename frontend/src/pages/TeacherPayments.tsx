@@ -319,14 +319,11 @@ const TeacherPayments: React.FC = () => {
 
   return (
     <div className="page-container">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', gap: '1rem', flexWrap: 'wrap' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem', flexWrap: 'wrap' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.8rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-            <CircleDollarSign style={{ color: 'var(--primary)' }} /> Control de Pagos
+          <h1 style={{ margin: 0, fontSize: '1.6rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <CircleDollarSign style={{ color: 'var(--primary)' }} size={24} /> Control de Pagos
           </h1>
-          <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)' }}>
-            Revisa el mes actual y los dos anteriores y marca con un tick los pagos realizados.
-          </p>
         </div>
       </header>
 

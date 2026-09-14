@@ -10,8 +10,7 @@ import {
   BookOpen,
   Download,
   Eye,
-  MessageSquare,
-  Sparkles
+  MessageSquare
 } from 'lucide-react';
 import ExamReviewModal from './ExamReviewModal';
 import AttachmentViewerModal, { isAttachmentImage } from './AttachmentViewerModal';
@@ -810,7 +809,7 @@ const TaskDeliveryReviewModal: React.FC<TaskDeliveryReviewModalProps> = ({
                 className="btn-primary"
                 style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.65rem 1.25rem' }}
               >
-                <Sparkles size={15} /> {isSaving ? 'Guardando...' : 'Guardar Calificación de Tarea'}
+                <CheckCircle2 size={15} /> {isSaving ? 'Guardando...' : 'Guardar Calificación de Tarea'}
               </button>
             </div>
           </form>

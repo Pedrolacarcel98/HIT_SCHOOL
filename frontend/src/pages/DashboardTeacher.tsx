@@ -1,5 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { Users, BookOpen, AlertTriangle, CheckSquare, Clock } from 'lucide-react';
+import { 
+  Users, 
+  BookOpen, 
+  AlertTriangle, 
+  CheckSquare, 
+  Clock, 
+  ArrowRight, 
+  PlusCircle, 
+  FolderPlus, 
+  GraduationCap, 
+  MessageSquare,
+  CheckCircle2,
+  FileText,
+  Calendar
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface DashboardTeacherData {
@@ -16,6 +30,30 @@ interface DashboardTeacherData {
     submittedAt: string;
   }[];
 }
+
+const getInitials = (name: string) => {
+  if (!name) return 'HS';
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .map(p => p[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+};
+
+const getAvatarStyle = (name: string) => {
+  const styles = [
+    { bg: 'var(--primary-light)', text: 'var(--primary-text)' },
+    { bg: '#e0f2fe', text: '#0369a1' },
+    { bg: '#f3e8ff', text: '#6b21a8' },
+    { bg: '#fef3c7', text: '#92400e' },
+    { bg: '#ffe4e6', text: '#9f1239' }
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash += name.charCodeAt(i);
+  return styles[hash % styles.length];
+};
 
 const DashboardTeacher: React.FC = () => {
   const [data, setData] = useState<DashboardTeacherData | null>(null);
@@ -46,6 +84,19 @@ const DashboardTeacher: React.FC = () => {
     fetchData();
   }, []);
 
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 13) return { text: '¡Buenos días, Profesor!', icon: '☕' };
+    if (hour < 20) return { text: '¡Buenas tardes, Profesor!', icon: '🌤️' };
+    return { text: '¡Buenas noches, Profesor!', icon: '🌙' };
+  };
+
+  const currentDateLabel = new Date().toLocaleDateString('es-ES', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'short'
+  });
+
   if (loading) {
     return (
       <div className="page-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
@@ -57,113 +108,413 @@ const DashboardTeacher: React.FC = () => {
   if (error || !data) {
     return (
       <div className="page-container">
-        <div style={{ padding: '1rem', background: '#fdf0f0', border: '1px solid #f7caca', color: '#9e2a2b', borderRadius: '8px' }}>
+        <div style={{ padding: '1.25rem', background: '#fdf0f0', border: '1px solid #f7caca', color: '#9e2a2b', borderRadius: '12px' }}>
           {error || 'Error al cargar el resumen.'}
         </div>
       </div>
     );
   }
 
+  const greeting = getGreeting();
+
   return (
     <div className="page-container animate-fade-in">
-      <header style={{ marginBottom: '2rem' }}>
-        <h1 style={{ margin: 0, fontSize: '1.8rem', color: 'var(--text-main)' }}>Inicio</h1>
-        <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)' }}>Resumen general de tu actividad en HitSchool.</p>
-      </header>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2.5rem' }}>
-        <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', cursor: 'pointer' }} onClick={() => navigate('/teacher/enrollments')}>
-          <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'var(--primary-light)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Users size={24} />
+      {/* Hero Bar Contextual */}
+      <section className="dashboard-hero">
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.35rem' }}>
+            <span style={{ fontSize: '1.25rem' }}>{greeting.icon}</span>
+            <h1 style={{ margin: 0, fontSize: '1.55rem', color: 'var(--text-main)' }}>
+              {greeting.text}
+            </h1>
           </div>
+          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.92rem' }}>
+            {data.unscoredSubmissions > 0
+              ? `Tienes ${data.unscoredSubmissions} ${data.unscoredSubmissions === 1 ? 'tarea esperando corrección' : 'tareas esperando corrección'} hoy.`
+              : 'Todo el trabajo de tus alumnos está al día. ¡Excelente labor docente!'}
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div style={{ 
+            display: 'inline-flex', 
+            alignItems: 'center', 
+            gap: '0.4rem', 
+            padding: '0.4rem 0.85rem', 
+            borderRadius: '999px', 
+            background: 'var(--surface)', 
+            border: '1px solid var(--border)',
+            fontSize: '0.82rem',
+            color: 'var(--text-muted)',
+            textTransform: 'capitalize'
+          }}>
+            <Calendar size={14} color="var(--primary)" />
+            {currentDateLabel}
+          </div>
+        </div>
+      </section>
+
+      {/* Atajos Rápidos */}
+      <section className="dashboard-quick-actions" aria-label="Accesos directos de profesor">
+        <button 
+          onClick={() => navigate('/teacher/tasks')} 
+          className="quick-action-pill"
+          type="button"
+        >
+          <PlusCircle size={15} color="var(--primary)" /> Nueva Tarea
+        </button>
+
+        <button 
+          onClick={() => navigate('/teacher/materials')} 
+          className="quick-action-pill"
+          type="button"
+        >
+          <FolderPlus size={15} color="#0284c7" /> Subir Material
+        </button>
+
+        <button 
+          onClick={() => navigate('/teacher/students')} 
+          className="quick-action-pill"
+          type="button"
+        >
+          <GraduationCap size={15} color="#7c3aed" /> Fichas Alumnos
+        </button>
+
+        <button 
+          onClick={() => navigate('/teacher/chat')} 
+          className="quick-action-pill"
+          type="button"
+        >
+          <MessageSquare size={15} color="var(--primary)" /> Mensajes
+        </button>
+      </section>
+
+      {/* Bento Grid Principal */}
+      <div className="dashboard-bento">
+        {/* Tarjeta Hero: Tareas Pendientes de Calificar (Doble ancho / Columna 6) */}
+        <div 
+          className="bento-col-6 dashboard-card dashboard-card--primary dashboard-card--interactive"
+          onClick={() => navigate('/teacher/grades')}
+          style={{ justifyContent: 'space-between', minHeight: '220px' }}
+        >
           <div>
-            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>Alumnos Activos</p>
-            <p style={{ margin: '0.25rem 0 0', fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--text-main)' }}>{data.activeStudents}</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+              <div style={{ 
+                width: '46px', 
+                height: '46px', 
+                borderRadius: '12px', 
+                background: 'var(--surface)', 
+                border: '1px solid var(--primary-border)',
+                color: 'var(--primary)', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                boxShadow: 'var(--shadow-sm)'
+              }}>
+                <CheckSquare size={24} />
+              </div>
+            </div>
+
+            <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+              Entregas por Calificar
+            </p>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.6rem', marginTop: '0.2rem' }}>
+              <span style={{ fontSize: '2.4rem', fontWeight: 800, color: 'var(--text-main)', fontFamily: 'Quicksand, sans-serif' }}>
+                {data.unscoredSubmissions}
+              </span>
+              <span style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>
+                {data.unscoredSubmissions === 1 ? 'tarea pendiente' : 'tareas pendientes'}
+              </span>
+            </div>
+          </div>
+
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            paddingTop: '1rem', 
+            borderTop: '1px solid rgba(130, 194, 142, 0.25)', 
+            marginTop: '1rem' 
+          }}>
+            <span style={{ fontSize: '0.85rem', color: 'var(--primary-text)', fontWeight: 600 }}>
+              {data.unscoredSubmissions > 0 ? 'Revisar y enviar feedback a los alumnos' : 'Bandeja de corrección al día'}
+            </span>
+            <span style={{ 
+              display: 'inline-flex', 
+              alignItems: 'center', 
+              gap: '0.25rem', 
+              color: 'var(--primary)', 
+              fontWeight: 700, 
+              fontSize: '0.88rem' 
+            }}>
+              Ir a Calificar <ArrowRight size={15} />
+            </span>
           </div>
         </div>
 
-        <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', cursor: 'pointer' }} onClick={() => navigate('/teacher/courses')}>
-          <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#e0f2fe', color: '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <BookOpen size={24} />
-          </div>
-          <div>
-            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>Cursos</p>
-            <p style={{ margin: '0.25rem 0 0', fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--text-main)' }}>{data.activeCourses}</p>
-          </div>
-        </div>
+        {/* Sub-grid de 3 métricas compactas (Columna 6) */}
+        <div className="bento-col-6" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1.25rem' }}>
+            {/* Alumnos Activos */}
+            <div 
+              className="dashboard-card dashboard-card--sky dashboard-card--interactive"
+              onClick={() => navigate('/teacher/enrollments')}
+              style={{ padding: '1.25rem' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: '#ffffff', color: '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #bae6fd' }}>
+                  <Users size={20} />
+                </div>
+                <span style={{ fontSize: '0.74rem', color: '#0369a1', fontWeight: 700, textTransform: 'uppercase' }}>Alumnos</span>
+              </div>
+              <span style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-main)', fontFamily: 'Quicksand, sans-serif' }}>
+                {data.activeStudents}
+              </span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                Matriculados activos
+              </span>
+            </div>
 
-        <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', cursor: 'pointer' }} onClick={() => navigate('/teacher/grades')}>
-          <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#fef3c7', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <CheckSquare size={24} />
+            {/* Cursos Activos */}
+            <div 
+              className="dashboard-card dashboard-card--purple dashboard-card--interactive"
+              onClick={() => navigate('/teacher/courses')}
+              style={{ padding: '1.25rem' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: '#ffffff', color: '#7c3aed', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #e9d5ff' }}>
+                  <BookOpen size={20} />
+                </div>
+                <span style={{ fontSize: '0.74rem', color: '#6b21a8', fontWeight: 700, textTransform: 'uppercase' }}>Aulas</span>
+              </div>
+              <span style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-main)', fontFamily: 'Quicksand, sans-serif' }}>
+                {data.activeCourses}
+              </span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                Cursos impartidos
+              </span>
+            </div>
           </div>
-          <div>
-            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>Pendientes Calificar</p>
-            <p style={{ margin: '0.25rem 0 0', fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--text-main)' }}>{data.unscoredSubmissions}</p>
-          </div>
-        </div>
 
-        <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', cursor: 'pointer' }} onClick={() => navigate('/teacher/payments')}>
-          <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#fee2e2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <AlertTriangle size={24} />
-          </div>
-          <div>
-            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>Avisos Impago</p>
-            <p style={{ margin: '0.25rem 0 0', fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--text-main)' }}>{data.overduePayments}</p>
+          {/* Control de Pagos e Impagos */}
+          <div 
+            className={`dashboard-card ${data.overduePayments > 0 ? 'dashboard-card--rose' : 'dashboard-card--primary'} dashboard-card--interactive`}
+            onClick={() => navigate('/teacher/payments')}
+            style={{ padding: '1.15rem 1.35rem', display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
+              <div style={{ 
+                width: '40px', 
+                height: '40px', 
+                borderRadius: '10px', 
+                background: '#ffffff', 
+                color: data.overduePayments > 0 ? '#e11d48' : 'var(--primary)', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                border: `1px solid ${data.overduePayments > 0 ? '#fecdd3' : 'var(--primary-border)'}`,
+                flexShrink: 0
+              }}>
+                {data.overduePayments > 0 ? <AlertTriangle size={20} /> : <CheckCircle2 size={20} />}
+              </div>
+              <div>
+                <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                  {data.overduePayments > 0 ? `${data.overduePayments} avisos de impago` : 'Mensualidades al día'}
+                </p>
+                <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  {data.overduePayments > 0 ? 'Recibos pendientes de regularizar' : 'Sin incidencias de cobro registradas'}
+                </p>
+              </div>
+            </div>
+
+            <span style={{ 
+              fontSize: '0.82rem', 
+              fontWeight: 700, 
+              color: data.overduePayments > 0 ? '#be123c' : 'var(--primary-text)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.2rem'
+            }}>
+              Ver pagos <ArrowRight size={14} />
+            </span>
           </div>
         </div>
       </div>
 
-      <div className="glass-panel" style={{ padding: '1.5rem' }}>
-        <h2 style={{ margin: '0 0 1.5rem', fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-main)' }}>
-          <Clock size={20} color="var(--primary)" /> Últimas Entregas (Sin Nota)
-        </h2>
+      {/* Centro de Entregas Recientes (Feed Enriquecido) */}
+      <section className="glass-panel" style={{ padding: '1.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <div style={{ 
+              width: '36px', 
+              height: '36px', 
+              borderRadius: '9px', 
+              background: 'var(--primary-light)', 
+              color: 'var(--primary)', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center' 
+            }}>
+              <Clock size={19} />
+            </div>
+            <div>
+              <h2 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--text-main)' }}>
+                Últimas Entregas de Alumnos
+              </h2>
+              <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                Trabajos y respuestas pendientes de revisión y nota
+              </p>
+            </div>
+          </div>
+
+          {data.latestSubmissions.length > 0 && (
+            <span style={{ 
+              padding: '0.3rem 0.75rem', 
+              borderRadius: '999px', 
+              background: 'var(--surface-alt)', 
+              border: '1px solid var(--border)', 
+              fontSize: '0.8rem', 
+              fontWeight: 700, 
+              color: 'var(--text-muted)' 
+            }}>
+              {data.latestSubmissions.length} pendientes
+            </span>
+          )}
+        </div>
 
         {data.latestSubmissions.length === 0 ? (
-          <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem 0' }}>No hay tareas pendientes de calificar.</p>
+          <div style={{ 
+            textAlign: 'center', 
+            padding: '3rem 1.5rem', 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center', 
+            gap: '0.75rem' 
+          }}>
+            <div style={{ 
+              width: '54px', 
+              height: '54px', 
+              borderRadius: '50%', 
+              background: 'var(--primary-light)', 
+              color: 'var(--primary)', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <CheckCircle2 size={26} />
+            </div>
+            <strong style={{ fontSize: '1.05rem', color: 'var(--text-main)' }}>
+              ¡Todo corregido! No hay tareas pendientes
+            </strong>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', margin: 0, maxWidth: '420px' }}>
+              Los alumnos no tienen trabajos sin calificar. Cuando entreguen un examen o redacción, aparecerá aquí al instante.
+            </p>
+          </div>
         ) : (
-          <div className="table-responsive">
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                  <th style={{ padding: '0.75rem', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 600 }}>ALUMNO</th>
-                  <th style={{ padding: '0.75rem', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 600 }}>TAREA</th>
-                  <th style={{ padding: '0.75rem', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 600 }}>CURSO</th>
-                  <th style={{ padding: '0.75rem', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 600 }}>FECHA ENT.</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'right' }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.latestSubmissions.map(sub => (
-                  <tr key={sub.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={{ padding: '1rem 0.75rem', fontWeight: 500, color: 'var(--text-main)' }}>{sub.studentName}</td>
-                    <td style={{ padding: '1rem 0.75rem', color: 'var(--text-main)' }}>{sub.taskTitle}</td>
-                    <td style={{ padding: '1rem 0.75rem', color: 'var(--text-muted)' }}>{sub.courseTitle}</td>
-                    <td style={{ padding: '1rem 0.75rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                      {new Date(sub.submittedAt).toLocaleDateString()}
-                    </td>
-                    <td style={{ padding: '1rem 0.75rem', textAlign: 'right' }}>
-                      <button
-                        onClick={() => navigate(`/teacher/grades?student=${encodeURIComponent(sub.studentName)}`)}
-                        style={{
-                          background: 'var(--primary)',
-                          color: '#fff',
-                          border: 'none',
-                          padding: '0.4rem 0.75rem',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          fontSize: '0.85rem'
-                        }}
-                      >
-                        Calificar
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {data.latestSubmissions.map(sub => {
+              const avatar = getAvatarStyle(sub.studentName);
+              const initials = getInitials(sub.studentName);
+              const formattedDate = new Date(sub.submittedAt).toLocaleDateString('es-ES', {
+                day: 'numeric',
+                month: 'short',
+                hour: '2-digit',
+                minute: '2-digit'
+              });
+
+              return (
+                <div 
+                  key={sub.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '0.9rem 1.15rem',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '12px',
+                    gap: '1rem',
+                    flexWrap: 'wrap',
+                    transition: 'all 0.2s ease'
+                  }}
+                  className="dashboard-card--interactive"
+                  onClick={() => navigate(`/teacher/grades?student=${encodeURIComponent(sub.studentName)}`)}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', minWidth: '220px' }}>
+                    <div style={{ 
+                      width: '42px', 
+                      height: '42px', 
+                      borderRadius: '50%', 
+                      background: avatar.bg, 
+                      color: avatar.text, 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      fontWeight: 800,
+                      fontSize: '0.88rem',
+                      flexShrink: 0
+                    }}>
+                      {initials}
+                    </div>
+
+                    <div>
+                      <strong style={{ fontSize: '0.95rem', color: 'var(--text-main)', display: 'block' }}>
+                        {sub.studentName}
+                      </strong>
+                      <span style={{ 
+                        display: 'inline-block',
+                        fontSize: '0.76rem', 
+                        color: 'var(--text-muted)',
+                        background: 'var(--surface-alt)',
+                        padding: '0.15rem 0.5rem',
+                        borderRadius: '6px',
+                        marginTop: '0.2rem',
+                        border: '1px solid var(--border-light)'
+                      }}>
+                        {sub.courseTitle}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: '200px' }}>
+                    <FileText size={16} color="var(--primary)" style={{ flexShrink: 0 }} />
+                    <span style={{ fontSize: '0.92rem', color: 'var(--text-main)', fontWeight: 600 }}>
+                      {sub.taskTitle}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                      <Clock size={14} />
+                      {formattedDate}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/teacher/grades?student=${encodeURIComponent(sub.studentName)}`);
+                      }}
+                      className="btn-primary"
+                      style={{
+                        padding: '0.45rem 0.95rem',
+                        fontSize: '0.84rem',
+                        borderRadius: '8px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem'
+                      }}
+                    >
+                      Calificar <ArrowRight size={14} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
-      </div>
+      </section>
     </div>
   );
 };

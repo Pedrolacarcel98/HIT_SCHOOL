@@ -67,25 +67,6 @@ const modalBackdrop: React.CSSProperties = {
   zIndex: 80,
   padding: "1rem",
 };
-const secondaryButton: React.CSSProperties = {
-  padding: "0.6rem 1.2rem",
-  borderRadius: 8,
-  border: "1px solid var(--border)",
-  background: "transparent",
-  color: "var(--text-main)",
-  cursor: "pointer",
-  fontWeight: 600,
-};
-const iconButtonStyle: React.CSSProperties = {
-  background: "transparent",
-  border: "1px solid var(--border)",
-  borderRadius: 6,
-  padding: "0.4rem",
-  cursor: "pointer",
-  color: "var(--text-muted)",
-  display: "flex",
-  alignItems: "center",
-};
 
 const ParentsManagement: React.FC = () => {
   const [parents, setParents] = useState<Parent[]>([]);
@@ -243,10 +224,6 @@ const ParentsManagement: React.FC = () => {
     );
   });
 
-  const getInitials = (parent: Parent) =>
-    `${parent.profile?.firstName?.[0] || ""}${parent.profile?.lastName?.[0] || ""}`.toUpperCase() ||
-    "TU";
-
   return (
     <div className="page-container parents-management">
       {notification && (
@@ -289,16 +266,14 @@ const ParentsManagement: React.FC = () => {
           <h1
             style={{
               margin: 0,
+              fontSize: "1.6rem",
               display: "flex",
               alignItems: "center",
-              gap: "0.7rem",
+              gap: "0.65rem",
             }}
           >
-            <Users style={{ color: "var(--primary)" }} /> Gestión de Tutores
+            <Users style={{ color: "var(--primary)" }} size={24} /> Tutores
           </h1>
-          <p style={{ margin: "0.25rem 0 0", color: "var(--text-muted)" }}>
-            Administra accesos, datos y alumnos asociados.
-          </p>
         </div>
         <button
           className="btn-primary"

@@ -113,7 +113,11 @@ const TeachersManagement: React.FC = () => {
     {notification && <div style={{ position: 'fixed', bottom: 24, right: 24, padding: '1rem 1.5rem', borderRadius: 8, background: notification.type === 'success' ? 'var(--primary)' : '#991b1b', color: '#fff', boxShadow: 'var(--shadow-lg)', display: 'flex', alignItems: 'center', gap: '0.75rem', zIndex: 100 }}>{notification.type === 'success' ? <Check size={18} /> : <AlertTriangle size={18} />}{notification.text}</div>}
 
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-      <div><h1 style={{ margin: 0, fontSize: '1.8rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}><UserRoundCog style={{ color: 'var(--primary)' }} /> Gestión de Profesores</h1><p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)', fontSize: '0.95rem' }}>Administra las fichas, datos de contacto y accesos del equipo docente</p></div>
+      <div>
+        <h1 style={{ margin: 0, fontSize: '1.6rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          <UserRoundCog style={{ color: 'var(--primary)' }} size={24} /> Profesores
+        </h1>
+      </div>
       <button onClick={() => { resetForm(); setShowCreateModal(true); }} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.25rem' }}><UserPlus size={18} /> Nuevo Profesor</button>
     </div>
 

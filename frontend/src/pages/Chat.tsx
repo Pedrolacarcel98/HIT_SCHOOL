@@ -274,22 +274,15 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
 
   return (
     <div className="page-container animate-fade-in">
-      <header style={{ marginBottom: '1.5rem' }}>
-        <h1 style={{ margin: 0, fontSize: '1.8rem', display: 'flex', alignItems: 'center', gap: '0.7rem' }}>
-          <MessageCircle style={{ color: 'var(--primary)' }} />
+      <header style={{ marginBottom: '1.25rem' }}>
+        <h1 style={{ margin: 0, fontSize: '1.6rem', display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          <MessageCircle style={{ color: 'var(--primary)' }} size={24} />
           {role === 'TEACHER'
-            ? 'Chats de la Academia'
+            ? 'Mensajes'
             : userRole === 'PARENT'
-              ? `Chat con Profesor de ${activeStudentName}`
+              ? `Profesor de ${activeStudentName}`
               : 'Chat con Profesor'}
         </h1>
-        <p style={{ margin: '0.3rem 0 0', color: 'var(--text-muted)' }}>
-          {role === 'TEACHER' 
-            ? 'Consulta y responde las conversaciones de todos los alumnos de la academia.' 
-            : userRole === 'PARENT'
-              ? `Canal directo y privado con el profesor asignado a ${activeStudentName}.`
-              : 'Canal directo y privado con tu profesor asignado.'}
-        </p>
       </header>
 
       {error && (

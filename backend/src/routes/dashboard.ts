@@ -14,16 +14,41 @@ interface AuthRequest extends Request {
 // ==========================================
 router.get('/teacher', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
   try {
-    const activeStudents = await prisma.user.count({
+    const isTeacher = req.user?.role === 'TEACHER';
+    const teacherId = req.user?.id;
+
+    const courseWhere = isTeacher ? { teacherId } : {};
+    const activeCourses = await prisma.course.count({ where: courseWhere });
+
+    const activeStudents = isTeacher ? await prisma.user.count({
+      where: {
+        role: 'STUDENT',
+        status: 'ACTIVE',
+        enrollments: { some: { course: { teacherId } } }
+      }
+    }) : await prisma.user.count({
       where: { role: 'STUDENT', status: 'ACTIVE' }
     });
 
-    const activeCourses = await prisma.course.count();
+    const pendingSubmissionWhere: any = {
+      grade: null,
+      content: { not: null },
+      assignment: {
+        ...(isTeacher ? { OR: [{ teacherId }, { course: { teacherId } }] } : {}),
+        NOT: {
+          material: {
+            type: 'FORM'
+          }
+        },
+        OR: [
+          { structuredTaskStepId: null },
+          { structuredTaskStep: { requiresSubmission: true } }
+        ]
+      }
+    };
 
     const unscoredSubmissions = await prisma.submission.count({
-      where: {
-        grade: null
-      }
+      where: pendingSubmissionWhere
     });
 
     // Overdue payments roughly (isPaid false, dueDate in past)
@@ -37,7 +62,7 @@ router.get('/teacher', authenticateToken, requireTeacher, async (req: AuthReques
     });
 
     const latestSubmissions = await prisma.submission.findMany({
-      where: { grade: null },
+      where: pendingSubmissionWhere,
       orderBy: { submittedAt: 'desc' },
       take: 5,
       include: {

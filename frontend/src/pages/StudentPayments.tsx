@@ -247,16 +247,11 @@ const StudentPayments: React.FC = () => {
 
   return (
     <div className="page-container">
-      <header style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+      <header style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.8rem', color: 'var(--text-main)' }}>
+          <h1 style={{ margin: 0, fontSize: '1.6rem', color: 'var(--text-main)' }}>
             {isParent ? `Pagos de ${childName}` : 'Mis Pagos'}
           </h1>
-          <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)' }}>
-            {isParent 
-              ? `Consulta si la mensualidad de ${childName} está al día.` 
-              : 'Consulta si tu mensualidad está al día.'}
-          </p>
         </div>
         {groupedPayments.length > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>

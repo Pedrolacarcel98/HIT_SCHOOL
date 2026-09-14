@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=Quicksand:wght@600;700&display=swap');
 
 @media print {
   .no-print {
@@ -6,15 +6,16 @@
   }
 }
 :root {
-  /* Paleta Verde Pastel / Salvia Suave */
-  --primary-hue: 152;
-  --primary: #059669;
-  --primary-hover: #418664;
-  --primary-active: #367053;
-  --primary-light: #eaf4ef;
-  --primary-subtle: #f3f8f5;
-  --primary-border: #c4e2d3;
-  --primary-text: #24583e;
+  /* Paleta Verde Lima Pastel (Basada en el logo oficial HitSchool #82c28e) */
+  --primary-hue: 131;
+  --primary: #5ba86d;            /* Verde lima suave y cálido para botones y énfasis */
+  --primary-hover: #4e9a5f;
+  --primary-active: #428651;
+  --primary-pastel: #82c28e;     /* Tono exacto del círculo del logo HitSchool */
+  --primary-light: #eaf5ed;      /* Fondo lima pastel muy suave */
+  --primary-subtle: #f3faf5;
+  --primary-border: #bce3c5;
+  --primary-text: #245832;
 
   /* Paleta Blanco y Blanco Crudo */
   --background: #f7f8f5;         /* Blanco crudo suave y cálido */
@@ -36,12 +37,12 @@
   --radius-sm: 8px;
   --radius-lg: 20px;
 
-  /* Sombras sutiles y elegantes */
+  /* Sombras sutiles y elegantes en tono lima pastel */
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
   --shadow-md: 0 4px 14px -2px rgba(34, 49, 43, 0.06), 0 2px 6px -1px rgba(34, 49, 43, 0.03);
   --shadow-lg: 0 12px 28px -4px rgba(34, 49, 43, 0.08), 0 4px 12px -2px rgba(34, 49, 43, 0.04);
   --shadow-glass: 0 8px 30px rgba(34, 49, 43, 0.05);
-  --shadow-primary: 0 4px 14px rgba(78, 155, 117, 0.2);
+  --shadow-primary: 0 4px 14px rgba(130, 194, 142, 0.35);
 }
 
 * {
@@ -51,16 +52,16 @@
 }
 
 body {
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Nunito', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background-color: var(--background);
   color: var(--text-main);
-  line-height: 1.5;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
-  /* Fondo suave con degradados difuminados en verde pastel muy tenue y blanco crudo */
+  /* Fondo suave con degradados difuminados en verde lima pastel muy tenue y blanco crudo */
   background-image: 
-    radial-gradient(at 0% 0%, rgba(78, 155, 117, 0.06) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, rgba(78, 155, 117, 0.05) 0px, transparent 50%);
+    radial-gradient(at 0% 0%, rgba(130, 194, 142, 0.09) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(130, 194, 142, 0.07) 0px, transparent 50%);
   background-attachment: fixed;
 }
 
@@ -153,18 +154,27 @@ body {
 }
 
 h1, h2, h3, h4, h5, h6 {
+  font-family: 'Quicksand', 'Nunito', system-ui, sans-serif;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   color: var(--text-main);
 }
 
 h1,
 .page-title {
-  font-family: 'Plus Jakarta Sans', sans-serif !important;
-  font-size: 1.75rem !important;
+  font-family: 'Quicksand', 'Nunito', system-ui, sans-serif !important;
+  font-size: 1.6rem !important;
   font-weight: 700 !important;
-  letter-spacing: -0.02em !important;
-  color: #1e293b !important;
+  letter-spacing: -0.01em !important;
+  color: var(--text-main) !important;
+}
+
+button,
+.btn-primary,
+.btn-secondary,
+.nav-item,
+th {
+  font-family: 'Quicksand', 'Nunito', system-ui, sans-serif;
 }
 
 .parents-management button[title] {
@@ -411,7 +421,7 @@ h1,
 .btn-primary:hover {
   background-color: var(--primary-hover);
   transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(78, 155, 117, 0.28);
+  box-shadow: 0 6px 18px rgba(130, 194, 142, 0.35);
 }
 
 .btn-primary:active {
@@ -592,3 +602,191 @@ input, select, textarea {
     font-size: 0.88rem;
   }
 }
+
+/* ==========================================================================
+   Dashboard Bento Grid & Card Components
+   ========================================================================== */
+
+.dashboard-hero {
+  background: linear-gradient(135deg, #ffffff 0%, var(--primary-subtle) 100%);
+  border: 1px solid var(--primary-border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem 1.75rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.dashboard-hero::after {
+  content: '';
+  position: absolute;
+  top: -40px;
+  right: -40px;
+  width: 140px;
+  height: 140px;
+  background: radial-gradient(circle, rgba(130, 194, 142, 0.22) 0%, transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.dashboard-quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.75rem;
+}
+
+.quick-action-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 1.1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
+  text-decoration: none;
+}
+
+.quick-action-pill:hover {
+  border-color: var(--primary);
+  background: var(--primary-subtle);
+  color: var(--primary-text);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.dashboard-bento {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+.bento-col-12 { grid-column: span 12; }
+.bento-col-8  { grid-column: span 8; }
+.bento-col-7  { grid-column: span 7; }
+.bento-col-6  { grid-column: span 6; }
+.bento-col-5  { grid-column: span 5; }
+.bento-col-4  { grid-column: span 4; }
+.bento-col-3  { grid-column: span 3; }
+
+@media (max-width: 1024px) {
+  .bento-col-8,
+  .bento-col-7,
+  .bento-col-5 {
+    grid-column: span 12;
+  }
+  .bento-col-6,
+  .bento-col-4,
+  .bento-col-3 {
+    grid-column: span 6;
+  }
+}
+
+@media (max-width: 640px) {
+  .bento-col-6,
+  .bento-col-4,
+  .bento-col-3 {
+    grid-column: span 12;
+  }
+  .dashboard-hero {
+    padding: 1.25rem;
+  }
+}
+
+.dashboard-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.dashboard-card--interactive {
+  cursor: pointer;
+}
+
+.dashboard-card--primary {
+  background: linear-gradient(145deg, #ffffff 35%, var(--primary-subtle) 100%);
+  border: 1px solid var(--primary-border);
+}
+
+.dashboard-card--primary:hover {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-primary);
+}
+
+.dashboard-card--sky {
+  background: linear-gradient(145deg, #ffffff 40%, #f0f9ff 100%);
+  border: 1px solid #bae6fd;
+}
+
+.dashboard-card--sky:hover {
+  border-color: #38bdf8;
+  box-shadow: 0 4px 14px rgba(56, 189, 248, 0.25);
+}
+
+.dashboard-card--purple {
+  background: linear-gradient(145deg, #ffffff 40%, #faf5ff 100%);
+  border: 1px solid #e9d5ff;
+}
+
+.dashboard-card--purple:hover {
+  border-color: #c084fc;
+  box-shadow: 0 4px 14px rgba(192, 132, 252, 0.25);
+}
+
+.dashboard-card--amber {
+  background: linear-gradient(145deg, #ffffff 40%, #fffbeb 100%);
+  border: 1px solid #fde68a;
+}
+
+.dashboard-card--amber:hover {
+  border-color: #fbbf24;
+  box-shadow: 0 4px 14px rgba(251, 191, 36, 0.25);
+}
+
+.dashboard-card--rose {
+  background: linear-gradient(145deg, #ffffff 40%, #fff1f2 100%);
+  border: 1px solid #fecdd3;
+}
+
+.dashboard-card--rose:hover {
+  border-color: #fb7185;
+  box-shadow: 0 4px 14px rgba(251, 113, 133, 0.25);
+}
+
+.dashboard-stat-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+

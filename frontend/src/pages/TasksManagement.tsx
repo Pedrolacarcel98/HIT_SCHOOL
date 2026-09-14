@@ -471,7 +471,7 @@ const TasksManagement: React.FC = () => {
 
   const getMaterialIcon = (type?: string, size = 16) => {
     switch (type) {
-      case 'FORM': return <ClipboardCheck size={size} style={{ color: '#059669' }} />;
+      case 'FORM': return <ClipboardCheck size={size} style={{ color: 'var(--primary)' }} />;
       case 'VIDEO': return <Video size={size} style={{ color: '#ef4444' }} />;
       case 'AUDIO': return <Headphones size={size} style={{ color: '#f59e0b' }} />;
       case 'IMAGE': return <Image size={size} style={{ color: '#8b5cf6' }} />;
@@ -515,17 +515,14 @@ const TasksManagement: React.FC = () => {
   return (
     <div className="animate-fade-in" style={{ padding: '2rem 1.5rem', maxWidth: '1280px', margin: '0 auto' }}>
       {/* Cabecera Principal */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.75rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.3rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
             <span style={{ display: 'inline-flex', padding: '0.35rem', borderRadius: '10px', background: 'var(--primary-light)', color: 'var(--primary)' }}>
               <ListTodo size={22} />
             </span>
-            <h1 style={{ margin: 0, fontSize: '1.65rem', color: 'var(--text-main)' }}>Gestión de Tareas y Plantillas</h1>
+            <h1 style={{ margin: 0, fontSize: '1.6rem', color: 'var(--text-main)' }}>Tareas y Plantillas</h1>
           </div>
-          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.92rem' }}>
-            Diseña plantillas pedagógicas reutilizables y administra el trabajo asignado a tus clases.
-          </p>
         </div>
 
         <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>

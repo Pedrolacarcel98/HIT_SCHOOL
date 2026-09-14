@@ -428,14 +428,12 @@ const StudentCourses: React.FC = () => {
 
   return (
     <div className="page-container animate-fade-in">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '2rem' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.8rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <BookOpen style={{ color: 'var(--primary)' }} /> Mis Clases
+          <h1 style={{ margin: 0, fontSize: '1.6rem', display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <BookOpen style={{ color: 'var(--primary)' }} size={24} />
+            {userRole === 'PARENT' ? `Clases de ${activeStudentName}` : 'Mis Clases'}
           </h1>
-          <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)' }}>
-            {userRole === 'PARENT' ? `Clases matriculadas de ${activeStudentName}` : 'Aquí verás todas las clases en las que estás matriculado.'}
-          </p>
         </div>
       </header>
 

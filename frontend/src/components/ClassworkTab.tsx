@@ -367,7 +367,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
 
   const getMaterialIcon = (type?: string, size = 16) => {
     switch (type) {
-      case 'FORM': return <ClipboardCheck size={size} style={{ color: '#059669' }} />;
+      case 'FORM': return <ClipboardCheck size={size} style={{ color: 'var(--primary)' }} />;
       case 'VIDEO': return <Video size={size} style={{ color: '#ef4444' }} />;
       case 'AUDIO': return <Headphones size={size} style={{ color: '#f59e0b' }} />;
       case 'IMAGE': return <ImageIcon size={size} style={{ color: '#8b5cf6' }} />;

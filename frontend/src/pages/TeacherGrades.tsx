@@ -17,7 +17,6 @@ import {
   GraduationCap,
   Laptop,
   Search,
-  Sparkles,
   Users,
   X
 } from 'lucide-react';
@@ -862,12 +861,9 @@ const TeacherGrades: React.FC = () => {
       <header style={{ marginBottom: '1.75rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
-            <h1 style={{ margin: 0, fontSize: '1.85rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <Award style={{ color: 'var(--primary)' }} /> Centro de Calificaciones
+            <h1 style={{ margin: 0, fontSize: '1.6rem', display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              <Award style={{ color: 'var(--primary)' }} size={24} /> Calificaciones
             </h1>
-            <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)' }}>
-              Supervisa el rendimiento académico general por alumnos o agrupado por clases presenciales y online
-            </p>
           </div>
 
           <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
@@ -2149,7 +2145,7 @@ const TeacherGrades: React.FC = () => {
                     padding: '0.75rem 1.5rem'
                   }}
                 >
-                  <Sparkles size={16} />
+                  <CheckCircle2 size={16} />
                   {isSavingGrade ? 'Guardando...' : 'Guardar Calificación'}
                 </button>
               </div>

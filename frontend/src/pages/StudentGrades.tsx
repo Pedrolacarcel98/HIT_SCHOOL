@@ -93,12 +93,9 @@ const StudentGrades: React.FC = () => {
     <div className="page-container animate-fade-in">
       <header style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.8rem', display: 'flex', alignItems: 'center', gap: '0.7rem' }}>
-            <Award style={{ color: 'var(--primary)' }} /> Libro de Calificaciones
+          <h1 style={{ margin: 0, fontSize: '1.6rem', display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <Award style={{ color: 'var(--primary)' }} size={24} /> Mis Calificaciones
           </h1>
-          <p style={{ margin: '0.3rem 0 0', color: 'var(--text-muted)' }}>
-            Consulta tus notas trimestrales, ejercicios continuos y descarga boletines oficiales
-          </p>
         </div>
 
         {/* Selector de Trimestre */}
