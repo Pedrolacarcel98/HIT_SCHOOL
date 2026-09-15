@@ -258,7 +258,7 @@ const DashboardTeacher: React.FC = () => {
             {/* Alumnos Activos */}
             <div 
               className="dashboard-card dashboard-card--sky dashboard-card--interactive"
-              onClick={() => navigate('/teacher/enrollments')}
+              onClick={() => navigate('/teacher/students')}
               style={{ padding: '1.25rem' }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>

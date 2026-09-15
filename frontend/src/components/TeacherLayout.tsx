@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Award, BookOpen, Users, LogOut, GraduationCap, FolderArchive, CircleDollarSign, MessageCircle, Menu, X, Settings, FileText, Home, UserRoundCog } from 'lucide-react';
+import { Award, BookOpen, Users, LogOut, GraduationCap, FolderArchive, CircleDollarSign, MessageCircle, Menu, X, Settings, Home, UserRoundCog } from 'lucide-react';
 import SettingsModal from './SettingsModal';
 
 const TeacherLayout: React.FC = () => {
@@ -65,7 +65,6 @@ const TeacherLayout: React.FC = () => {
     { label: 'Gestión de Alumnos', path: '/teacher/students', icon: <Users size={20} />, iconColor: '#d14f72' },
     { label: 'Gestión Profesores', path: '/teacher/teachers', icon: <UserRoundCog size={20} />, iconColor: '#5369ad' },
     { label: 'Gestión Tutores', path: '/teacher/parents', icon: <Users size={20} />, iconColor: '#0f9f7a' },
-    { label: 'Matrículas', path: '/teacher/enrollments', icon: <FileText size={20} />, iconColor: '#c97824' },
     { label: 'Control de Pagos', path: '/teacher/payments', icon: <CircleDollarSign size={20} />, iconColor: '#d14f72' },
     { label: 'Chat Alumnos', path: '/teacher/chat', icon: <MessageCircle size={20} />, iconColor: '#12966b' },
   ];
