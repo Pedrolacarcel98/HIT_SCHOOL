@@ -144,7 +144,7 @@ const PeopleTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   };
 
   // Filtrar los alumnos para no mostrar los que ya están en esta clase
-  const availableStudents = allStudents.filter(student => !courseStudents.some(cs => cs.id === student.id));
+  const availableStudents = allStudents.filter(student => student.status === 'ACTIVE' && !courseStudents.some(cs => cs.id === student.id));
   const filteredAvailableStudents = availableStudents.filter(student => {
     const searchValue = `${student.profile?.firstName || ''} ${student.profile?.lastName || ''} ${student.email}`.toLowerCase();
     return searchValue.includes(studentSearch.trim().toLowerCase());

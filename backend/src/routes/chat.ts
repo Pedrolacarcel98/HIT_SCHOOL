@@ -5,6 +5,36 @@ import { authenticateToken, AuthRequest } from '../middleware/auth';
 const router = Router();
 const prisma = new PrismaClient();
 
+const addUnreadCounts = async (contacts: any[], userId: string) => {
+  const relevantMessages = await prisma.chatMessage.findMany({
+    where: {
+      OR: [{ senderId: userId }, { recipientId: userId }]
+    },
+    select: { senderId: true, recipientId: true, studentId: true, readAt: true, createdAt: true },
+    orderBy: { createdAt: 'desc' }
+  });
+  const counts = new Map<string, number>();
+  const lastMessages = new Map<string, Date>();
+  relevantMessages.forEach(message => {
+    const partnerId = message.senderId === userId ? message.recipientId : message.senderId;
+    const key = `${partnerId}:${message.studentId || ''}`;
+    if (message.recipientId === userId && !message.readAt) {
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    if (!lastMessages.has(key)) lastMessages.set(key, message.createdAt);
+  });
+
+  return contacts.map(contact => {
+    const conversationStudentId = contact.studentId || (contact.role === 'STUDENT' ? contact.id : '');
+    const key = `${contact.id}:${conversationStudentId}`;
+    return {
+      ...contact,
+      unreadCount: counts.get(key) || 0,
+      lastMessageAt: lastMessages.get(key)?.toISOString() || null
+    };
+  });
+};
+
 const canChat = async (userId: string, role: string, partnerId: string) => {
   const partner = await prisma.user.findUnique({ where: { id: partnerId }, select: { role: true } });
   if (!partner) return false;
@@ -80,7 +110,7 @@ router.get('/contacts', authenticateToken, async (req: AuthRequest, res: Respons
         }
       });
 
-      res.json(contacts);
+      res.json(await addUnreadCounts(contacts, userId));
     } else {
       let targetStudentId = userId;
       if (role === 'PARENT') {
@@ -119,7 +149,7 @@ router.get('/contacts', authenticateToken, async (req: AuthRequest, res: Respons
           orderBy: { profile: { firstName: 'asc' } }
         });
 
-        return res.json(teachers.map((teacher) => ({
+        return res.json(await addUnreadCounts(teachers.map((teacher) => ({
           id: teacher.id,
           name: teacher.profile ? `${teacher.profile.firstName} ${teacher.profile.lastName}`.trim() || teacher.email : teacher.email,
           email: teacher.email,
@@ -127,7 +157,7 @@ router.get('/contacts', authenticateToken, async (req: AuthRequest, res: Respons
           role: 'TEACHER',
           subtitle: 'Profesor/a de la academia',
           studentId: targetStudentId
-        })));
+        })), userId));
       }
 
       const [studentUser, teachers] = await Promise.all([
@@ -147,7 +177,7 @@ router.get('/contacts', authenticateToken, async (req: AuthRequest, res: Respons
       ]);
       const studentFirstName = studentUser?.profile?.firstName || 'el alumno';
 
-      res.json(teachers.map((teacher) => ({
+      res.json(await addUnreadCounts(teachers.map((teacher) => ({
         id: teacher.id,
         name: teacher.profile ? `${teacher.profile.firstName} ${teacher.profile.lastName}`.trim() || teacher.email : teacher.email,
         email: teacher.email,
@@ -156,7 +186,7 @@ router.get('/contacts', authenticateToken, async (req: AuthRequest, res: Respons
         role: 'TEACHER',
         studentId: targetStudentId,
         studentFirstName
-      })));
+      })), userId));
     }
   } catch (error) {
     console.error('Error al cargar contactos de chat:', error);
@@ -184,7 +214,13 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
     const isTeacherOrAdmin = req.user.role === 'TEACHER' || req.user.role === 'ADMIN';
     const conversationStudentId = reqStudentId || (partnerUser?.role === 'STUDENT' ? partnerId : '');
     const whereCondition: any = isTeacherOrAdmin && conversationStudentId
-      ? { studentId: conversationStudentId }
+      ? {
+          studentId: conversationStudentId,
+          OR: [
+            { senderId: req.user.id, recipientId: partnerId },
+            { senderId: partnerId, recipientId: req.user.id }
+          ]
+        }
       : {
           OR: [
             { senderId: req.user.id, recipientId: partnerId },
@@ -249,6 +285,26 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
+router.post('/read', authenticateToken, async (req: AuthRequest, res: Response) => {
+  const partnerId = typeof req.body?.partnerId === 'string' ? req.body.partnerId : '';
+  const studentId = typeof req.body?.studentId === 'string' ? req.body.studentId : null;
+  if (!req.user || !partnerId || !(await canChat(req.user.id, req.user.role, partnerId))) {
+    return res.status(403).json({ error: 'No tienes acceso a esta conversación.' });
+  }
+
+  await prisma.chatMessage.updateMany({
+    where: {
+      senderId: partnerId,
+      recipientId: req.user.id,
+      studentId,
+      readAt: null
+    },
+    data: { readAt: new Date() }
+  });
+
+  return res.json({ unreadCount: 0 });
+});
+
 router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   const { recipientId, content, studentId: reqStudentId } = req.body as { recipientId?: string; content?: string; studentId?: string };
   if (!recipientId || !content?.trim() || !req.user || !(await canChat(req.user.id, req.user.role, recipientId))) {
@@ -257,8 +313,12 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 
   const recipientUser = await prisma.user.findUnique({
     where: { id: recipientId },
-    select: { id: true, role: true }
+    select: { id: true, role: true, status: true }
   });
+
+  if (recipientUser?.role === 'STUDENT' && recipientUser.status !== 'ACTIVE') {
+    return res.status(400).json({ error: 'No se puede enviar mensajes a un alumno dado de baja.' });
+  }
 
   let targetStudentId: string | null = null;
 
@@ -270,6 +330,16 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
     targetStudentId = req.user.id;
   } else if ((req.user.role === 'TEACHER' || req.user.role === 'ADMIN') && recipientUser?.role === 'STUDENT') {
     targetStudentId = recipientId;
+  }
+
+  if (targetStudentId) {
+    const activeStudent = await prisma.user.findFirst({
+      where: { id: targetStudentId, role: 'STUDENT', status: 'ACTIVE' },
+      select: { id: true }
+    });
+    if (!activeStudent) {
+      return res.status(400).json({ error: 'No se puede enviar mensajes relacionados con un alumno dado de baja.' });
+    }
   }
 
   const message = await prisma.chatMessage.create({

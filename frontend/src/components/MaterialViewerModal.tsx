@@ -19,6 +19,7 @@ export interface ViewerMaterial {
 interface MaterialViewerModalProps {
   material: ViewerMaterial | null;
   onClose: () => void;
+  audioMode?: 'drive-preview' | 'backend-proxy';
 }
 
 const getTypeIcon = (type: ViewerMaterial['type']) => {
@@ -37,7 +38,7 @@ const getImageDisplayUrl = (url?: string | null) => {
   return driveFileId ? `https://lh3.googleusercontent.com/d/${driveFileId}=w1600` : url;
 };
 
-const MaterialViewerModal: React.FC<MaterialViewerModalProps> = ({ material, onClose }) => {
+const MaterialViewerModal: React.FC<MaterialViewerModalProps> = ({ material, onClose, audioMode = 'drive-preview' }) => {
   if (!material) return null;
   const isForm = material.type === 'FORM' || material.type === 'EXAM';
 
@@ -45,11 +46,11 @@ const MaterialViewerModal: React.FC<MaterialViewerModalProps> = ({ material, onC
     <div className="glass-panel modal-card modal-card--wide" style={{ width: '100%', maxWidth: isForm ? '900px' : '850px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }} onClick={(event) => event.stopPropagation()}>
       <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>{getTypeIcon(material.type)}<div><h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text)' }}>{material.title}</h3><span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600 }}>{material.level || 'GENERAL'}{material.category ? ` • ${material.category}` : ''}</span></div></div><button type="button" onClick={onClose} aria-label="Cerrar visor" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={22} /></button></div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem' }}>
-        {material.type === 'AUDIO' && material.url && <><AudioPlayer src={material.url} title={material.title} />{material.description && <p style={{ color: 'var(--text-muted)' }}>{material.description}</p>}</>}
+        {material.type === 'AUDIO' && material.url && <><AudioPlayer src={material.url} title={material.title} audioMode={audioMode} />{material.description && <p style={{ color: 'var(--text-muted)' }}>{material.description}</p>}</>}
         {material.type === 'VIDEO' && material.url && <><VideoPlayer url={material.url} title={material.title} />{material.description && <p style={{ color: 'var(--text-muted)' }}>{material.description}</p>}</>}
         {material.type === 'DOCUMENT' && material.url && <DocumentViewer url={material.url} title={material.title} />}
         {material.type === 'IMAGE' && material.url && <img src={getImageDisplayUrl(material.url)} alt={material.title} referrerPolicy="no-referrer" style={{ maxWidth: '100%', maxHeight: 550, display: 'block', margin: 'auto', objectFit: 'contain' }} />}
-        {isForm && material.formData && <FormPlayer title={material.title} description={material.description || undefined} questions={material.formData.questions || []} readOnly initialAnswers={Object.fromEntries((material.formData.questions || []).map((question: { id: string; correctAnswer: string | number }) => [question.id, question.correctAnswer]))} />}
+        {isForm && material.formData && <FormPlayer title={material.title} description={material.description || undefined} questions={material.formData.questions || []} readOnly audioMode={audioMode} initialAnswers={Object.fromEntries((material.formData.questions || []).map((question: { id: string; correctAnswer: string | number }) => [question.id, question.correctAnswer]))} />}
         {!material.url && !material.formData && <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>Este recurso no tiene contenido disponible.</p>}
       </div>
     </div>

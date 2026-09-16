@@ -25,6 +25,7 @@ interface FormPlayerProps {
   readOnly?: boolean;
   allowRetry?: boolean;
   initialAnswers?: { [key: string]: any };
+  audioMode?: 'drive-preview' | 'backend-proxy';
 }
 
 const getBlankAnswers = (questionText: string) => Array.from(questionText.matchAll(/\(([^)]+)\)/g), (match) => match[1]);
@@ -39,7 +40,7 @@ const isTextCorrect = (answer: string, expected: string, caseSensitive = false) 
     : normalizedAnswer.toLowerCase() === normalizedExpected.toLowerCase();
 };
 
-const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions = [], onFinish, onClose, readOnly = false, allowRetry = true, initialAnswers = {} }) => {
+const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions = [], onFinish, onClose, readOnly = false, allowRetry = true, initialAnswers = {}, audioMode = 'drive-preview' }) => {
   const [answers, setAnswers] = useState<{ [key: string]: any }>(initialAnswers);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [score, setScore] = useState(0);
@@ -524,7 +525,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
               {/* Reproductor de Audio asociado a la pregunta (Listening) */}
               {q.audioUrl && (
                 <div style={{ marginBottom: '1.25rem' }}>
-                  <AudioPlayer src={q.audioUrl} title={`Pista de Audio - Pregunta ${idx + 1}`} />
+                  <AudioPlayer src={q.audioUrl} title={`Pista de Audio - Pregunta ${idx + 1}`} audioMode={audioMode} />
                 </div>
               )}
 

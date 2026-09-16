@@ -135,7 +135,7 @@ A continuación se detallan los 11 requerimientos acordados en la última reuni�
 
 ### 1.4 Gestión de Alumnos y Ficha de Usuario
 - [x] Alta y registro de estudiantes desde panel de administración con generación automática de credenciales (`hitXXXX`).
-- [x] Disparo automático de Webhook a **n8n** para envío de credenciales por email al crear alumno.
+- [x] Envío directo desde el backend por SMTP del email de cuenta activada al formalizar la primera matrícula del alumno.
 - [x] Matriculación de alumnos en una o varias clases mediante modal selector interactivo.
 - [x] Edición y actualización de datos de alumnos (nombre, apellidos, email, cuota mensual, duración).
 - [x] Eliminación segura de alumnos con borrado en cascada.
@@ -173,7 +173,8 @@ A continuación se detallan los 11 requerimientos acordados en la última reuni�
 - [x] Canal de comunicación privado Profesor ↔ Padres/Tutores (hilos independientes por hijo).
 - [x] Tablón de anuncios (*Stream*) por clase para publicaciones grupales.
 - [/] Notificaciones automáticas:
-  - [x] Webhook a n8n al crear nuevo alumno.
+  - [x] Email de cuenta activada enviado directamente por el backend mediante SMTP al formalizar la primera matrícula.
+  - [x] Email de cuenta reactivada enviado directamente por el backend mediante SMTP al volver a matricular a un alumno dado de baja.
   - [x] Webhook a n8n para enviar credenciales al Padre/Tutor asignado.
   - [ ] Aviso por email a alumnos/padres al publicar anuncios en el tablón de la clase.
   - [ ] Notificaciones push en la app.

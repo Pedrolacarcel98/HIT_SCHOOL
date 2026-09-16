@@ -401,7 +401,7 @@ const TeacherPayments: React.FC = () => {
                   transition: 'all 0.15s ease'
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', width: '100%' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(240px, 1fr) minmax(220px, 1fr) 120px', alignItems: 'center', gap: '1rem', width: '100%' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
                     <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.85rem', flexShrink: 0 }}>
                       {initials}
@@ -414,7 +414,7 @@ const TeacherPayments: React.FC = () => {
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'center', flex: 1 }}>
+                  <div style={{ display: 'flex', justifyContent: 'center', minWidth: 0 }}>
                     {hasEnrollment && (
                       <span style={{
                         display: 'inline-flex',
@@ -440,6 +440,7 @@ const TeacherPayments: React.FC = () => {
                   </div>
 
                   <span style={{
+                    justifySelf: 'end',
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '0.25rem',
@@ -476,7 +477,7 @@ const TeacherPayments: React.FC = () => {
       </div>
 
       {selectedStudent && createPortal(
-        <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: '260px', zIndex: 50, minHeight: '100vh', overflowY: 'auto', background: '#f8fafc', padding: '2rem' }}>
+        <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: '260px', zIndex: 50, minHeight: '100vh', overflowY: 'auto', background: '#fce7f3', padding: '2rem' }}>
           <div className="animate-fade-in" style={{ maxWidth: '1024px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <div>
               <button

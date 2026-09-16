@@ -5,6 +5,35 @@ import { authenticateToken, requireTeacher, AuthRequest } from '../middleware/au
 const router = Router();
 const prisma = new PrismaClient();
 
+router.get('/drive-audio/:fileId', async (req, res) => {
+  const fileId = Array.isArray(req.params.fileId) ? req.params.fileId[0] : req.params.fileId;
+  if (!/^[a-zA-Z0-9_-]+$/.test(fileId)) {
+    return res.status(400).json({ error: 'Identificador de audio no válido.' });
+  }
+
+  try {
+    const upstream = await fetch(`https://drive.usercontent.google.com/download?id=${fileId}&export=download&confirm=t`);
+    if (!upstream.ok) {
+      return res.status(502).json({ error: 'No se pudo cargar el audio.' });
+    }
+
+    const contentType = upstream.headers.get('content-type') || 'audio/mpeg';
+    if (contentType.includes('text/html')) {
+      return res.status(502).json({ error: 'Google Drive no entregó un archivo de audio reproducible.' });
+    }
+
+    res.setHeader('Content-Type', contentType);
+    const contentLength = upstream.headers.get('content-length');
+    if (contentLength) res.setHeader('Content-Length', contentLength);
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    const audioBuffer = Buffer.from(await upstream.arrayBuffer());
+    return res.send(audioBuffer);
+  } catch (error) {
+    console.error('Error al cargar audio de Google Drive:', error);
+    return res.status(502).json({ error: 'No se pudo cargar el audio.' });
+  }
+});
+
 const parsePublishAt = (value: unknown) => {
   if (!value) return { value: null as Date | null };
   const publishAt = new Date(String(value));

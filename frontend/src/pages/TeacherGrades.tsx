@@ -49,6 +49,16 @@ interface FinalEvaluationData {
   overallGrade?: number | null;
   middleExamGrade?: number | null;
   finalExamGrade?: number | null;
+  middleGrammar?: number | null;
+  middleReading?: number | null;
+  middleWriting?: number | null;
+  middleListening?: number | null;
+  middleSpeaking?: number | null;
+  finalGrammar?: number | null;
+  finalReading?: number | null;
+  finalWriting?: number | null;
+  finalListening?: number | null;
+  finalSpeaking?: number | null;
   tasksAverage?: number | null;
   observations?: string | null;
 }
@@ -389,6 +399,8 @@ const TeacherGrades: React.FC = () => {
   const [evaluationForm, setEvaluationForm] = useState({
     middleExamGrade: '',
     finalExamGrade: '',
+    middleGrammar: '', middleReading: '', middleWriting: '', middleListening: '', middleSpeaking: '',
+    finalGrammar: '', finalReading: '', finalWriting: '', finalListening: '', finalSpeaking: '',
     grammar: '',
     reading: '',
     writing: '',
@@ -397,11 +409,10 @@ const TeacherGrades: React.FC = () => {
     overallGrade: '',
     observations: ''
   });
+  const [expandedExamSections, setExpandedExamSections] = useState({ middle: false, final: false });
   const [isSavingEvaluation, setIsSavingEvaluation] = useState(false);
 
-  const displayedTermOverall = selectedStudentForDossier && selectedStudentForDossier.modality !== 'ONLINE' && termEvaluation
-    ? Number(((termEvaluation.middleExamGrade || 0) * 0.35 + (termEvaluation.finalExamGrade || 0) * 0.35 + (termEvaluation.tasksAverage || 0) * 0.3).toFixed(2))
-    : termEvaluation?.overallGrade;
+  const displayedTermOverall = termEvaluation?.overallGrade;
 
   useEffect(() => {
     if (selectedStudentForDossier) {
@@ -440,6 +451,8 @@ const TeacherGrades: React.FC = () => {
       setEvaluationForm({
         middleExamGrade: currentEvaluation.middleExamGrade !== null && currentEvaluation.middleExamGrade !== undefined ? String(currentEvaluation.middleExamGrade) : '',
         finalExamGrade: currentEvaluation.finalExamGrade !== null && currentEvaluation.finalExamGrade !== undefined ? String(currentEvaluation.finalExamGrade) : '',
+        middleGrammar: currentEvaluation.middleGrammar !== null && currentEvaluation.middleGrammar !== undefined ? String(currentEvaluation.middleGrammar) : '', middleReading: currentEvaluation.middleReading !== null && currentEvaluation.middleReading !== undefined ? String(currentEvaluation.middleReading) : '', middleWriting: currentEvaluation.middleWriting !== null && currentEvaluation.middleWriting !== undefined ? String(currentEvaluation.middleWriting) : '', middleListening: currentEvaluation.middleListening !== null && currentEvaluation.middleListening !== undefined ? String(currentEvaluation.middleListening) : '', middleSpeaking: currentEvaluation.middleSpeaking !== null && currentEvaluation.middleSpeaking !== undefined ? String(currentEvaluation.middleSpeaking) : '',
+        finalGrammar: currentEvaluation.finalGrammar !== null && currentEvaluation.finalGrammar !== undefined ? String(currentEvaluation.finalGrammar) : '', finalReading: currentEvaluation.finalReading !== null && currentEvaluation.finalReading !== undefined ? String(currentEvaluation.finalReading) : '', finalWriting: currentEvaluation.finalWriting !== null && currentEvaluation.finalWriting !== undefined ? String(currentEvaluation.finalWriting) : '', finalListening: currentEvaluation.finalListening !== null && currentEvaluation.finalListening !== undefined ? String(currentEvaluation.finalListening) : '', finalSpeaking: currentEvaluation.finalSpeaking !== null && currentEvaluation.finalSpeaking !== undefined ? String(currentEvaluation.finalSpeaking) : '',
         grammar: currentEvaluation.grammar !== null && currentEvaluation.grammar !== undefined ? String(currentEvaluation.grammar) : '',
         reading: currentEvaluation.reading !== null && currentEvaluation.reading !== undefined ? String(currentEvaluation.reading) : '',
         writing: currentEvaluation.writing !== null && currentEvaluation.writing !== undefined ? String(currentEvaluation.writing) : '',
@@ -452,6 +465,8 @@ const TeacherGrades: React.FC = () => {
       setEvaluationForm({
         middleExamGrade: '',
         finalExamGrade: '',
+        middleGrammar: '', middleReading: '', middleWriting: '', middleListening: '', middleSpeaking: '',
+        finalGrammar: '', finalReading: '', finalWriting: '', finalListening: '', finalSpeaking: '',
         grammar: '',
         reading: '',
         writing: '',
@@ -461,6 +476,7 @@ const TeacherGrades: React.FC = () => {
         observations: ''
       });
     }
+    setExpandedExamSections({ middle: false, final: false });
     setIsEvaluationModalOpen(true);
   };
 
@@ -2165,6 +2181,7 @@ const TeacherGrades: React.FC = () => {
           answers={reviewingExam.answers}
           score={reviewingExam.score}
           total={reviewingExam.total}
+          audioMode="backend-proxy"
           feedback={reviewingExam.feedback}
           onSaveFeedback={handleSaveExamFeedback}
           onClose={() => setReviewingExam(null)}
@@ -2177,7 +2194,7 @@ const TeacherGrades: React.FC = () => {
          ========================================================================= */}
       {isEvaluationModalOpen && activeDossierStudent && createPortal(
         <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
-          <div className="glass-panel modal-card" style={{ width: '100%', maxWidth: '520px', padding: '2rem', background: 'var(--surface)', position: 'relative' }}>
+          <div className="glass-panel modal-card" style={{ width: '100%', maxWidth: '760px', maxHeight: '90vh', overflowY: 'auto', padding: '2rem', background: 'var(--surface)', position: 'relative' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
               <div>
                 <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 700, textTransform: 'uppercase' }}>
@@ -2197,13 +2214,44 @@ const TeacherGrades: React.FC = () => {
 
             <form onSubmit={handleSaveEvaluation} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {activeDossierStudent.modality !== 'ONLINE' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  {([['middleExamGrade', 'MIDDLE TERM (35%)'], ['finalExamGrade', 'FINAL TERM (35%)']] as const).map(([field, label]) => (
-                    <label key={field} style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)' }}>
-                      {label}
-                      <input type="number" step="0.1" min="0" max="10" value={evaluationForm[field]} onChange={e => setEvaluationForm({ ...evaluationForm, [field]: e.target.value })} placeholder="0 - 10" style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', outline: 'none' }} />
-                    </label>
-                  ))}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                  {([
+                    ['middle', 'MIDDLE TERM (35%)'],
+                    ['final', 'FINAL TERM (35%)']
+                  ] as const).map(([exam, label]) => {
+                    const skillFields = [
+                      [`${exam}Grammar`, 'Grammar and Vocabulary'],
+                      [`${exam}Reading`, 'Reading'],
+                      [`${exam}Speaking`, 'Speaking'],
+                      [`${exam}Listening`, 'Listening'],
+                      [`${exam}Writing`, 'Writing']
+                    ] as const;
+                    const enteredGrades = skillFields
+                      .map(([field]) => evaluationForm[field].trim())
+                      .filter((value) => value !== '')
+                      .map(Number)
+                      .filter((grade) => Number.isFinite(grade) && grade >= 0 && grade <= 10);
+                    const average = enteredGrades.length > 0 ? (enteredGrades.reduce((sum, grade) => sum + grade, 0) / enteredGrades.length).toFixed(1) : null;
+
+                    return (
+                      <div key={exam} style={{ border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)', overflow: 'hidden' }}>
+                        <button type="button" onClick={() => setExpandedExamSections((current) => ({ ...current, [exam]: !current[exam] }))} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', padding: '0.85rem 1rem', border: 'none', background: 'transparent', color: 'var(--text-main)', cursor: 'pointer', textAlign: 'left' }}>
+                          <span style={{ fontSize: '0.88rem', fontWeight: 700 }}>{label}</span>
+                          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--primary-text)' }}>{average ? `Media: ${average} / 10` : 'Añadir destrezas'}</span>
+                        </button>
+                        {expandedExamSections[exam] && (
+                          <div style={{ padding: '0 1rem 1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '0.75rem' }}>
+                            {skillFields.map(([field, skill]) => (
+                              <label key={field} style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                                {skill}
+                                <input type="number" step="0.1" min="0" max="10" value={evaluationForm[field]} onChange={e => setEvaluationForm({ ...evaluationForm, [field]: e.target.value })} placeholder="Sin calificar" style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', outline: 'none' }} />
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
               {activeDossierStudent.modality === 'ONLINE' && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>

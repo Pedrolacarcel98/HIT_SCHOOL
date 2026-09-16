@@ -21,7 +21,7 @@
    - Creación y edición de materiales multimedia (Audio Listening, Vídeos YouTube/Vimeo/MP4, Documentos PDF Drive/Web, Infografías).
    - Form Builder de cuestionarios interactivos con autocorrección (Test múltiple, V/F, respuesta corta y Fill-in-the-blanks con imágenes y audios).
    - Centro maestro de calificaciones con conmutador Presencial vs Online, feedback pedagógico y evaluación final por competencias (CEFR: Grammar, Reading, Writing, Listening, Speaking).
-   - Gestión de alumnos con ficha extendida (DNI, teléfono, fecha de nacimiento/edad, dirección, vinculación a tutores) y alta automática de credenciales con webhook a n8n.
+   - Gestión de alumnos con ficha extendida (DNI, teléfono, fecha de nacimiento/edad, dirección, vinculación a tutores) y envío de credenciales por SMTP desde el backend al formalizar la primera matrícula.
    - Matriz visual de control de mensualidades y generación de recibos/facturas en PDF.
    - Chat privado directo con alumnos y padres (hilos contextuales por hijo).
 2. **Alumno (`STUDENT`):**

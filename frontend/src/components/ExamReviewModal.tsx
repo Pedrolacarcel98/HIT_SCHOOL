@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CheckCircle2, X, XCircle } from 'lucide-react';
+import AudioPlayer from './AudioPlayer';
 
 export interface ReviewQuestion {
   id: string;
@@ -9,6 +10,7 @@ export interface ReviewQuestion {
   type: 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'SHORT_ANSWER' | 'FILL_IN_THE_BLANKS';
   options?: string[];
   correctAnswer: string | number;
+  audioUrl?: string;
   imageUrl?: string;
   caseSensitive?: boolean;
   points?: number;
@@ -23,6 +25,7 @@ interface ExamReviewModalProps {
   feedback?: string | null;
   onSaveFeedback?: (feedback: string) => Promise<void>;
   onClose: () => void;
+  audioMode?: 'drive-preview' | 'backend-proxy';
 }
 
 const getBlankAnswers = (questionText: string) => Array.from(questionText.matchAll(/\(([^)]+)\)/g), (match) => match[1]);
@@ -45,7 +48,7 @@ const isCorrect = (question: ReviewQuestion, answer: string | number | string[] 
     : answer !== undefined && Number(answer) === Number(question.correctAnswer);
 };
 
-const ExamReviewModal: React.FC<ExamReviewModalProps> = ({ title, questions = [], answers = {}, score, total: passedTotal, feedback, onSaveFeedback, onClose }) => {
+const ExamReviewModal: React.FC<ExamReviewModalProps> = ({ title, questions = [], answers = {}, score, total: passedTotal, feedback, onSaveFeedback, onClose, audioMode = 'drive-preview' }) => {
   const [feedbackInput, setFeedbackInput] = useState(feedback || '');
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -139,6 +142,11 @@ const ExamReviewModal: React.FC<ExamReviewModalProps> = ({ title, questions = []
                   <p style={{ margin: '0 0 0.6rem', color: 'var(--text-main)', fontWeight: 600, fontSize: '0.92rem' }}>{question.questionText}</p>
                   {question.type === 'FILL_IN_THE_BLANKS' && <p style={{ margin: '0 0 0.6rem', color: 'var(--text-main)', fontSize: '0.88rem' }}>{getBlankText(question).replace(/\([^)]+\)/g, '_____')}</p>}
                   {question.imageUrl && <img src={question.imageUrl} alt={`Imagen de apoyo de la pregunta ${index + 1}`} style={{ display: 'block', maxWidth: '100%', maxHeight: '240px', margin: '0 0 0.6rem', objectFit: 'contain', borderRadius: '6px', border: '1px solid var(--border)' }} />}
+                  {question.audioUrl && (
+                    <div style={{ marginBottom: '1.25rem' }}>
+                      <AudioPlayer src={question.audioUrl} title={`Pista de Audio - Pregunta ${index + 1}`} audioMode={audioMode} />
+                    </div>
+                  )}
                   <p style={{ margin: 0, color: correct ? '#24583e' : '#9e2a2b', fontSize: '0.88rem' }}>Respuesta del alumno: <strong>{answerText}</strong></p>
                   {!correct && <p style={{ margin: '0.3rem 0 0', color: '#24583e', fontSize: '0.88rem' }}>Respuesta correcta esperada: <strong>{correctText}</strong></p>}
                 </article>

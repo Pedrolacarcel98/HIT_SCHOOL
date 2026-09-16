@@ -62,6 +62,7 @@ interface TaskDeliveryReviewModalProps {
   }) => void;
   readOnly?: boolean;
   inline?: boolean;
+  audioMode?: 'drive-preview' | 'backend-proxy';
 }
 
 const parseSubmissionContent = (content?: string | null) => {
@@ -111,7 +112,8 @@ const TaskDeliveryReviewModal: React.FC<TaskDeliveryReviewModalProps> = ({
   onSaveGrade,
   onReviewExam,
   readOnly = false,
-  inline = false
+  inline = false,
+  audioMode = 'drive-preview'
 }) => {
   // Estado para visualización interna del examen en caso de no pasar onReviewExam
   const [internalExamReview, setInternalExamReview] = useState<{
@@ -823,6 +825,7 @@ const TaskDeliveryReviewModal: React.FC<TaskDeliveryReviewModalProps> = ({
           answers={internalExamReview.answers}
           score={internalExamReview.score}
           total={internalExamReview.total}
+          audioMode={audioMode}
           onClose={() => setInternalExamReview(null)}
         />
       )}

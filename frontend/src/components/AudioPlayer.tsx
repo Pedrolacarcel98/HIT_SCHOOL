@@ -5,9 +5,10 @@ interface AudioPlayerProps {
   src: string;
   title?: string;
   autoPlay?: boolean;
+  audioMode?: 'drive-preview' | 'backend-proxy';
 }
 
-const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, title, autoPlay = false }) => {
+const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, title, autoPlay = false, audioMode = 'drive-preview' }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -15,11 +16,17 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, title, autoPlay = false 
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
 
-  const getGoogleDriveFileId = (rawUrl: string) => rawUrl.match(/drive\.google\.com\/file\/d\/([^/?]+)/)?.[1]
-      || rawUrl.match(/[?&]id=([^&/?]+)/)?.[1];
+  const getGoogleDriveFileId = (rawUrl: string) => {
+    const decodedUrl = decodeURIComponent(rawUrl);
+    return decodedUrl.match(/(?:drive|docs)\.google\.com\/[^\s]*\/d\/([^/?]+)/)?.[1]
+      || decodedUrl.match(/[?&]id=([^&/?]+)/)?.[1]
+      || decodedUrl.match(/googleusercontent\.com\/d\/([^=/?]+)/)?.[1];
+  };
 
   const googleDriveFileId = getGoogleDriveFileId(src);
-  const audioSource = googleDriveFileId ? '' : src;
+  const audioSource = googleDriveFileId && audioMode === 'backend-proxy'
+    ? `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/materials/drive-audio/${googleDriveFileId}`
+    : googleDriveFileId ? '' : src;
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -102,7 +109,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, title, autoPlay = false 
       gap: '0.75rem',
       boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
     }}>
-      {googleDriveFileId ? (
+      {googleDriveFileId && audioMode === 'drive-preview' ? (
         <>
           {title && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -113,10 +120,13 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, title, autoPlay = false 
             </div>
           )}
           <iframe
+            key={googleDriveFileId}
             src={`https://drive.google.com/file/d/${googleDriveFileId}/preview`}
             title={title || 'Reproductor de audio'}
-            allow="autoplay"
-            style={{ width: '100%', height: '84px', border: 'none', borderRadius: '6px', background: 'var(--background)' }}
+            allow="autoplay; fullscreen; encrypted-media"
+            allowFullScreen
+            loading="eager"
+            style={{ display: 'block', width: '100%', height: '180px', border: 'none', borderRadius: '6px', background: 'var(--background)' }}
           />
         </>
       ) : (

@@ -1005,6 +1005,7 @@ const GradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                                 task={taskForReview}
                                 studentName={st.fullName}
                                 inline
+                                audioMode="backend-proxy"
                                 onClose={() => {
                                   setReviewingTask(null);
                                   setActiveReviewStudent(null);
@@ -1248,6 +1249,7 @@ const GradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
           answers={reviewingExam.answers}
           score={reviewingExam.score}
           total={reviewingExam.total}
+          audioMode="backend-proxy"
           onClose={() => setReviewingExam(null)}
         />
       )}

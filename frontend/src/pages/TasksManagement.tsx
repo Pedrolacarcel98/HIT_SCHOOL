@@ -1374,6 +1374,7 @@ const TasksManagement: React.FC = () => {
       {viewingMaterial && (
         <MaterialViewerModal
           material={viewingMaterial}
+          audioMode="backend-proxy"
           onClose={() => setViewingMaterial(null)}
         />
       )}

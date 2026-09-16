@@ -215,18 +215,20 @@ export const generateStatementPDF = (data: StatementData) => {
   doc.setFillColor(240, 246, 243);
   doc.rect(0, 0, 210, 42, 'F');
 
-  // Marca "HIT SCHOOL" en verde corporativo negrita a la izquierda con datos de la academia
+  // Marca y subtítulo de la academia
   doc.setTextColor(greenCorporate[0], greenCorporate[1], greenCorporate[2]);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(22);
-  doc.text(ACADEMY_NAME, 15, 16);
+  doc.text('Hit School', 15, 16);
+  doc.setFontSize(11);
+  doc.text('Academia de idiomas', 15, 21);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(mutedText[0], mutedText[1], mutedText[2]);
-  doc.text(`Titular: ${ACADEMY_OWNER}`, 15, 23);
-  doc.text(`DNI: ${ACADEMY_DNI}`, 15, 29);
-  doc.text(ACADEMY_ADDRESS, 15, 35);
+  doc.text(`Titular: ${ACADEMY_OWNER}`, 15, 27);
+  doc.text(`DNI: ${ACADEMY_DNI}`, 15, 32);
+  doc.text(ACADEMY_ADDRESS, 15, 37);
 
   // A la derecha: "EXTRACTO DE PAGOS", Ejercicio y Fecha de emisión
   doc.setTextColor(greenCorporate[0], greenCorporate[1], greenCorporate[2]);

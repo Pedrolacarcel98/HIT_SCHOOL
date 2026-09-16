@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken, requireTeacher } from '../middleware/auth';
 import { ensureStudentPaymentScheduleById } from '../services/payments';
-import { sendAccountReactivationEmail } from '../services/email';
+import { sendAccountReactivationEmail, sendStudentWelcomeEmail } from '../services/email';
 import bcrypt from 'bcrypt';
 import { deactivateParentIfNoActiveChildren } from '../services/parentStatus';
 
@@ -20,7 +20,10 @@ router.post('/enroll', authenticateToken, requireTeacher, async (req, res) => {
   if (normalizedBillingPeriod !== 'MONTHLY' && normalizedBillingPeriod !== 'QUARTERLY') return res.status(400).json({ error: 'La periodicidad de pago no es válida.' });
 
   try {
-    const student = await prisma.user.findUnique({ where: { id: studentId, role: 'STUDENT' } });
+    const student = await prisma.user.findUnique({
+      where: { id: studentId, role: 'STUDENT' },
+      include: { academyEnrollments: { select: { id: true } } }
+    });
     if (!student) {
       return res.status(404).json({ error: 'Alumno no encontrado.' });
     }
@@ -29,6 +32,7 @@ router.post('/enroll', authenticateToken, requireTeacher, async (req, res) => {
       return res.status(400).json({ error: 'El alumno ya está dado de alta.' });
     }
 
+    const isReactivation = student.academyEnrollments.length > 0;
     const temporaryPassword = `hit${Math.floor(1000 + Math.random() * 9000)}`;
     const enrollment = await prisma.academyEnrollment.create({
       data: {
@@ -57,14 +61,27 @@ router.post('/enroll', authenticateToken, requireTeacher, async (req, res) => {
     await ensureStudentPaymentScheduleById(prisma, studentId);
 
     try {
-      await sendAccountReactivationEmail(
-        updatedUser.email,
-        updatedUser.profile?.firstName || 'alumno',
-        temporaryPassword,
-        'alumno'
-      );
+      if (isReactivation) {
+        await sendAccountReactivationEmail(
+          updatedUser.email,
+          updatedUser.profile?.firstName || 'alumno',
+          temporaryPassword,
+          'alumno'
+        );
+      } else {
+        await sendStudentWelcomeEmail(
+          updatedUser.email,
+          updatedUser.profile?.firstName || 'alumno',
+          temporaryPassword
+        );
+      }
     } catch (mailError) {
-      console.error('El alumno fue reactivado, pero no se pudo enviar el correo SMTP:', mailError);
+      console.error(
+        isReactivation
+          ? 'El alumno fue reactivado, pero no se pudo enviar el correo SMTP:'
+          : 'El alumno fue dado de alta, pero no se pudo enviar el correo SMTP:',
+        mailError
+      );
     }
 
     return res.json({ message: 'Alumno dado de alta exitosamente', enrollment, user: updatedUser });

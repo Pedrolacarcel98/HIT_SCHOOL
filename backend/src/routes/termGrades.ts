@@ -24,9 +24,9 @@ export const calculateTermOverallGrade = (
     };
   }
 
-  // Presencial: 35% Mid Term + 35% Final Term + 30% tareas prácticas.
-  if (cleanMiddle !== null || cleanFinal !== null || cleanTasksAvg !== null) {
-    const overall = (cleanMiddle ?? 0) * 0.35 + (cleanFinal ?? 0) * 0.35 + (cleanTasksAvg ?? 0) * 0.30;
+  // Presencial: la nota global solo está disponible tras registrar ambos exámenes.
+  if (cleanMiddle !== null && cleanFinal !== null) {
+    const overall = cleanMiddle * 0.35 + cleanFinal * 0.35 + (cleanTasksAvg ?? 0) * 0.30;
     return {
       tasksAverage: cleanTasksAvg,
       overallGrade: Number(overall.toFixed(2))
@@ -38,6 +38,17 @@ export const calculateTermOverallGrade = (
     overallGrade: null
   };
 };
+
+const examSkillKeys = ['Grammar', 'Reading', 'Writing', 'Listening', 'Speaking'] as const;
+type ExamSkillKey = typeof examSkillKeys[number];
+
+const getGradeValue = (value: unknown) => {
+  if (value === undefined || value === null || value === '') return null;
+  const grade = Number(value);
+  return Number.isFinite(grade) && grade >= 0 && grade <= 10 ? grade : null;
+};
+
+const getExamAverage = (grades: Array<number | null>) => averageScores(grades.filter((grade): grade is number => grade !== null));
 
 const skillKeys = ['grammar', 'reading', 'writing', 'listening', 'speaking'] as const;
 type SkillKey = typeof skillKeys[number];
@@ -286,6 +297,8 @@ router.put('/course/:courseId', authenticateToken, requireTeacher, async (req: A
       academicYear = '2025-2026',
       middleExamGrade,
       finalExamGrade,
+      middleGrammar, middleReading, middleWriting, middleListening, middleSpeaking,
+      finalGrammar, finalReading, finalWriting, finalListening, finalSpeaking,
       observations,
       grammar,
       reading,
@@ -307,6 +320,25 @@ router.put('/course/:courseId', authenticateToken, requireTeacher, async (req: A
     if (!student) {
       return res.status(404).json({ error: 'Estudiante no encontrado.' });
     }
+
+    const existingTermGrade = await prisma.termGrade.findUnique({
+      where: { studentId_courseId_term_academicYear: { studentId, courseId, term: Number(term), academicYear } }
+    });
+
+    const resolveExamSkill = (prefix: 'middle' | 'final', skill: ExamSkillKey) => {
+      const field = `${prefix}${skill}` as const;
+      const value = req.body[field];
+      return value === undefined ? existingTermGrade?.[field] ?? null : getGradeValue(value);
+    };
+
+    const middleSkills = examSkillKeys.map((skill) => resolveExamSkill('middle', skill));
+    const finalSkills = examSkillKeys.map((skill) => resolveExamSkill('final', skill));
+    const resolvedMiddleExamGrade = student.modality === 'ONLINE'
+      ? getGradeValue(middleExamGrade)
+      : (middleSkills.some((grade) => grade !== null) ? getExamAverage(middleSkills) : existingTermGrade?.middleExamGrade ?? null);
+    const resolvedFinalExamGrade = student.modality === 'ONLINE'
+      ? getGradeValue(finalExamGrade)
+      : (finalSkills.some((grade) => grade !== null) ? getExamAverage(finalSkills) : existingTermGrade?.finalExamGrade ?? null);
 
     // Calcular tareas y promedio continuo en este trimestre
     const tasks = await prisma.structuredTask.findMany({
@@ -348,8 +380,8 @@ router.put('/course/:courseId', authenticateToken, requireTeacher, async (req: A
 
     const { overallGrade } = calculateTermOverallGrade(
       student.modality,
-      middleExamGrade,
-      finalExamGrade,
+      resolvedMiddleExamGrade,
+      resolvedFinalExamGrade,
       tasksAverage
     );
 
@@ -367,8 +399,10 @@ router.put('/course/:courseId', authenticateToken, requireTeacher, async (req: A
         courseId,
         term: Number(term),
         academicYear,
-        middleExamGrade: middleExamGrade !== undefined && middleExamGrade !== null ? Number(middleExamGrade) : null,
-        finalExamGrade: finalExamGrade !== undefined && finalExamGrade !== null ? Number(finalExamGrade) : null,
+        middleExamGrade: resolvedMiddleExamGrade,
+        finalExamGrade: resolvedFinalExamGrade,
+        middleGrammar: middleSkills[0], middleReading: middleSkills[1], middleWriting: middleSkills[2], middleListening: middleSkills[3], middleSpeaking: middleSkills[4],
+        finalGrammar: finalSkills[0], finalReading: finalSkills[1], finalWriting: finalSkills[2], finalListening: finalSkills[3], finalSpeaking: finalSkills[4],
         tasksAverage,
         overallGrade,
         grammar: grammar !== undefined && grammar !== null ? Number(grammar) : null,
@@ -379,8 +413,10 @@ router.put('/course/:courseId', authenticateToken, requireTeacher, async (req: A
         observations: typeof observations === 'string' ? observations.trim() : null
       },
       update: {
-        middleExamGrade: middleExamGrade !== undefined ? (middleExamGrade !== null ? Number(middleExamGrade) : null) : undefined,
-        finalExamGrade: finalExamGrade !== undefined ? (finalExamGrade !== null ? Number(finalExamGrade) : null) : undefined,
+        middleExamGrade: resolvedMiddleExamGrade,
+        finalExamGrade: resolvedFinalExamGrade,
+        middleGrammar: middleSkills[0], middleReading: middleSkills[1], middleWriting: middleSkills[2], middleListening: middleSkills[3], middleSpeaking: middleSkills[4],
+        finalGrammar: finalSkills[0], finalReading: finalSkills[1], finalWriting: finalSkills[2], finalListening: finalSkills[3], finalSpeaking: finalSkills[4],
         tasksAverage,
         overallGrade,
         grammar: grammar !== undefined ? (grammar !== null ? Number(grammar) : null) : undefined,

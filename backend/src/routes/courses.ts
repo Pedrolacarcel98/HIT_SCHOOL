@@ -559,6 +559,14 @@ router.post('/:id/enroll', authenticateToken, requireTeacher, verifyCourseAccess
       return res.status(400).json({ error: 'Todos los alumnos seleccionados ya están en la clase.' });
     }
 
+    const activeStudents = await prisma.user.findMany({
+      where: { id: { in: newStudentIds }, role: 'STUDENT', status: 'ACTIVE' },
+      select: { id: true }
+    });
+    if (activeStudents.length !== newStudentIds.length) {
+      return res.status(400).json({ error: 'No se puede invitar a alumnos dados de baja.' });
+    }
+
     const dataToInsert = newStudentIds.map(studentId => ({
       courseId,
       studentId

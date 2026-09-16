@@ -264,29 +264,6 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
       }
     }
 
-    // El alumno nuevo continúa usando la automatización existente de n8n.
-    try {
-      await fetch('http://n8n:5678/webhook-test/nuevo-alumno', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: newStudent.email,
-          firstName: newStudent.profile?.firstName,
-          lastName: newStudent.profile?.lastName,
-          dni: newStudent.profile?.dni,
-          phone: newStudent.profile?.phone,
-          generatedPassword: autoPassword,
-          parent: createdParentInfo ? null : (newStudent.parent ? {
-            email: newStudent.parent.email,
-            name: `${newStudent.parent.profile?.firstName} ${newStudent.parent.profile?.lastName}`
-          } : null)
-        })
-      });
-      console.log('Webhook de n8n disparado con éxito');
-    } catch (n8nError) {
-      console.error('No se pudo contactar con n8n, pero el alumno fue creado:', n8nError);
-    }
-
     res.status(201).json({
       message: 'Alumno creado con éxito',
       student: {

@@ -101,6 +101,12 @@ const IMAGE_AUTHORIZATION_OPTIONS = [
   'Sí, Para envío personal, familias del grupo de clase y redes sociales'
 ] as const;
 
+const normalizeSearchValue = (value: string) => value
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .trim();
+
 type ImageAuthorizationOption = typeof IMAGE_AUTHORIZATION_OPTIONS[number];
 
 const getImageAuthorizationValue = (profile?: Student['profile']): ImageAuthorizationOption => {
@@ -578,11 +584,17 @@ const StudentsManagement: React.FC = () => {
   });
 
   const filteredParents = parents.filter((parent) => {
-    const currentParentId = editingStudent ? editParentId : selectedParentId;
-    if (parent.status === 'INACTIVE' && parent.id !== currentParentId) return false;
-    const name = `${parent.profile?.firstName || ''} ${parent.profile?.lastName || ''}`.toLowerCase();
-    const query = parentSearchTerm.trim().toLowerCase();
-    return !query || name.includes(query) || parent.email.toLowerCase().includes(query) || (parent.profile?.dni || '').toLowerCase().includes(query);
+    if (parent.status !== 'ACTIVE') return false;
+    const searchableValues = [
+      parent.profile?.firstName,
+      parent.profile?.lastName,
+      parent.email,
+      parent.profile?.dni,
+      parent.profile?.phone
+    ].filter(Boolean).map((value) => normalizeSearchValue(value || ''));
+    const searchableText = searchableValues.join(' ');
+    const query = normalizeSearchValue(parentSearchTerm);
+    return !query || searchableText.includes(query);
   });
 
   const handleExportExcel = () => {
@@ -1374,7 +1386,9 @@ const StudentsManagement: React.FC = () => {
                           style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}
                         >
                           <option value="">-- Seleccionar Padre/Tutor --</option>
-                          {filteredParents.map(p => (
+                          {filteredParents.length === 0 ? (
+                            <option value="" disabled>No hay tutores activos que coincidan</option>
+                          ) : filteredParents.map(p => (
                             <option key={p.id} value={p.id}>
                               {p.profile?.firstName} {p.profile?.lastName} ({p.email}) - {p.children?.length || 0} hijos
                             </option>
@@ -1566,7 +1580,9 @@ const StudentsManagement: React.FC = () => {
                   style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
                 >
                   <option value="">-- Sin tutor asignado (Alumno Independiente) --</option>
-                  {filteredParents.map(p => (
+                  {filteredParents.length === 0 ? (
+                    <option value="" disabled>No hay tutores activos que coincidan</option>
+                  ) : filteredParents.map(p => (
                     <option key={p.id} value={p.id}>
                       👨‍👧 {p.profile?.firstName} {p.profile?.lastName} ({p.email})
                     </option>
