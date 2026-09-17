@@ -45,6 +45,19 @@ interface FamilyPaymentLine {
   paidAt?: string | Date | null;
 }
 
+interface CurrentUser {
+  profile?: {
+    firstName?: string | null;
+  } | null;
+}
+
+const getTimeGreeting = (name: string) => {
+  const hour = new Date().getHours();
+  if (hour < 13) return { text: `¡Buenos días, ${name}!`, icon: '☕' };
+  if (hour < 20) return { text: `¡Buenas tardes, ${name}!`, icon: '🌤️' };
+  return { text: `¡Buenas noches, ${name}!`, icon: '🌙' };
+};
+
 const getInitials = (name: string) => {
   if (!name) return 'HS';
   return name
@@ -73,6 +86,7 @@ const DashboardStudent: React.FC = () => {
   const [dashboardData, setDashboardData] = useState<DashboardStudentData[]>([]);
   const [familyPayments, setFamilyPayments] = useState<FamilyPaymentLine[]>([]);
   const [familyMonthKey, setFamilyMonthKey] = useState('');
+  const [accountName, setAccountName] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -90,15 +104,21 @@ const DashboardStudent: React.FC = () => {
       try {
         const token = localStorage.getItem('token');
         const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-        const res = await fetch(`${apiUrl}/api/dashboard/me`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const headers = { Authorization: `Bearer ${token}` };
+        const [res, profileRes] = await Promise.all([
+          fetch(`${apiUrl}/api/dashboard/me`, { headers }),
+          fetch(`${apiUrl}/api/auth/me`, { headers })
+        ]);
         
         if (!res.ok) {
           throw new Error('Error al obtener el dashboard');
         }
         const json = await res.json();
         setDashboardData(json.data);
+        if (profileRes.ok) {
+          const currentUser = await profileRes.json() as CurrentUser;
+          setAccountName(currentUser.profile?.firstName?.trim() || '');
+        }
       } catch (err) {
         setError('No se pudo cargar el dashboard.');
       } finally {
@@ -218,6 +238,7 @@ const DashboardStudent: React.FC = () => {
   // Si es estudiante, tomamos su nombre del primer registro
   const singleStudent = dashboardData[0]?.student;
   const totalPendingAssignments = dashboardData.reduce((acc, curr) => acc + curr.assignments.pendingCount, 0);
+  const greeting = getTimeGreeting(accountName);
 
   return (
     <div className="page-container animate-fade-in">
@@ -225,13 +246,9 @@ const DashboardStudent: React.FC = () => {
       <section className="dashboard-hero">
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.35rem' }}>
-            <span style={{ fontSize: '1.25rem' }}>
-              {userRole === 'PARENT' ? '👨‍👩‍👧‍👦' : '🚀'}
-            </span>
+            <span style={{ fontSize: '1.25rem' }}>{greeting.icon}</span>
             <h1 style={{ margin: 0, fontSize: '1.55rem', color: 'var(--text-main)' }}>
-              {userRole === 'PARENT' 
-                ? 'Panel Familiar HitSchool' 
-                : `¡Hola, ${singleStudent?.name || 'Estudiante'}! 👋`}
+              {greeting.text}
             </h1>
           </div>
           <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.92rem' }}>

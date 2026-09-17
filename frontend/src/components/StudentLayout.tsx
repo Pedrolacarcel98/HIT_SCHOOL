@@ -9,6 +9,7 @@ const StudentLayout: React.FC = () => {
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
   const { parentName, childrenList, selectedStudentId, setSelectedStudentId, refreshParentData } = useParent();
 
   const userRole = localStorage.getItem('userRole');
@@ -26,6 +27,29 @@ const StudentLayout: React.FC = () => {
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const fetchUnreadChatCount = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+        const res = await fetch(`${apiUrl}/api/chat/unread-count`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setUnreadChatCount(Number(data.unreadCount) || 0);
+        }
+      } catch {
+        setUnreadChatCount(0);
+      }
+    };
+
+    fetchUnreadChatCount();
+    const interval = setInterval(fetchUnreadChatCount, 3500);
+    return () => clearInterval(interval);
   }, [location.pathname]);
 
   const handleLogout = () => {
@@ -194,8 +218,11 @@ const StudentLayout: React.FC = () => {
                     }
                   }}
                 >
-                  <span style={{ display: 'inline-flex', color: isActive ? '#ffffff' : item.iconColor }}>
+                  <span style={{ display: 'inline-flex', color: isActive ? '#ffffff' : item.iconColor, position: 'relative' }}>
                     {React.cloneElement(item.icon, { strokeWidth: 2.5 })}
+                    {item.path === '/student/chat' && unreadChatCount > 0 && (
+                      <span style={{ position: 'absolute', top: -3, right: -3, width: 9, height: 9, borderRadius: '50%', background: '#ef4444', border: `2px solid ${isActive ? 'var(--primary)' : '#ffffff'}` }} />
+                    )}
                   </span>
                   {item.label}
                 </button>

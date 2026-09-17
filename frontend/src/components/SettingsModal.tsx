@@ -9,6 +9,8 @@ const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [activeTab, setActiveTab] = useState<'PROFILE' | 'SECURITY'>('PROFILE');
+  const [accountEmail, setAccountEmail] = useState(localStorage.getItem('userEmail') || 'Usuario');
+  const [accountRole, setAccountRole] = useState(localStorage.getItem('userRole') || 'STUDENT');
   
   // Security
   const [currentPassword, setCurrentPassword] = useState('');
@@ -30,10 +32,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const userEmail = localStorage.getItem('userEmail') || 'Usuario';
-  const userRole = localStorage.getItem('userRole') || 'STUDENT';
+  const roleLabel = accountRole === 'ADMIN' ? 'Administrador' : accountRole === 'TEACHER' ? 'Profesor' : accountRole === 'PARENT' ? 'Padre / Tutor' : 'Estudiante';
+  const showAdministrativeData = accountRole === 'STUDENT';
 
-  const roleLabel = userRole === 'TEACHER' ? 'Profesor / Administrador' : userRole === 'PARENT' ? 'Padre / Tutor' : 'Estudiante';
+  const clearSession = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('userId');
+    localStorage.removeItem('userRole');
+    localStorage.removeItem('userEmail');
+    localStorage.removeItem('hasParent');
+    localStorage.removeItem('selectedStudentId');
+  };
 
   useEffect(() => {
     fetchProfile();
@@ -45,6 +54,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
       const res = await fetch(`${apiUrl}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) {
         const data = await res.json();
+        setAccountEmail(data.email || 'Usuario');
+        setAccountRole(data.role || 'STUDENT');
+        localStorage.setItem('userEmail', data.email || '');
+        localStorage.setItem('userRole', data.role || 'STUDENT');
         setFirstName(data.profile?.firstName || '');
         setLastName(data.profile?.lastName || '');
         setDni(data.profile?.dni || '');
@@ -52,6 +65,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         setModality(data.modality || 'PRESENCIAL');
         setFee(data.monthlyFee ? `${data.monthlyFee} € / mes` : 'No asignada');
         setTutorName(data.parent ? `${data.parent.profile?.firstName || ''} ${data.parent.profile?.lastName || ''}`.trim() : 'Ninguno');
+      } else if (res.status === 401 || res.status === 403 || res.status === 404) {
+        clearSession();
+        setError('Tu sesión ya no es válida. Cierra este modal e inicia sesión de nuevo.');
       }
     } catch (e) {
       console.error(e);
@@ -100,6 +116,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
+      onClose();
     } catch (err) {
       console.error(err);
       setError('Error de conexión con el servidor.');
@@ -118,6 +135,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
       return;
     }
 
+    if (!accountEmail.trim()) {
+      setError('El email es obligatorio.');
+      return;
+    }
+
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
@@ -127,16 +149,26 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ firstName, lastName, dni, phone })
+        body: JSON.stringify({ firstName, lastName, email: accountEmail, dni, phone })
       });
 
       const data = await res.json();
       if (!res.ok) {
+        if (res.status === 401 || res.status === 403 || res.status === 404) {
+          clearSession();
+          setError(data.error || 'Tu sesión ya no es válida. Vuelve a iniciar sesión.');
+          return;
+        }
         setError(data.error || 'Error al actualizar el perfil.');
         return;
       }
 
+      if (data.email) {
+        setAccountEmail(data.email);
+        localStorage.setItem('userEmail', data.email);
+      }
       setSuccess('Perfil actualizado con éxito.');
+      onClose();
     } catch (err) {
       console.error(err);
       setError('Error de conexión con el servidor.');
@@ -213,7 +245,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.92rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {userEmail}
+              {accountEmail}
             </div>
             <div style={{ fontSize: '0.78rem', color: 'var(--primary)', fontWeight: 600 }}>
               {roleLabel}
@@ -321,6 +353,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
               </div>
             </div>
 
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                Email
+              </label>
+              <input
+                type="email"
+                required
+                value={accountEmail}
+                onChange={e => setAccountEmail(e.target.value)}
+                style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
+              />
+            </div>
+
             <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
               <div style={{ flex: '1 1 200px' }}>
                 <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>
@@ -346,27 +391,28 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
               </div>
             </div>
 
-            {/* Read-only fields */}
-            <div style={{ marginTop: '0.5rem', padding: '1rem', background: 'var(--surface-alt)', borderRadius: '8px', border: '1px solid var(--border)' }}>
-              <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text-main)', fontSize: '0.9rem' }}>Datos Administrativos (Solo lectura)</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
-                <div>
-                  <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Modalidad</span>
-                  <strong style={{ fontSize: '0.9rem', color: 'var(--text-main)' }}>{modality}</strong>
+            {showAdministrativeData && (
+              <div style={{ marginTop: '0.5rem', padding: '1rem', background: 'var(--surface-alt)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text-main)', fontSize: '0.9rem' }}>Datos Administrativos (Solo lectura)</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
+                  <div>
+                    <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Modalidad</span>
+                    <strong style={{ fontSize: '0.9rem', color: 'var(--text-main)' }}>{modality}</strong>
+                  </div>
+                  <div>
+                    <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Tarifa</span>
+                    <strong style={{ fontSize: '0.9rem', color: 'var(--text-main)' }}>{fee}</strong>
+                  </div>
+                  <div>
+                    <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Tutor</span>
+                    <strong style={{ fontSize: '0.9rem', color: 'var(--text-main)' }}>{tutorName}</strong>
+                  </div>
                 </div>
-                <div>
-                  <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Tarifa</span>
-                  <strong style={{ fontSize: '0.9rem', color: 'var(--text-main)' }}>{fee}</strong>
-                </div>
-                <div>
-                  <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Tutor</span>
-                  <strong style={{ fontSize: '0.9rem', color: 'var(--text-main)' }}>{tutorName}</strong>
-                </div>
+                <p style={{ margin: '0.75rem 0 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  Si necesitas cambiar tu modalidad o tarifa, contacta con secretaría o tu profesor.
+                </p>
               </div>
-              <p style={{ margin: '0.75rem 0 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                Si necesitas cambiar tu modalidad o tarifa, contacta con secretaría o tu profesor.
-              </p>
-            </div>
+            )}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.75rem' }}>
               <button type="button" onClick={onClose} style={{ padding: '0.65rem 1.15rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-main)', fontSize: '0.88rem', fontWeight: 600, cursor: 'pointer' }}>

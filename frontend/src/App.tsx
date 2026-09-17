@@ -11,6 +11,7 @@ import TeacherGrades from './pages/TeacherGrades';
 import StudentGrades from './pages/StudentGrades';
 import StudentsManagement from './pages/StudentsManagement';
 import TeachersManagement from './pages/TeachersManagement';
+import AdminsManagement from './pages/AdminsManagement';
 import ParentsManagement from './pages/ParentsManagement';
 import MaterialsManagement from './pages/MaterialsManagement';
 import CourseView from './pages/CourseView';
@@ -35,6 +36,7 @@ function App() {
             <Route path="materials" element={<MaterialsManagement />} />
             <Route path="students" element={<StudentsManagement />} />
             <Route path="teachers" element={<TeachersManagement />} />
+            <Route path="admins" element={<AdminsManagement />} />
             <Route path="parents" element={<ParentsManagement />} />
             <Route path="enrollments" element={<Navigate to="/teacher/students" replace />} />
             <Route path="payments" element={<TeacherPayments />} />

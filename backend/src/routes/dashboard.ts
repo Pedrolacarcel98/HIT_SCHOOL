@@ -246,7 +246,11 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => 
 
       // 3. Grades
       const gradesData = await prisma.submission.findMany({
-        where: { studentId: student.id, grade: { not: null } },
+        where: {
+          studentId: student.id,
+          grade: { not: null },
+          assignment: { courseId: { in: courseIds } }
+        },
         include: { assignment: { include: { course: { select: { title: true } } } } }
       });
 

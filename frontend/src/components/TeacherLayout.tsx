@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Award, BookOpen, Users, LogOut, GraduationCap, FolderArchive, CircleDollarSign, MessageCircle, Menu, X, Settings, Home, UserRoundCog } from 'lucide-react';
+import { Award, BookOpen, Users, LogOut, GraduationCap, FolderArchive, CircleDollarSign, MessageCircle, Menu, X, Settings, Home, UserRoundCog, ShieldCheck } from 'lucide-react';
 import SettingsModal from './SettingsModal';
 
 const TeacherLayout: React.FC = () => {
@@ -8,6 +8,7 @@ const TeacherLayout: React.FC = () => {
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -23,14 +24,34 @@ const TeacherLayout: React.FC = () => {
       return;
     }
 
-    if (role !== 'ADMIN' && location.pathname === '/teacher/payments') {
-      navigate('/teacher');
-    }
   }, [navigate, location.pathname]);
 
   // Cerrar menú móvil al cambiar de ruta
   useEffect(() => {
     setIsMobileMenuOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const fetchUnreadChatCount = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+        const res = await fetch(`${apiUrl}/api/chat/unread-count`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setUnreadChatCount(Number(data.unreadCount) || 0);
+        }
+      } catch {
+        setUnreadChatCount(0);
+      }
+    };
+
+    fetchUnreadChatCount();
+    const interval = setInterval(fetchUnreadChatCount, 3500);
+    return () => clearInterval(interval);
   }, [location.pathname]);
 
   const userRole = localStorage.getItem('userRole');
@@ -55,6 +76,7 @@ const TeacherLayout: React.FC = () => {
     if (location.pathname === '/teacher/materials') return '#d1fae5';
     if (location.pathname === '/teacher/students') return '#ffe4e6';
     if (location.pathname === '/teacher/teachers') return '#e0e7ff';
+    if (location.pathname === '/teacher/admins') return '#eef2ff';
     if (location.pathname === '/teacher/parents') return '#e0f7f1';
     if (location.pathname === '/teacher/enrollments') return '#ffedd5';
     if (location.pathname === '/teacher/payments') return '#fce7f3';
@@ -69,6 +91,7 @@ const TeacherLayout: React.FC = () => {
     { label: 'Material de Clase', path: '/teacher/materials', icon: <FolderArchive size={20} />, iconColor: '#12966b' },
     { label: 'Gestión de Alumnos', path: '/teacher/students', icon: <Users size={20} />, iconColor: '#d14f72' },
     { label: 'Gestión Profesores', path: '/teacher/teachers', icon: <UserRoundCog size={20} />, iconColor: '#5369ad' },
+    ...(userRole === 'ADMIN' ? [{ label: 'Gestión Admin', path: '/teacher/admins', icon: <ShieldCheck size={20} />, iconColor: '#4f46e5' }] : []),
     { label: 'Gestión Tutores', path: '/teacher/parents', icon: <Users size={20} />, iconColor: '#0f9f7a' },
     ...(userRole === 'ADMIN' ? [{ label: 'Control de Pagos', path: '/teacher/payments', icon: <CircleDollarSign size={20} />, iconColor: '#d14f72' }] : []),
     { label: 'Chat Alumnos', path: '/teacher/chat', icon: <MessageCircle size={20} />, iconColor: '#12966b' },
@@ -114,7 +137,7 @@ const TeacherLayout: React.FC = () => {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <span style={{ fontSize: '0.72rem', color: userRole === 'ADMIN' ? '#d97706' : 'var(--primary)', fontWeight: '700', textTransform: 'uppercase', background: userRole === 'ADMIN' ? '#fef3c7' : 'var(--primary-light)', padding: '0.2rem 0.5rem', borderRadius: '6px' }}>
-            {userRole === 'ADMIN' ? '👑 Directora' : 'Profesor'}
+            {userRole === 'ADMIN' ? 'Admin' : 'Profesor'}
           </span>
         </div>
       </header>
@@ -149,7 +172,7 @@ const TeacherLayout: React.FC = () => {
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--text)' }}>HitSchool</h3>
                 <span style={{ fontSize: '0.75rem', color: userRole === 'ADMIN' ? '#d97706' : 'var(--primary)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  {userRole === 'ADMIN' ? '👑 Panel Directora' : 'Panel Profesor'}
+                  {userRole === 'ADMIN' ? 'Panel de Administrador' : 'Panel Profesor'}
                 </span>
               </div>
             </div>
@@ -207,8 +230,11 @@ const TeacherLayout: React.FC = () => {
                     if (!isActive) e.currentTarget.style.background = 'transparent';
                   }}
                 >
-                  <span style={{ display: 'inline-flex', color: isActive ? '#ffffff' : item.iconColor }}>
+                  <span style={{ display: 'inline-flex', color: isActive ? '#ffffff' : item.iconColor, position: 'relative' }}>
                     {React.cloneElement(item.icon, { strokeWidth: 2.5 })}
+                    {item.path === '/teacher/chat' && unreadChatCount > 0 && (
+                      <span style={{ position: 'absolute', top: -3, right: -3, width: 9, height: 9, borderRadius: '50%', background: '#ef4444', border: `2px solid ${isActive ? 'var(--primary)' : '#ffffff'}` }} />
+                    )}
                   </span>
                   {item.label}
                 </button>
@@ -224,7 +250,7 @@ const TeacherLayout: React.FC = () => {
               </div>
               <div style={{ flex: 1, overflow: 'hidden' }}>
                 <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: '600', color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {userRole === 'ADMIN' ? '👑 Directora' : '👨‍🏫 Profesor'}
+                  {userRole === 'ADMIN' ? 'Admin' : 'Profesor'}
                 </p>
                 <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {localStorage.getItem('userEmail') || 'usuario@hitschool.com'}

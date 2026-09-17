@@ -272,7 +272,7 @@ router.post('/assignments/:id/submit', authenticateToken, async (req: AuthReques
 
 router.get('/:id/assignments', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
   const materialId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const material = await prisma.material.findFirst({ where: { id: materialId, teacherId: req.user!.id }, select: { id: true } });
+  const material = await prisma.material.findUnique({ where: { id: materialId }, select: { id: true } });
   if (!material) return res.status(404).json({ error: 'Material no encontrado' });
   const assignments = await prisma.materialAssignment.findMany({
     where: { materialId },
@@ -286,7 +286,7 @@ router.delete('/:id/assignments/:studentId', authenticateToken, requireTeacher, 
   const materialId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const studentId = Array.isArray(req.params.studentId) ? req.params.studentId[0] : req.params.studentId;
   const deleted = await prisma.materialAssignment.deleteMany({
-    where: { materialId, studentId, material: { teacherId: req.user!.id } }
+    where: { materialId, studentId }
   });
   if (deleted.count === 0) return res.status(404).json({ error: 'Acceso no encontrado' });
   res.json({ message: 'Acceso revocado' });
@@ -342,7 +342,7 @@ router.post('/:id/assignments', authenticateToken, requireTeacher, async (req: A
   if (parsedPublishAt.error) return res.status(400).json({ error: parsedPublishAt.error });
 
   try {
-    const material = await prisma.material.findFirst({ where: { id: materialId, teacherId: req.user!.id } });
+    const material = await prisma.material.findUnique({ where: { id: materialId } });
     if (!material) return res.status(404).json({ error: 'Material no encontrado' });
 
     const uniqueStudentIds = [...new Set(studentIds as string[])];
@@ -423,7 +423,7 @@ router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, r
     const { title, description, type, level, category, url, formData } = req.body;
 
     const updated = await prisma.material.updateMany({
-      where: { id, teacherId: req.user!.id },
+      where: { id },
       data: {
         title,
         description,
@@ -448,7 +448,7 @@ router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, r
 router.post('/:id/duplicate', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
   try {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const source = await prisma.material.findFirst({ where: { id, teacherId: req.user!.id } });
+    const source = await prisma.material.findUnique({ where: { id } });
     if (!source) return res.status(404).json({ error: 'Material no encontrado' });
 
     const duplicated = await prisma.material.create({
@@ -474,8 +474,8 @@ router.post('/:id/duplicate', authenticateToken, requireTeacher, async (req: Aut
 router.delete('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
   try {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const material = await prisma.material.findFirst({
-      where: { id, teacherId: req.user!.id },
+    const material = await prisma.material.findUnique({
+      where: { id },
       select: { id: true }
     });
     if (!material) return res.status(404).json({ error: 'Material no encontrado' });

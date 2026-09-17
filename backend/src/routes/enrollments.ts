@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { authenticateToken, requireAdmin } from '../middleware/auth';
+import { authenticateToken, requireTeacher } from '../middleware/auth';
 import { ensureStudentPaymentScheduleById } from '../services/payments';
 import { sendAccountReactivationEmail, sendStudentWelcomeEmail } from '../services/email';
 import bcrypt from 'bcrypt';
@@ -10,7 +10,7 @@ const router = Router();
 const prisma = new PrismaClient();
 
 // POST /api/enrollments/enroll
-router.post('/enroll', authenticateToken, requireAdmin, async (req, res) => {
+router.post('/enroll', authenticateToken, requireTeacher, async (req, res) => {
   const { studentId, monthlyFee, billingPeriod, startDate } = req.body;
   const normalizedBillingPeriod = billingPeriod || 'MONTHLY';
 
@@ -92,7 +92,7 @@ router.post('/enroll', authenticateToken, requireAdmin, async (req, res) => {
 });
 
 // POST /api/enrollments/unenroll
-router.post('/unenroll', authenticateToken, requireAdmin, async (req, res) => {
+router.post('/unenroll', authenticateToken, requireTeacher, async (req, res) => {
   const { studentId } = req.body;
 
   try {
@@ -132,6 +132,10 @@ router.post('/unenroll', authenticateToken, requireAdmin, async (req, res) => {
         isPaid: false,
         dueDate: { gt: new Date() }
       }
+    });
+
+    await prisma.enrollment.deleteMany({
+      where: { studentId }
     });
 
     // Volver a calcular schedule por si acaso

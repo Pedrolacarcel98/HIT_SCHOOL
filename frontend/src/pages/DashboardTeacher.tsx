@@ -33,6 +33,19 @@ interface DashboardTeacherData {
   }[];
 }
 
+interface CurrentUser {
+  profile?: {
+    firstName?: string | null;
+  } | null;
+}
+
+const getTimeGreeting = (name: string) => {
+  const hour = new Date().getHours();
+  if (hour < 13) return { text: `¡Buenos días, ${name}!`, icon: '☕' };
+  if (hour < 20) return { text: `¡Buenas tardes, ${name}!`, icon: '🌤️' };
+  return { text: `¡Buenas noches, ${name}!`, icon: '🌙' };
+};
+
 const getInitials = (name: string) => {
   if (!name) return 'HS';
   return name
@@ -59,6 +72,7 @@ const getAvatarStyle = (name: string) => {
 
 const DashboardTeacher: React.FC = () => {
   const [data, setData] = useState<DashboardTeacherData | null>(null);
+  const [accountName, setAccountName] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -68,15 +82,21 @@ const DashboardTeacher: React.FC = () => {
       try {
         const token = localStorage.getItem('token');
         const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-        const res = await fetch(`${apiUrl}/api/dashboard/teacher`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const headers = { Authorization: `Bearer ${token}` };
+        const [res, profileRes] = await Promise.all([
+          fetch(`${apiUrl}/api/dashboard/teacher`, { headers }),
+          fetch(`${apiUrl}/api/auth/me`, { headers })
+        ]);
         
         if (!res.ok) {
           throw new Error('Error al obtener el dashboard');
         }
         const json = await res.json();
         setData(json);
+        if (profileRes.ok) {
+          const currentUser = await profileRes.json() as CurrentUser;
+          setAccountName(currentUser.profile?.firstName?.trim() || '');
+        }
       } catch (err) {
         setError('No se pudo cargar el dashboard.');
       } finally {
@@ -88,14 +108,6 @@ const DashboardTeacher: React.FC = () => {
 
   const userRole = localStorage.getItem('userRole');
   const isAdmin = userRole === 'ADMIN';
-
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    const roleTitle = isAdmin ? 'Directora' : 'Profesor';
-    if (hour < 13) return { text: `¡Buenos días, ${roleTitle}!`, icon: '☕' };
-    if (hour < 20) return { text: `¡Buenas tardes, ${roleTitle}!`, icon: '🌤️' };
-    return { text: `¡Buenas noches, ${roleTitle}!`, icon: '🌙' };
-  };
 
   const currentDateLabel = new Date().toLocaleDateString('es-ES', {
     weekday: 'long',
@@ -121,7 +133,7 @@ const DashboardTeacher: React.FC = () => {
     );
   }
 
-  const greeting = getGreeting();
+  const greeting = getTimeGreeting(accountName);
 
   return (
     <div className="page-container animate-fade-in">
@@ -159,7 +171,7 @@ const DashboardTeacher: React.FC = () => {
             color: isAdmin ? '#b45309' : 'var(--primary-text)',
             border: `1px solid ${isAdmin ? '#fde68a' : 'var(--primary-border)'}`
           }}>
-            {isAdmin ? '👑 Directora' : '👨‍🏫 Profesor'}
+            {isAdmin ? 'Admin' : 'Profesor'}
           </span>
 
           <div style={{ 

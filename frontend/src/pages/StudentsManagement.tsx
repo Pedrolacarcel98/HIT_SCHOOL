@@ -120,6 +120,7 @@ const getImageAuthorizationValue = (profile?: Student['profile']): ImageAuthoriz
 const StudentsManagement: React.FC = () => {
   const navigate = useNavigate();
   const userRole = localStorage.getItem('userRole');
+  const canManageStudents = userRole === 'ADMIN' || userRole === 'TEACHER';
   const [students, setStudents] = useState<Student[]>([]);
   const [parents, setParents] = useState<ParentData[]>([]);
   const [parentSearchTerm, setParentSearchTerm] = useState('');
@@ -665,7 +666,7 @@ const StudentsManagement: React.FC = () => {
           <button onClick={handleExportExcel} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: '#ecfdf5', color: '#047857', border: '1px solid #6ee7b7', padding: '0.65rem 1rem', borderRadius: '12px', fontSize: '0.875rem', fontWeight: 500, cursor: 'pointer', transition: 'background 0.2s ease' }}>
             <FileSpreadsheet size={17} /> Exportar a Excel
           </button>
-          {userRole === 'ADMIN' && (
+          {canManageStudents && (
             <button
               onClick={() => { resetCreateForm(); setShowCreateModal(true); }}
               className="btn-primary"
@@ -896,7 +897,7 @@ const StudentsManagement: React.FC = () => {
                           }}>
                             {isActive ? 'Alta' : 'Baja'}
                           </span>
-                          {userRole === 'ADMIN' && (
+                          {canManageStudents && (
                             <button
                               type="button"
                               onClick={() => isActive ? handleBaja(s) : handleOpenAlta(s)}
@@ -929,7 +930,7 @@ const StudentsManagement: React.FC = () => {
 
                       <td style={{ padding: '1rem 1.25rem', textAlign: 'right' }}>
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.45rem', alignItems: 'center' }}>
-                          {hasUnpaid && !isActive && (
+                          {userRole === 'ADMIN' && hasUnpaid && !isActive && (
                             <button
                               type="button"
                               onClick={() => downloadUnpaidPDF(s)}
@@ -970,7 +971,7 @@ const StudentsManagement: React.FC = () => {
                             <Eye size={16} />
                           </button>
 
-                          {userRole === 'ADMIN' && (
+                          {canManageStudents && (
                             <>
                               <button
                                 onClick={() => handleStartEdit(s)}
@@ -1147,7 +1148,7 @@ const StudentsManagement: React.FC = () => {
               >
                 Cerrar
               </button>
-              {userRole === 'ADMIN' && (
+              {canManageStudents && (
                 <>
                   <button
                     type="button"

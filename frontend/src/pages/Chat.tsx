@@ -112,8 +112,9 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
       setContacts(sortContacts(data));
       if (data.length > 0) {
         setSelectedContactId(prev => {
+          if (!prev) return '';
           const exists = data.some(c => (c.contactKey || c.id) === prev || c.id === prev);
-          return exists ? prev : (data[0].contactKey || data[0].id);
+          return exists ? prev : '';
         });
       } else {
         setSelectedContactId('');

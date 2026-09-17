@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
-import { authenticateToken, requireTeacher, requireAdmin, AuthRequest } from '../middleware/auth';
+import { authenticateToken, requireTeacher, AuthRequest } from '../middleware/auth';
 import { getChildrenForParent } from './auth';
 import { ensureStudentPaymentScheduleById } from '../services/payments';
 import { sendParentWelcomeEmail } from '../services/email';
@@ -165,7 +165,7 @@ router.put('/:id/evaluation', authenticateToken, requireTeacher, async (req: Aut
 });
 
 // Ruta protegida: crear alumno (con soporte de ficha extendida y vinculación familiar)
-router.post('/', authenticateToken, requireAdmin, async (req, res) => {
+router.post('/', authenticateToken, requireTeacher, async (req, res) => {
   const { email, firstName, lastName, dni, phone, birthDate, address, schoolYear, allergies, imageAuthorization, imageAuthorizationScope, observations, parentId, parentData, modality } = req.body;
 
   if (!email || !firstName || !lastName) {
@@ -368,7 +368,7 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
 });
 
 // Ruta para actualizar un alumno
-router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
+router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
   const studentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const { firstName, lastName, email, dni, phone, birthDate, address, schoolYear, allergies, imageAuthorization, imageAuthorizationScope, observations, parentId, modality, billingPeriod, billingAmount } = req.body;
 
@@ -499,7 +499,7 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
 });
 
 // Ruta para eliminar un alumno
-router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
+router.delete('/:id', authenticateToken, requireTeacher, async (req, res) => {
   const studentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
   try {

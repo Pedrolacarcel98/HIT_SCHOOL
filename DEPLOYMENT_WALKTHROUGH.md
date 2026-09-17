@@ -83,7 +83,9 @@ docker exec hit_school_backend npx prisma db seed
 ```
 
 > **Datos de Acceso Precargados:**
+> - 💼 **Profesor:** `admin@hitschool.com` | Contraseña: `1234`
 > - 💼 **Profesor:** `profesor@hitschool.com` | Contraseña: `1234`
+> - 💼 **Profesor2:** `profesor2@hitschool.com` | Contraseña: `1234`
 > - 🎓 **Alumno:** `alumno@hitschool.com` | Contraseña: `1234`
 > - 🎓 **Tutor:** `marpargut@hitschool.com` | Contraseña: `123456`
 

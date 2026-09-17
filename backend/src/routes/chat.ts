@@ -194,6 +194,24 @@ router.get('/contacts', authenticateToken, async (req: AuthRequest, res: Respons
   }
 });
 
+router.get('/unread-count', authenticateToken, async (req: AuthRequest, res: Response) => {
+  if (!req.user?.id) return res.status(401).json({ error: 'No autenticado' });
+
+  try {
+    const unreadCount = await prisma.chatMessage.count({
+      where: {
+        recipientId: req.user.id,
+        readAt: null
+      }
+    });
+
+    res.json({ unreadCount });
+  } catch (error) {
+    console.error('Error al obtener mensajes sin leer:', error);
+    res.status(500).json({ error: 'Error al obtener mensajes sin leer' });
+  }
+});
+
 router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const partnerId = typeof req.query.partnerId === 'string' ? req.query.partnerId : '';
