@@ -10,8 +10,8 @@ export interface ReviewQuestion {
   type: 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'SHORT_ANSWER' | 'FILL_IN_THE_BLANKS';
   options?: string[];
   correctAnswer: string | number;
-  audioUrl?: string;
   imageUrl?: string;
+  audioUrl?: string;
   caseSensitive?: boolean;
   points?: number;
 }
@@ -143,7 +143,7 @@ const ExamReviewModal: React.FC<ExamReviewModalProps> = ({ title, questions = []
                   {question.type === 'FILL_IN_THE_BLANKS' && <p style={{ margin: '0 0 0.6rem', color: 'var(--text-main)', fontSize: '0.88rem' }}>{getBlankText(question).replace(/\([^)]+\)/g, '_____')}</p>}
                   {question.imageUrl && <img src={question.imageUrl} alt={`Imagen de apoyo de la pregunta ${index + 1}`} style={{ display: 'block', maxWidth: '100%', maxHeight: '240px', margin: '0 0 0.6rem', objectFit: 'contain', borderRadius: '6px', border: '1px solid var(--border)' }} />}
                   {question.audioUrl && (
-                    <div style={{ marginBottom: '1.25rem' }}>
+                    <div style={{ margin: '0 0 0.6rem' }}>
                       <AudioPlayer src={question.audioUrl} title={`Pista de Audio - Pregunta ${index + 1}`} audioMode={audioMode} />
                     </div>
                   )}

@@ -32,7 +32,7 @@ router.post('/enroll', authenticateToken, requireTeacher, async (req, res) => {
       return res.status(400).json({ error: 'El alumno ya está dado de alta.' });
     }
 
-    const isReactivation = student.academyEnrollments.length > 0;
+    const isFirstEnrollment = student.academyEnrollments.length === 0;
     const temporaryPassword = `hit${Math.floor(1000 + Math.random() * 9000)}`;
     const enrollment = await prisma.academyEnrollment.create({
       data: {
@@ -61,30 +61,30 @@ router.post('/enroll', authenticateToken, requireTeacher, async (req, res) => {
     await ensureStudentPaymentScheduleById(prisma, studentId);
 
     try {
-      if (isReactivation) {
+      if (isFirstEnrollment) {
+        await sendStudentWelcomeEmail(
+          updatedUser.email,
+          updatedUser.profile?.firstName || 'alumno',
+          temporaryPassword
+        );
+      } else {
         await sendAccountReactivationEmail(
           updatedUser.email,
           updatedUser.profile?.firstName || 'alumno',
           temporaryPassword,
           'alumno'
         );
-      } else {
-        await sendStudentWelcomeEmail(
-          updatedUser.email,
-          updatedUser.profile?.firstName || 'alumno',
-          temporaryPassword
-        );
       }
     } catch (mailError) {
       console.error(
-        isReactivation
-          ? 'El alumno fue reactivado, pero no se pudo enviar el correo SMTP:'
-          : 'El alumno fue dado de alta, pero no se pudo enviar el correo SMTP:',
+        isFirstEnrollment
+          ? 'El alumno fue dado de alta por primera vez, pero no se pudo enviar el correo de bienvenida SMTP:'
+          : 'El alumno fue reactivado, pero no se pudo enviar el correo de reactivación SMTP:',
         mailError
       );
     }
 
-    return res.json({ message: 'Alumno dado de alta exitosamente', enrollment, user: updatedUser });
+    return res.json({ message: 'Alumno dado de alta exitosamente', enrollment, user: updatedUser, isFirstEnrollment });
   } catch (error) {
     console.error('Error dando de alta al alumno:', error);
     return res.status(500).json({ error: 'Error interno del servidor al dar de alta.' });

@@ -1,36 +1,97 @@
 import { Router, Response } from 'express';
 import { PrismaClient, MaterialType, Level, SkillCategory } from '@prisma/client';
+import { Readable } from 'stream';
 import { authenticateToken, requireTeacher, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 const prisma = new PrismaClient();
 
-router.get('/drive-audio/:fileId', async (req, res) => {
-  const fileId = Array.isArray(req.params.fileId) ? req.params.fileId[0] : req.params.fileId;
-  if (!/^[a-zA-Z0-9_-]+$/.test(fileId)) {
-    return res.status(400).json({ error: 'Identificador de audio no válido.' });
+// Proxy de streaming para pistas de audio (evita bloqueos de cookies, CORS y CORP: same-site de Google Drive)
+const streamDriveAudio = async (fileId: string, req: any, res: Response) => {
+  const cleanId = fileId.trim();
+  if (!/^[a-zA-Z0-9_-]+$/.test(cleanId)) {
+    return res.status(400).json({ error: 'ID de archivo no válido' });
+  }
+  const targetUrl = `https://drive.usercontent.google.com/download?id=${cleanId}&export=download`;
+  const headers: Record<string, string> = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+  };
+  if (req.headers.range) {
+    headers['Range'] = req.headers.range;
   }
 
+  let response = await fetch(targetUrl, { headers });
+
+  if (!response.ok && response.status !== 206) {
+    const fallbackUrl = `https://drive.google.com/uc?export=download&id=${cleanId}`;
+    response = await fetch(fallbackUrl, { headers });
+  }
+
+  if (!response.ok && response.status !== 206) {
+    return res.status(response.status).json({ error: 'No se pudo obtener el stream de audio' });
+  }
+
+  res.status(response.status);
+  const upstreamType = response.headers.get('content-type') || 'audio/mpeg';
+  const isHtmlOrText = upstreamType.includes('text') || upstreamType.includes('html');
+  res.setHeader('Content-Type', isHtmlOrText ? 'audio/mpeg' : upstreamType);
+  res.setHeader('Accept-Ranges', 'bytes');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+
+  const contentLength = response.headers.get('content-length');
+  if (contentLength) res.setHeader('Content-Length', contentLength);
+  const contentRange = response.headers.get('content-range');
+  if (contentRange) res.setHeader('Content-Range', contentRange);
+
+  if (response.body) {
+    // @ts-ignore
+    Readable.fromWeb(response.body).pipe(res);
+  } else {
+    res.end();
+  }
+};
+
+router.get('/drive-audio/:fileId', async (req: any, res: Response) => {
+  const fileId = Array.isArray(req.params.fileId) ? req.params.fileId[0] : req.params.fileId;
   try {
-    const upstream = await fetch(`https://drive.usercontent.google.com/download?id=${fileId}&export=download&confirm=t`);
-    if (!upstream.ok) {
-      return res.status(502).json({ error: 'No se pudo cargar el audio.' });
-    }
-
-    const contentType = upstream.headers.get('content-type') || 'audio/mpeg';
-    if (contentType.includes('text/html')) {
-      return res.status(502).json({ error: 'Google Drive no entregó un archivo de audio reproducible.' });
-    }
-
-    res.setHeader('Content-Type', contentType);
-    const contentLength = upstream.headers.get('content-length');
-    if (contentLength) res.setHeader('Content-Length', contentLength);
-    res.setHeader('Cache-Control', 'public, max-age=300');
-    const audioBuffer = Buffer.from(await upstream.arrayBuffer());
-    return res.send(audioBuffer);
+    await streamDriveAudio(fileId, req, res);
   } catch (error) {
     console.error('Error al cargar audio de Google Drive:', error);
-    return res.status(502).json({ error: 'No se pudo cargar el audio.' });
+    res.status(502).json({ error: 'No se pudo cargar el audio.' });
+  }
+});
+
+router.get('/proxy-audio', async (req: any, res: Response) => {
+  try {
+    const { id, url: customUrl } = req.query;
+    if (id && typeof id === 'string') {
+      await streamDriveAudio(id, req, res);
+    } else if (customUrl && typeof customUrl === 'string') {
+      const headers: Record<string, string> = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      };
+      if (req.headers.range) headers['Range'] = req.headers.range;
+      const response = await fetch(customUrl.trim(), { headers });
+      if (!response.ok && response.status !== 206) {
+        return res.status(response.status).json({ error: 'No se pudo obtener el stream de audio' });
+      }
+      res.status(response.status);
+      res.setHeader('Content-Type', response.headers.get('content-type') || 'audio/mpeg');
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      if (response.body) {
+        // @ts-ignore
+        Readable.fromWeb(response.body).pipe(res);
+      } else {
+        res.end();
+      }
+    } else {
+      return res.status(400).json({ error: 'Se requiere id o url' });
+    }
+  } catch (error) {
+    console.error('Error en proxy de audio:', error);
+    res.status(500).json({ error: 'Error interno en streaming de audio' });
   }
 });
 

@@ -396,6 +396,20 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                           {q.questionText}
                         </p>
 
+                        {q.imageUrl && (
+                          <img
+                            src={q.imageUrl}
+                            alt={`Imagen de apoyo para la pregunta ${idx + 1}`}
+                            style={{ display: 'block', maxWidth: '100%', maxHeight: '200px', margin: '0 0 0.75rem', objectFit: 'contain', borderRadius: '6px', border: '1px solid var(--border)' }}
+                          />
+                        )}
+
+                        {q.audioUrl && (
+                          <div style={{ marginBottom: '0.75rem' }}>
+                            <AudioPlayer src={q.audioUrl} title={`Pista de Audio - Pregunta ${idx + 1}`} />
+                          </div>
+                        )}
+
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.85rem' }}>
                           <div>
                             <span style={{ color: 'var(--text-muted)' }}>Tu respuesta: </span>

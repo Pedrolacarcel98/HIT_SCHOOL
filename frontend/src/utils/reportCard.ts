@@ -6,6 +6,7 @@ export interface ReportCardTaskItem {
   category?: string;
   grade?: number | null;
   completedAt?: string;
+  stepsSummary?: string;
 }
 
 export interface ReportCardData {

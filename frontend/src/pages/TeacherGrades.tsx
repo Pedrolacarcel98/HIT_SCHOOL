@@ -22,8 +22,9 @@ import {
 } from 'lucide-react';
 import ExamReviewModal from '../components/ExamReviewModal';
 import type { ReviewQuestion } from '../components/ExamReviewModal';
-import AttachmentViewerModal, { isAttachmentImage } from '../components/AttachmentViewerModal';
+import AttachmentViewerModal, { isAttachmentImage, isAttachmentAudio } from '../components/AttachmentViewerModal';
 import type { AttachmentData } from '../components/AttachmentViewerModal';
+import AudioPlayer from '../components/AudioPlayer';
 
 interface StudentData {
   id: string;
@@ -1546,6 +1547,11 @@ const TeacherGrades: React.FC = () => {
                                             }}
                                             title="Clic para ampliar y rotar"
                                           />
+                                        </div>
+                                      )}
+                                      {isAttachmentAudio(submissionDetails.attachment) && (
+                                        <div style={{ marginTop: '0.5rem' }}>
+                                          <AudioPlayer src={submissionDetails.attachment.dataUrl} title={submissionDetails.attachment.name} />
                                         </div>
                                       )}
                                     </div>

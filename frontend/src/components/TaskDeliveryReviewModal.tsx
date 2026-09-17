@@ -13,8 +13,9 @@ import {
   MessageSquare
 } from 'lucide-react';
 import ExamReviewModal from './ExamReviewModal';
-import AttachmentViewerModal, { isAttachmentImage } from './AttachmentViewerModal';
+import AttachmentViewerModal, { isAttachmentImage, isAttachmentAudio } from './AttachmentViewerModal';
 import type { AttachmentData } from './AttachmentViewerModal';
+import AudioPlayer from './AudioPlayer';
 
 export interface TaskStepDetail {
   stepId: string;
@@ -426,21 +427,28 @@ const TaskDeliveryReviewModal: React.FC<TaskDeliveryReviewModalProps> = ({
                   </div>
                 </div>
 
-                {/* CASO 1: Paso NO evaluable (Vídeo / Guía / Tips) */}
+                {/* CASO 1: Paso NO evaluable (Vídeo / Guía / Tips / Audio) */}
                 {!step.isEvaluable && !step.content && (
                   <div style={{ marginTop: '0.4rem', padding: '0.45rem 0.75rem', background: '#f8fafc', borderRadius: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                    {step.isCompleted
-                      ? '✓ El alumno ha visualizado y marcado este recurso como completado.'
-                      : '⏳ El alumno aún no ha accedido a este recurso formativo.'}
-                    {step.materialUrl && (
-                      <a
-                        href={step.materialUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ marginLeft: '8px', color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}
-                      >
-                        <ExternalLink size={12} style={{ display: 'inline', verticalAlign: 'middle' }} /> Ver material
-                      </a>
+                    <div>
+                      {step.isCompleted
+                        ? '✓ El alumno ha visualizado y marcado este recurso como completado.'
+                        : '⏳ El alumno aún no ha accedido a este recurso formativo.'}
+                      {step.materialType !== 'AUDIO' && step.materialUrl && (
+                        <a
+                          href={step.materialUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ marginLeft: '8px', color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}
+                        >
+                          <ExternalLink size={12} style={{ display: 'inline', verticalAlign: 'middle' }} /> Ver material
+                        </a>
+                      )}
+                    </div>
+                    {step.materialType === 'AUDIO' && step.materialUrl && (
+                      <div style={{ marginTop: '0.5rem' }}>
+                        <AudioPlayer src={step.materialUrl} title={step.title} />
+                      </div>
                     )}
                   </div>
                 )}
@@ -566,6 +574,11 @@ const TaskDeliveryReviewModal: React.FC<TaskDeliveryReviewModalProps> = ({
                                     }}
                                     title="Clic para ampliar y rotar"
                                   />
+                                </div>
+                              )}
+                              {isAttachmentAudio(parsed.attachment) && (
+                                <div style={{ marginTop: '0.45rem' }}>
+                                  <AudioPlayer src={parsed.attachment.dataUrl} title={parsed.attachment.name} />
                                 </div>
                               )}
                             </div>

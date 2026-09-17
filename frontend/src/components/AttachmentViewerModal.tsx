@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Download, ExternalLink, FileText, Image as ImageIcon, RotateCw, X, ZoomIn, ZoomOut } from 'lucide-react';
+import { Download, ExternalLink, FileText, Headphones, Image as ImageIcon, RotateCw, X, ZoomIn, ZoomOut } from 'lucide-react';
+import AudioPlayer from './AudioPlayer';
 
 export interface AttachmentData {
   name: string;
@@ -30,6 +31,18 @@ export const isAttachmentPdf = (attachment?: AttachmentData | null): boolean => 
     mime === 'application/pdf' ||
     /\.pdf$/i.test(name) ||
     dataUrl.startsWith('data:application/pdf')
+  );
+};
+
+export const isAttachmentAudio = (attachment?: AttachmentData | null): boolean => {
+  if (!attachment) return false;
+  const mime = (attachment.mimeType || '').toLowerCase();
+  const name = (attachment.name || '').toLowerCase();
+  const dataUrl = (attachment.dataUrl || '').toLowerCase();
+  return (
+    mime.startsWith('audio/') ||
+    /\.(mp3|wav|ogg|m4a|aac|flac|weba|opus)$/i.test(name) ||
+    dataUrl.startsWith('data:audio/')
   );
 };
 
@@ -66,6 +79,7 @@ export const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({ at
 
   const isImage = isAttachmentImage(attachment);
   const isPdf = isAttachmentPdf(attachment);
+  const isAudio = isAttachmentAudio(attachment);
 
   const blobUrl = useMemo(() => {
     if (!attachment?.dataUrl) return null;
@@ -118,8 +132,8 @@ export const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({ at
       <div
         style={{
           width: '100%',
-          maxWidth: isPdf ? '1100px' : '900px',
-          height: '90vh',
+          maxWidth: isPdf ? '1100px' : isAudio ? '680px' : '900px',
+          height: isAudio ? 'auto' : '90vh',
           maxHeight: '92vh',
           background: 'var(--surface)',
           borderRadius: '16px',
@@ -147,6 +161,8 @@ export const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({ at
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0 }}>
             {isImage ? (
               <ImageIcon size={20} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+            ) : isAudio ? (
+              <Headphones size={20} style={{ color: 'var(--primary)', flexShrink: 0 }} />
             ) : (
               <FileText size={20} style={{ color: 'var(--primary)', flexShrink: 0 }} />
             )}
@@ -166,7 +182,7 @@ export const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({ at
                 {attachment.name}
               </h3>
               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                {isImage ? 'Imagen / Fotografía' : isPdf ? 'Documento PDF' : 'Archivo adjunto'}
+                {isImage ? 'Imagen / Fotografía' : isAudio ? 'Grabación / Archivo de Audio' : isPdf ? 'Documento PDF' : 'Archivo adjunto'}
               </span>
             </div>
           </div>
@@ -307,6 +323,33 @@ export const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({ at
                   borderRadius: '4px'
                 }}
               />
+            </div>
+          ) : isAudio ? (
+            <div style={{ padding: '2.5rem 1.5rem', width: '100%', maxWidth: '580px', margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+                <div style={{
+                  width: '64px',
+                  height: '64px',
+                  borderRadius: '50%',
+                  background: 'var(--primary-subtle, #eaf4ef)',
+                  color: 'var(--primary, #4e9b75)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 0.75rem'
+                }}>
+                  <Headphones size={32} />
+                </div>
+                <h4 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--text-main)', fontWeight: 700 }}>
+                  Reproductor de Audio
+                </h4>
+                <p style={{ margin: '0.35rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                  {attachment.name}
+                </p>
+              </div>
+              <div style={{ width: '100%' }}>
+                <AudioPlayer src={blobUrl || attachment.dataUrl} title={attachment.name} autoPlay={true} />
+              </div>
             </div>
           ) : (
             <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
