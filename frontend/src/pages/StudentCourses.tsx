@@ -15,6 +15,9 @@ interface ParsedExamData {
   answers: Record<string, string | number>;
   score?: number | null;
   total?: number | null;
+  hasOpenText?: boolean;
+  openTextCount?: number;
+  questionScores?: Record<string, number>;
 }
 
 interface SubmissionAttachment {
@@ -58,11 +61,14 @@ const parseSavedExam = (content?: string | null): ParsedExamData | null => {
   if (!content) return null;
   try {
     const parsed = JSON.parse(content);
-    if (parsed.answers || typeof parsed.score === 'number') {
+    if (parsed.answers || typeof parsed.score === 'number' || parsed.hasOpenText) {
       return {
         answers: parsed.answers || {},
         score: typeof parsed.score === 'number' ? parsed.score : null,
-        total: typeof parsed.total === 'number' ? parsed.total : null
+        total: typeof parsed.total === 'number' ? parsed.total : null,
+        hasOpenText: Boolean(parsed.hasOpenText),
+        openTextCount: typeof parsed.openTextCount === 'number' ? parsed.openTextCount : 0,
+        questionScores: parsed.questionScores || {}
       };
     }
     return null;
@@ -103,7 +109,7 @@ interface IndividualContent {
   category?: string;
   dueDate?: string;
   material?: { id?: string; title: string; type: string; level?: string; description?: string; url?: string; formData?: { questions?: unknown[] } } | null;
-  submissions?: { grade?: number | null; content?: string | null; submittedAt?: string | null }[];
+  submissions?: { grade?: number | null; content?: string | null; feedback?: string | null; submittedAt?: string | null }[];
 }
 
 interface AssignedMaterial {
@@ -805,6 +811,8 @@ const StudentCourses: React.FC = () => {
           answers={parseSavedAnswers(reviewingContent.submissions?.[0]?.content)}
           score={reviewingContent.submissions?.[0]?.grade}
           total={parseSavedExam(reviewingContent.submissions?.[0]?.content)?.total}
+          feedback={reviewingContent.submissions?.[0]?.feedback}
+          questionScores={parseSavedExam(reviewingContent.submissions?.[0]?.content)?.questionScores}
           onClose={() => setReviewingContent(null)}
         />
       )}
@@ -845,6 +853,8 @@ const StudentCourses: React.FC = () => {
           answers={parseSavedAnswers(reviewingStructuredForm.submission.content)}
           score={reviewingStructuredForm.submission.grade}
           total={parseSavedExam(reviewingStructuredForm.submission.content)?.total}
+          feedback={reviewingStructuredForm.submission.feedback}
+          questionScores={parseSavedExam(reviewingStructuredForm.submission.content)?.questionScores}
           onClose={() => setReviewingStructuredForm(null)}
         />
       )}

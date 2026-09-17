@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CheckCircle2, XCircle, RotateCcw, Award, X } from 'lucide-react';
+import { CheckCircle2, XCircle, RotateCcw, Award, X, Clock } from 'lucide-react';
 import AudioPlayer from './AudioPlayer';
 
 interface Question {
@@ -9,7 +9,7 @@ interface Question {
   blankText?: string;
   audioUrl?: string;
   imageUrl?: string;
-  type: 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'SHORT_ANSWER' | 'FILL_IN_THE_BLANKS';
+  type: 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'SHORT_ANSWER' | 'FILL_IN_THE_BLANKS' | 'OPEN_TEXT';
   options?: string[];
   correctAnswer: string | number; // index or string
   caseSensitive?: boolean;
@@ -49,6 +49,9 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
   // Estados del Pop-up: 'COMPLETED' -> 'GRADE' -> 'REVIEW'
   const [showResultModal, setShowResultModal] = useState(false);
   const [modalStep, setModalStep] = useState<'COMPLETED' | 'GRADE' | 'REVIEW'>('COMPLETED');
+
+  const hasOpenText = questions.some((q) => q.type === 'OPEN_TEXT');
+  const openTextCount = questions.filter((q) => q.type === 'OPEN_TEXT').length;
 
   const handleSelectOption = (questionId: string, optionIndex: number) => {
     if (isSubmitted || readOnly) return;
@@ -173,20 +176,24 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                   width: '64px',
                   height: '64px',
                   borderRadius: '50%',
-                  background: 'var(--primary-light)',
-                  color: 'var(--primary-text)',
+                  background: hasOpenText ? '#fef3c7' : 'var(--primary-light)',
+                  color: hasOpenText ? '#b45309' : 'var(--primary-text)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   margin: '0 auto 1.5rem',
-                  border: '1px solid var(--primary-border)',
-                  boxShadow: 'var(--shadow-primary)'
+                  border: `1px solid ${hasOpenText ? '#fde68a' : 'var(--primary-border)'}`,
+                  boxShadow: hasOpenText ? '0 4px 12px rgba(217, 119, 6, 0.2)' : 'var(--shadow-primary)'
                 }}>
-                  <CheckCircle2 size={36} />
+                  {hasOpenText ? <Clock size={36} /> : <CheckCircle2 size={36} />}
                 </div>
-                <h3 style={{ margin: '0 0 0.5rem', color: 'var(--text)', fontSize: '1.5rem' }}>¡Examen completado!</h3>
+                <h3 style={{ margin: '0 0 0.5rem', color: 'var(--text)', fontSize: '1.5rem' }}>
+                  {hasOpenText ? '¡Examen entregado!' : '¡Examen completado!'}
+                </h3>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', margin: '0 0 2rem', lineHeight: '1.5' }}>
-                  Has respondido a todas las preguntas. Pulsa el botón para ver tu resultado detallado.
+                  {hasOpenText
+                    ? 'Has respondido a todas las preguntas. Este examen incluye preguntas de texto libre que serán revisadas y calificadas por tu profesor.'
+                    : 'Has respondido a todas las preguntas. Pulsa el botón para ver tu resultado detallado.'}
                 </p>
                 <button
                   type="button"
@@ -204,7 +211,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                     cursor: 'pointer'
                   }}
                 >
-                  <Award size={18} /> Ver Calificación
+                  <Award size={18} /> {hasOpenText ? 'Ver Resumen de Entrega' : 'Ver Calificación'}
                 </button>
               </div>
             )}
@@ -215,36 +222,60 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                   width: '64px',
                   height: '64px',
                   borderRadius: '50%',
-                  background: percentage >= 60 ? 'var(--primary-light)' : 'rgba(239, 68, 68, 0.12)',
-                  color: percentage >= 60 ? 'var(--primary-text)' : '#9e2a2b',
+                  background: hasOpenText ? '#fef3c7' : (percentage >= 60 ? 'var(--primary-light)' : 'rgba(239, 68, 68, 0.12)'),
+                  color: hasOpenText ? '#b45309' : (percentage >= 60 ? 'var(--primary-text)' : '#9e2a2b'),
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   margin: '0 auto 1.25rem',
-                  border: `1px solid ${percentage >= 60 ? 'var(--primary-border)' : '#f7caca'}`
+                  border: `1px solid ${hasOpenText ? '#fde68a' : (percentage >= 60 ? 'var(--primary-border)' : '#f7caca')}`
                 }}>
-                  <Award size={36} />
+                  {hasOpenText ? <Clock size={36} /> : <Award size={36} />}
                 </div>
 
-                <h3 style={{ margin: '0 0 0.5rem', color: 'var(--text)', fontSize: '1.5rem' }}>Tu Calificación</h3>
+                <h3 style={{ margin: '0 0 0.5rem', color: 'var(--text)', fontSize: '1.5rem' }}>
+                  {hasOpenText ? 'Entrega Registrada' : 'Tu Calificación'}
+                </h3>
                 
-                <div style={{
-                  margin: '1.5rem 0',
-                  padding: '1.25rem',
-                  borderRadius: '12px',
-                  background: percentage >= 60 ? 'var(--primary-subtle)' : '#fdf0f0',
-                  border: `1px solid ${percentage >= 60 ? 'var(--primary-border)' : '#f7caca'}`
-                }}>
-                  <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: percentage >= 60 ? 'var(--primary-text)' : '#9e2a2b' }}>
-                    {score} <span style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>/ {totalPoints}</span>
+                {hasOpenText ? (
+                  <div style={{
+                    margin: '1.5rem 0',
+                    padding: '1.25rem',
+                    borderRadius: '12px',
+                    background: '#fffbeb',
+                    border: '1px solid #fde68a'
+                  }}>
+                    <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#b45309' }}>
+                      ⏳ Calificación Pendiente
+                    </div>
+                    <div style={{ fontSize: '0.92rem', fontWeight: '500', color: 'var(--text)', marginTop: '0.4rem', lineHeight: '1.4' }}>
+                      Este examen incluye <strong>{openTextCount} {openTextCount === 1 ? 'pregunta de texto libre' : 'preguntas de texto libre'}</strong> que debe evaluar tu profesor.
+                    </div>
+                    {totalPoints > 0 && (
+                      <p style={{ margin: '0.5rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                        Puntuación total del examen: {totalPoints} pts
+                      </p>
+                    )}
                   </div>
-                  <div style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--text)', marginTop: '0.25rem' }}>
-                    {percentage}% de Acierto
+                ) : (
+                  <div style={{
+                    margin: '1.5rem 0',
+                    padding: '1.25rem',
+                    borderRadius: '12px',
+                    background: percentage >= 60 ? 'var(--primary-subtle)' : '#fdf0f0',
+                    border: `1px solid ${percentage >= 60 ? 'var(--primary-border)' : '#f7caca'}`
+                  }}>
+                    <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: percentage >= 60 ? 'var(--primary-text)' : '#9e2a2b' }}>
+                      {score} <span style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>/ {totalPoints}</span>
+                    </div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--text)', marginTop: '0.25rem' }}>
+                      {percentage}% de Acierto
+                    </div>
+                    <p style={{ margin: '0.5rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                      {percentage >= 60 ? '🎉 ¡Enhorabuena! Has superado el examen.' : '💪 Puedes reintentarlo para mejorar tu puntuación.'}
+                    </p>
                   </div>
-                  <p style={{ margin: '0.5rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                    {percentage >= 60 ? '🎉 ¡Enhorabuena! Has superado el examen.' : '💪 Puedes reintentarlo para mejorar tu puntuación.'}
-                  </p>
-                </div>
+                )}
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   <button
@@ -262,7 +293,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                       cursor: 'pointer'
                     }}
                   >
-                    <CheckCircle2 size={16} /> Revisar Respuestas (Aciertos y Fallos)
+                    <CheckCircle2 size={16} /> Revisar Respuestas Enviadas
                   </button>
 
                   <button
@@ -290,26 +321,28 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                     ✓ Finalizar y Salir
                   </button>
 
-                  {allowRetry && <button
-                    type="button"
-                    onClick={handleReset}
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      borderRadius: '8px',
-                      border: 'none',
-                      background: 'transparent',
-                      color: 'var(--text-muted)',
-                      fontSize: '0.85rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '0.4rem',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <RotateCcw size={15} /> Reintentar Examen
-                  </button>}
+                  {!hasOpenText && allowRetry && (
+                    <button
+                      type="button"
+                      onClick={handleReset}
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        borderRadius: '8px',
+                        border: 'none',
+                        background: 'transparent',
+                        color: 'var(--text-muted)',
+                        fontSize: '0.85rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.4rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <RotateCcw size={15} /> Reintentar Examen
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -320,8 +353,10 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border)' }}>
                   <div>
                     <h3 style={{ margin: 0, fontSize: '1.3rem', color: 'var(--text)' }}>Revisión de Respuestas</h3>
-                    <span style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 'bold' }}>
-                      Puntuación final: {score} / {totalPoints} ({percentage}%)
+                    <span style={{ fontSize: '0.85rem', color: hasOpenText ? '#b45309' : 'var(--primary)', fontWeight: 'bold' }}>
+                      {hasOpenText
+                        ? 'Calificación pendiente de corrección por el profesor'
+                        : `Puntuación final: ${score} / ${totalPoints} (${percentage}%)`}
                     </span>
                   </div>
                   <button
@@ -348,6 +383,70 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                 <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem', paddingRight: '0.5rem' }}>
                   {questions.map((q, idx) => {
                     const userAnswer = answers[q.id];
+
+                    if (q.type === 'OPEN_TEXT') {
+                      return (
+                        <div
+                          key={q.id || idx}
+                          style={{
+                            padding: '1.25rem',
+                            borderRadius: '10px',
+                            background: 'var(--surface)',
+                            border: '1px solid #fde68a',
+                            borderLeft: '4px solid #f59e0b'
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                            <span style={{ fontWeight: 'bold', fontSize: '0.85rem', color: '#b45309', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <Clock size={16} />
+                              Pregunta {idx + 1} ({q.points || 1} {q.points === 1 ? 'pto' : 'pts'}) — Pendiente de calificar
+                            </span>
+                            <span style={{ fontSize: '0.75rem', color: '#b45309', background: '#fef3c7', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>
+                              Texto Libre / Redacción
+                            </span>
+                          </div>
+
+                          <p style={{ margin: '0 0 0.75rem', fontWeight: '500', color: 'var(--text)', fontSize: '0.95rem' }}>
+                            {q.questionText}
+                          </p>
+
+                          {q.imageUrl && (
+                            <img
+                              src={q.imageUrl}
+                              alt={`Imagen de apoyo para la pregunta ${idx + 1}`}
+                              style={{ display: 'block', maxWidth: '100%', maxHeight: '200px', margin: '0 0 0.75rem', objectFit: 'contain', borderRadius: '6px', border: '1px solid var(--border)' }}
+                            />
+                          )}
+
+                          {q.audioUrl && (
+                            <div style={{ marginBottom: '0.75rem' }}>
+                              <AudioPlayer src={q.audioUrl} title={`Pista de Audio - Pregunta ${idx + 1}`} />
+                            </div>
+                          )}
+
+                          <div style={{ marginTop: '0.4rem' }}>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Tu respuesta enviada:</span>
+                            <div style={{
+                              marginTop: '0.35rem',
+                              padding: '0.75rem 1rem',
+                              borderRadius: '6px',
+                              background: 'var(--surface-alt)',
+                              border: '1px solid var(--border)',
+                              whiteSpace: 'pre-wrap',
+                              color: 'var(--text)',
+                              fontSize: '0.92rem',
+                              lineHeight: '1.5'
+                            }}>
+                              {userAnswer ? String(userAnswer) : 'No respondida'}
+                            </div>
+                            <p style={{ margin: '0.4rem 0 0', color: '#b45309', fontSize: '0.82rem' }}>
+                              <em>El profesor evaluará esta respuesta y asignará su puntuación correspondiente.</em>
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    }
+
                     const isCorrect = q.type === 'FILL_IN_THE_BLANKS'
                       ? getBlankAnswers(getBlankText(q)).every((expected, index) => isTextCorrect(String((Array.isArray(userAnswer) ? userAnswer[index] : '') || ''), expected, q.caseSensitive))
                       : (q.type === 'SHORT_ANSWER' && isTextCorrect(String(userAnswer || ''), String(q.correctAnswer))) ||
@@ -661,6 +760,37 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                   {isSubmitted && !isCorrect && (
                     <p style={{ margin: '0.65rem 0 0', color: '#ef4444', fontSize: '0.85rem' }}>
                       Respuestas correctas: <strong>{getBlankAnswers(getBlankText(q)).join(' | ')}</strong>
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {q.type === 'OPEN_TEXT' && (
+                <div>
+                  <textarea
+                    rows={6}
+                    disabled={isSubmitted || readOnly}
+                    value={userAnswer || ''}
+                    onChange={(e) => handleTextAnswer(q.id, e.target.value)}
+                    placeholder="Escribe aquí tu respuesta libre o redacción..."
+                    style={{
+                      width: '100%',
+                      minHeight: '130px',
+                      padding: '0.75rem 1rem',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border)',
+                      background: 'var(--background)',
+                      color: 'var(--text)',
+                      outline: 'none',
+                      resize: 'vertical',
+                      fontSize: '0.95rem',
+                      lineHeight: '1.5',
+                      fontFamily: 'inherit'
+                    }}
+                  />
+                  {isSubmitted && (
+                    <p style={{ margin: '0.5rem 0 0', color: '#b45309', fontSize: '0.85rem' }}>
+                      <em>Respuesta enviada. Esta pregunta será evaluada manualmente por el profesor.</em>
                     </p>
                   )}
                 </div>

@@ -84,7 +84,7 @@ const getTaskInclude = (studentId?: string) => ({
   }
 });
 
-const syncTaskDeliveryOnStepCompletion = async (taskId: string, studentId: string) => {
+export const syncTaskDeliveryOnStepCompletion = async (taskId: string, studentId: string) => {
   try {
     const task = await prisma.structuredTask.findUnique({
       where: { id: taskId },
@@ -192,9 +192,14 @@ const isTextCorrect = (answer: unknown, expected: string, caseSensitive = false)
 const gradeForm = (questions: any[], answers: Record<string, unknown>) => {
   let score = 0;
   let total = 0;
+  let openTextCount = 0;
   questions.forEach((question) => {
     const points = Number(question.points) || 1;
     total += points;
+    if (question.type === 'OPEN_TEXT') {
+      openTextCount += 1;
+      return;
+    }
     const answer = answers[question.id];
     const correct = question.type === 'FILL_IN_THE_BLANKS'
       ? (() => {
@@ -207,7 +212,14 @@ const gradeForm = (questions: any[], answers: Record<string, unknown>) => {
         : answer !== undefined && Number(answer) === Number(question.correctAnswer);
     if (correct) score += points;
   });
-  return { score, total, grade: total ? (score / total) * 10 : 0 };
+  const hasOpenText = openTextCount > 0;
+  return {
+    score,
+    total,
+    grade: hasOpenText ? null : (total ? Number(((score / total) * 10).toFixed(2)) : 0),
+    hasOpenText,
+    openTextCount
+  };
 };
 
 const getTargetStudents = (task: any, courseStudents: StudentRef[] = []): StudentRef[] => {
@@ -520,7 +532,15 @@ router.post('/steps/:stepId/submit-form', authenticateToken, async (req: AuthReq
           studentId: req.user!.id,
           structuredTaskId: step.taskId,
           formId: step.materialId,
-          content: JSON.stringify({ answers, score: result.score, total: result.total }),
+          content: JSON.stringify({
+            answers,
+            score: result.score,
+            baseScore: result.score,
+            total: result.total,
+            hasOpenText: result.hasOpenText,
+            openTextCount: result.openTextCount,
+            questionScores: {}
+          }),
           grade: result.grade
         }
       });
@@ -532,7 +552,14 @@ router.post('/steps/:stepId/submit-form', authenticateToken, async (req: AuthReq
       return created;
     });
     await syncTaskDeliveryOnStepCompletion(step.taskId, req.user!.id);
-    res.status(201).json({ submission, score: result.score, total: result.total, grade: result.grade });
+    res.status(201).json({
+      submission,
+      score: result.score,
+      total: result.total,
+      grade: result.grade,
+      hasOpenText: result.hasOpenText,
+      openTextCount: result.openTextCount
+    });
   } catch (error) {
     console.error('Error al entregar examen estructurado:', error);
     res.status(500).json({ error: 'Error al entregar el examen.' });

@@ -47,23 +47,36 @@ interface ParsedExamData {
   answers: Record<string, string | number>;
   score?: number | null;
   total?: number | null;
+  hasOpenText?: boolean;
+  openTextCount?: number;
+  questionScores?: Record<string, number>;
 }
 
 const parseSavedExam = (content?: string | null): ParsedExamData | null => {
   if (!content) return null;
   try {
     const parsed = JSON.parse(content);
-    if (parsed.answers || typeof parsed.score === 'number') {
+    if (parsed.answers || typeof parsed.score === 'number' || parsed.hasOpenText) {
       return {
         answers: parsed.answers || {},
         score: typeof parsed.score === 'number' ? parsed.score : null,
-        total: typeof parsed.total === 'number' ? parsed.total : null
+        total: typeof parsed.total === 'number' ? parsed.total : null,
+        hasOpenText: Boolean(parsed.hasOpenText),
+        openTextCount: typeof parsed.openTextCount === 'number' ? parsed.openTextCount : 0,
+        questionScores: parsed.questionScores || {}
       };
     }
     return null;
   } catch {
     return null;
   }
+};
+
+const isSubmissionPending = (s: { materialType?: string; grade?: number | null; content?: string | null }) => {
+  if (s.grade !== null && s.grade !== undefined) return false;
+  if (s.materialType !== 'FORM') return true;
+  const exam = parseSavedExam(s.content);
+  return Boolean(exam?.hasOpenText || (exam?.openTextCount ?? 0) > 0);
 };
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -117,11 +130,14 @@ const GradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
 
   // Modal para revisar examen interactivo
   const [reviewingExam, setReviewingExam] = useState<{
+    subId?: string;
     title: string;
     questions?: any[];
     answers: Record<string, any>;
     score: number | null;
     total?: number | null;
+    feedback?: string | null;
+    questionScores?: Record<string, number>;
   } | null>(null);
 
   // Cargar datos trimestrales del curso
@@ -367,6 +383,34 @@ const GradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     }
   };
 
+  const handleSaveExamGradeAndFeedback = async (data: { grade: number; feedback: string; questionScores: Record<string, number> }) => {
+    if (!reviewingExam?.subId) return;
+    const token = localStorage.getItem('token');
+    const updatedFeedback = data.feedback ? data.feedback.trim() : null;
+    const res = await fetch(`${apiUrl}/api/assignments/submissions/${reviewingExam.subId}/grade`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        grade: data.grade,
+        feedback: updatedFeedback,
+        questionScores: data.questionScores
+      })
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Error al guardar la calificación.');
+    }
+
+    setSubmissions((prev) =>
+      prev.map((s) => (s.id === reviewingExam.subId ? { ...s, grade: data.grade, feedback: updatedFeedback } : s))
+    );
+    setReviewingExam(null);
+  };
+
   // Filtrado de entregas directas
   const filteredSubmissions = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
@@ -381,7 +425,7 @@ const GradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
       if (!matchesSearch) return false;
 
       if (submissionFilter === 'PENDING') {
-        return sub.materialType !== 'FORM' && (sub.grade === null || sub.grade === undefined);
+        return isSubmissionPending(sub);
       }
       if (submissionFilter === 'GRADED') {
         return sub.grade !== null && sub.grade !== undefined;
@@ -1143,8 +1187,8 @@ const GradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                           {sub.grade!.toFixed(1)} / 10
                         </span>
                       ) : (
-                        <span style={{ padding: '0.35rem 0.75rem', borderRadius: '16px', fontWeight: 600, fontSize: '0.78rem', background: '#fef7e8', color: '#8d5b12' }}>
-                          Pendiente
+                        <span style={{ padding: '0.35rem 0.75rem', borderRadius: '16px', fontWeight: 600, fontSize: '0.78rem', background: '#fef7e8', color: '#8d5b12', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                          ⏳ {examData?.openTextCount ? `${examData.openTextCount} ${examData.openTextCount === 1 ? 'pregunta por calificar' : 'preguntas por calificar'}` : 'Pendiente'}
                         </span>
                       )}
 
@@ -1153,17 +1197,26 @@ const GradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                           type="button"
                           onClick={() =>
                             setReviewingExam({
+                              subId: sub.id,
                               title: sub.assignmentTitle,
                               questions: sub.materialFormData?.questions || [],
                               answers: examData?.answers || {},
                               score: sub.grade,
-                              total: examData?.total
+                              total: examData?.total,
+                              feedback: sub.feedback,
+                              questionScores: examData?.questionScores
                             })
                           }
-                          className="btn-secondary"
-                          style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', borderRadius: '6px' }}
+                          className={isSubmissionPending(sub) ? "btn-primary" : "btn-secondary"}
+                          style={{
+                            padding: '0.35rem 0.75rem',
+                            fontSize: '0.8rem',
+                            borderRadius: '6px',
+                            background: isSubmissionPending(sub) ? '#d97706' : undefined,
+                            borderColor: isSubmissionPending(sub) ? '#b45309' : undefined
+                          }}
                         >
-                          Ver Examen
+                          {isSubmissionPending(sub) ? 'Corregir Examen' : 'Ver Examen'}
                         </button>
                       )}
 
@@ -1250,6 +1303,9 @@ const GradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
           score={reviewingExam.score}
           total={reviewingExam.total}
           audioMode="backend-proxy"
+          feedback={reviewingExam.feedback}
+          questionScores={reviewingExam.questionScores}
+          onSaveGradeAndFeedback={reviewingExam.subId ? handleSaveExamGradeAndFeedback : undefined}
           onClose={() => setReviewingExam(null)}
         />
       )}

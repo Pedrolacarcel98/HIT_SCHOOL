@@ -50,6 +50,29 @@ Lista de control para el seguimiento y resolucion de las tareas, bugs y peticion
   - **Descripcion:** Configurar una jerarquia de permisos administrativos donde unicamente el usuario con rol ADMIN (Laura) tenga permisos para crear clases y asignarlas al resto de profesores, mientras que los profesores gestionan su contenido sin crear aulas globales por su cuenta.
   - **Estado:** ⏳ **Pendiente de atacar.**
 
-- [ ] **6. Redacciones y Writings Sin Limite de Palabras**
-  - **Descripcion:** Clarificar y asegurar que las entregas de redaccion / writing se realicen en respuestas de texto libre sin limite restrictivo de palabras o mediante adjuntos multiformato (imagenes, documentos, audios).
-  - **Estado:** ⏳ **Pendiente de atacar.**
+- [x] **6. Redacciones, Writings y Preguntas de Texto Libre en Cuestionarios (`OPEN_TEXT`)**
+  - **Descripcion:** Soporte completo y genérico para preguntas de respuesta abierta/texto libre (`OPEN_TEXT`) en cualquier formulario o examen interactivo, permitiendo redactar sin límites de palabras ni caracteres y habilitando la corrección manual docente.
+  - **Solucion implementada:**
+    - **Form Builder (`FormBuilderModal.tsx`):**
+      - Nuevo tipo de pregunta: *"Texto Libre / Redacción"* (`OPEN_TEXT`) aplicable a cualquier cuestionario.
+      - Aviso claro y conciso: *"Nota asignada por profesor, no se autocorrige."*
+      - Ponderación de puntos configurable por pregunta.
+    - **Resolución del alumno (`FormPlayer.tsx`):**
+      - Campo de texto libre multilinea `<textarea>` sin límite de palabras ni caracteres.
+      - Autocorrección universal condicional: si el examen contiene $\ge$ 1 pregunta abierta, no se califica automáticamente con un 0% ni muestra fallo; se registra la entrega, se califica como *"Calificación Pendiente"* (`grade: null`), informando del número de preguntas pendientes de revisión.
+    - **Evaluación y Revisión Docente (`ExamReviewModal.tsx`):**
+      - Bloqueo estricto de preguntas tipo test u objetivas: mantienen su puntuación original inalterable.
+      - Calificación individual de preguntas abiertas con tarjeta destacada en ámbar (`⏳ Pendiente de calificar`) y selector de puntos entre 0 y el máximo de la pregunta.
+      - Recálculo dinámico en tiempo real de la puntuación acumulada y nota final sobre 10.
+      - Caja única de observaciones y feedback pedagógico general del examen.
+    - **Panel y Listados de Calificaciones (`TeacherGrades.tsx` & `GradesTab.tsx`):**
+      - Distintivo visual ámbar con conteo: `⏳ X preguntas por calificar`.
+      - Botón de acción destacado *"Corregir Examen"*.
+      - Inclusión automática en los contadores y filtros de tareas pendientes de revisión (`PENDING`).
+      - Arreglo de alineación y flex wrap en las tarjetas de examen y expediente.
+    - **Backend (`structuredTasks.ts` & `assignments.ts`):**
+      - Detección de `hasOpenText` y cálculo de `baseScore` objetivo en `gradeForm`.
+      - Si `openTextCount > 0`, la entrega se guarda con `grade: null`.
+      - Endpoint `POST /api/assignments/submissions/:subId/grade` enriquecido para recibir y persistir `questionScores`, sincronizando la entrega en la tarea estructurada.
+  - **Estado:** ✅ **Completado y Verificado.**
+
