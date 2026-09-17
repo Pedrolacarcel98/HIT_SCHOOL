@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
-import { Prisma, PrismaClient, SkillCategory } from '@prisma/client';
-import { authenticateToken, requireTeacher, AuthRequest } from '../middleware/auth';
+import { Prisma, PrismaClient, SkillCategory, Modality } from '@prisma/client';
+import { authenticateToken, requireTeacher, requireAdmin, AuthRequest } from '../middleware/auth';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -68,11 +68,30 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
     const role = req.user!.role;
 
     if (role === 'TEACHER' || role === 'ADMIN') {
-      const whereCondition = role === 'ADMIN' ? {} : { teacherId: userId };
+      const whereCondition: Prisma.CourseWhereInput = role === 'ADMIN'
+        ? {}
+        : {
+            OR: [
+              { modality: Modality.PRESENCIAL },
+              {
+                modality: Modality.ONLINE,
+                OR: [
+                  { teacherId: userId },
+                  { assignedTeachers: { some: { teacherId: userId } } }
+                ]
+              }
+            ]
+          };
       const courses = await prisma.course.findMany({
         where: whereCondition,
         include: {
           teacher: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } },
+          assignedTeachers: {
+            select: {
+              teacherId: true,
+              teacher: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } }
+            }
+          },
           enrollments: { select: { studentId: true } },
           structuredTasks: {
             where: { isTemplate: false },
@@ -120,6 +139,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
           modality: course.modality,
           teacherId: course.teacherId,
           teacher: course.teacher,
+          assignedTeachers: course.assignedTeachers,
           studentsCount,
           tasksCount: course.structuredTasks.length,
           pendingStudentsCount: pendingStudentsSet.size
@@ -188,14 +208,26 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
       where: { id: courseId },
       include: {
         teacher: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true, avatarUrl: true } } } },
+        assignedTeachers: {
+          select: {
+            id: true,
+            teacherId: true,
+            teacher: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } }
+          }
+        },
         enrollments: { select: { studentId: true } }
       }
     });
 
     if (!course) return res.status(404).json({ error: 'Clase no encontrada' });
 
-    if (role === 'TEACHER' && course.teacherId !== userId) {
-      return res.status(403).json({ error: 'No tienes acceso a esta clase' });
+    if (role === 'TEACHER') {
+      const isTitular = course.teacherId === userId;
+      const isAssigned = course.assignedTeachers.some(at => at.teacherId === userId);
+      const isPresencial = course.modality === 'PRESENCIAL';
+      if (!isPresencial && !isTitular && !isAssigned) {
+        return res.status(403).json({ error: 'No tienes acceso a esta clase' });
+      }
     }
 
     if (role === 'STUDENT' && !course.enrollments.some(e => e.studentId === userId)) {
@@ -221,8 +253,8 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
   }
 });
 
-// Crear un nuevo curso (solo profesores)
-router.post('/', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
+// Crear un nuevo curso (solo ADMIN)
+router.post('/', authenticateToken, requireAdmin, async (req: AuthRequest, res: Response) => {
   const { title, modality = 'PRESENCIAL' } = req.body;
   if (!title) return res.status(400).json({ error: 'El título es obligatorio' });
   if (!['PRESENCIAL', 'ONLINE', 'HIBRIDO'].includes(modality)) return res.status(400).json({ error: 'La modalidad no es válida' });
@@ -249,8 +281,11 @@ router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, r
   if (modality !== undefined && !['PRESENCIAL', 'ONLINE', 'HIBRIDO'].includes(modality)) return res.status(400).json({ error: 'La modalidad no es válida' });
 
   try {
+    const courseWhere = req.user!.role === 'ADMIN'
+      ? { id: courseId }
+      : { id: courseId, teacherId: req.user!.id };
     const course = await prisma.course.updateMany({
-      where: { id: courseId, teacherId: req.user!.id },
+      where: courseWhere,
       data: { title, ...(modality !== undefined ? { modality } : {}) }
     });
     if (course.count === 0) return res.status(404).json({ error: 'Clase no encontrada' });
@@ -260,13 +295,10 @@ router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, r
   }
 });
 
-router.delete('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
+router.delete('/:id', authenticateToken, requireAdmin, async (req: AuthRequest, res: Response) => {
   const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   try {
-    const courseWhere = req.user!.role === 'ADMIN'
-      ? { id: courseId }
-      : { id: courseId, teacherId: req.user!.id };
-    const course = await prisma.course.findFirst({ where: courseWhere });
+    const course = await prisma.course.findFirst({ where: { id: courseId } });
     if (!course) return res.status(404).json({ error: 'Clase no encontrada' });
     
     // Con ON DELETE CASCADE en la base de datos, el borrado del curso elimina en cascada
@@ -280,7 +312,7 @@ router.delete('/:id', authenticateToken, requireTeacher, async (req: AuthRequest
 });
 
 // Duplicar curso con sus tareas estructuradas (sin alumnos y con fechas reseteadas)
-router.post('/:id/duplicate', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
+router.post('/:id/duplicate', authenticateToken, requireAdmin, async (req: AuthRequest, res: Response) => {
   const sourceCourseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const { title, modality } = req.body;
 
@@ -403,8 +435,17 @@ const verifyCourseAccess = async (req: any, res: any, next: any) => {
   const userId = req.user!.id;
   
   if (req.user!.role === 'TEACHER') {
-    const course = await prisma.course.findUnique({ where: { id: courseId } });
-    if (course?.teacherId !== userId) return res.status(403).json({ error: 'No tienes acceso a este curso' });
+    const course = await prisma.course.findUnique({
+      where: { id: courseId },
+      include: { assignedTeachers: { select: { teacherId: true } } }
+    });
+    if (!course) return res.status(404).json({ error: 'Clase no encontrada' });
+    const isTitular = course.teacherId === userId;
+    const isAssigned = course.assignedTeachers.some(at => at.teacherId === userId);
+    const isPresencial = course.modality === 'PRESENCIAL';
+    if (!isPresencial && !isTitular && !isAssigned) {
+      return res.status(403).json({ error: 'No tienes acceso a este curso' });
+    }
   } else if (req.user!.role === 'PARENT') {
     const userEmail = (req.user as any)?.email || '';
     const requestedStudentId = req.query.studentId as string;
@@ -749,6 +790,86 @@ router.post('/:id/enroll', authenticateToken, requireTeacher, verifyCourseAccess
   } catch (error) {
     console.error('Error en /enroll:', error);
     res.status(500).json({ error: 'Error interno al matricular alumnos' });
+  }
+});
+
+// Listar profesores de la clase (titular y colaboradores asignados)
+router.get('/:id/teachers', authenticateToken, verifyCourseAccess, async (req: AuthRequest, res: Response) => {
+  const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  try {
+    const course = await prisma.course.findUnique({
+      where: { id: courseId },
+      include: {
+        teacher: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } },
+        assignedTeachers: {
+          select: {
+            id: true,
+            teacherId: true,
+            createdAt: true,
+            teacher: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } }
+          }
+        }
+      }
+    });
+    if (!course) return res.status(404).json({ error: 'Clase no encontrada' });
+
+    res.json({
+      titular: course.teacher,
+      assigned: course.assignedTeachers.map(at => at.teacher)
+    });
+  } catch (error) {
+    console.error('Error al obtener profesores de la clase:', error);
+    res.status(500).json({ error: 'Error al obtener profesores de la clase' });
+  }
+});
+
+// Asignar un profesor a una clase (ADMIN)
+router.post('/:id/teachers', authenticateToken, requireAdmin, async (req: AuthRequest, res: Response) => {
+  const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const { teacherId } = req.body;
+  if (!teacherId) return res.status(400).json({ error: 'El ID del profesor es obligatorio' });
+
+  try {
+    const teacher = await prisma.user.findFirst({
+      where: { id: teacherId, role: 'TEACHER', status: 'ACTIVE' }
+    });
+    if (!teacher) return res.status(404).json({ error: 'Profesor no encontrado o no está activo' });
+
+    const course = await prisma.course.findUnique({ where: { id: courseId } });
+    if (!course) return res.status(404).json({ error: 'Clase no encontrada' });
+
+    if (course.teacherId === teacherId) {
+      return res.status(400).json({ error: 'Este profesor ya es el titular de la clase.' });
+    }
+
+    const assignment = await prisma.courseTeacher.upsert({
+      where: {
+        courseId_teacherId: { courseId, teacherId }
+      },
+      create: { courseId, teacherId },
+      update: {}
+    });
+
+    res.status(201).json({ message: 'Profesor asignado a la clase con éxito', assignment });
+  } catch (error) {
+    console.error('Error asignando profesor a la clase:', error);
+    res.status(500).json({ error: 'Error al asignar profesor a la clase' });
+  }
+});
+
+// Desasignar un profesor de una clase (ADMIN)
+router.delete('/:id/teachers/:teacherId', authenticateToken, requireAdmin, async (req: AuthRequest, res: Response) => {
+  const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const teacherId = Array.isArray(req.params.teacherId) ? req.params.teacherId[0] : req.params.teacherId;
+
+  try {
+    await prisma.courseTeacher.deleteMany({
+      where: { courseId, teacherId }
+    });
+    res.json({ message: 'Profesor desasignado de la clase con éxito' });
+  } catch (error) {
+    console.error('Error desasignando profesor de la clase:', error);
+    res.status(500).json({ error: 'Error al desasignar profesor de la clase' });
   }
 });
 

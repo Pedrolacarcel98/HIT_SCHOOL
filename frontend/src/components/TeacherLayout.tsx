@@ -20,8 +20,13 @@ const TeacherLayout: React.FC = () => {
 
     if (role !== 'TEACHER' && role !== 'ADMIN') {
       navigate(role === 'PARENT' ? '/student/payments' : role === 'STUDENT' ? '/student' : '/');
+      return;
     }
-  }, [navigate]);
+
+    if (role !== 'ADMIN' && location.pathname === '/teacher/payments') {
+      navigate('/teacher');
+    }
+  }, [navigate, location.pathname]);
 
   // Cerrar menú móvil al cambiar de ruta
   useEffect(() => {
@@ -65,7 +70,7 @@ const TeacherLayout: React.FC = () => {
     { label: 'Gestión de Alumnos', path: '/teacher/students', icon: <Users size={20} />, iconColor: '#d14f72' },
     { label: 'Gestión Profesores', path: '/teacher/teachers', icon: <UserRoundCog size={20} />, iconColor: '#5369ad' },
     { label: 'Gestión Tutores', path: '/teacher/parents', icon: <Users size={20} />, iconColor: '#0f9f7a' },
-    { label: 'Control de Pagos', path: '/teacher/payments', icon: <CircleDollarSign size={20} />, iconColor: '#d14f72' },
+    ...(userRole === 'ADMIN' ? [{ label: 'Control de Pagos', path: '/teacher/payments', icon: <CircleDollarSign size={20} />, iconColor: '#d14f72' }] : []),
     { label: 'Chat Alumnos', path: '/teacher/chat', icon: <MessageCircle size={20} />, iconColor: '#12966b' },
   ];
 
@@ -108,8 +113,8 @@ const TeacherLayout: React.FC = () => {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ fontSize: '0.72rem', color: 'var(--primary)', fontWeight: '700', textTransform: 'uppercase', background: 'var(--primary-light)', padding: '0.2rem 0.5rem', borderRadius: '6px' }}>
-            Profesor
+          <span style={{ fontSize: '0.72rem', color: userRole === 'ADMIN' ? '#d97706' : 'var(--primary)', fontWeight: '700', textTransform: 'uppercase', background: userRole === 'ADMIN' ? '#fef3c7' : 'var(--primary-light)', padding: '0.2rem 0.5rem', borderRadius: '6px' }}>
+            {userRole === 'ADMIN' ? '👑 Directora' : 'Profesor'}
           </span>
         </div>
       </header>
@@ -143,8 +148,8 @@ const TeacherLayout: React.FC = () => {
               <img src="/logo.webp" alt="HitSchool" style={{ width: '36px', height: '36px', borderRadius: '8px' }} />
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--text)' }}>HitSchool</h3>
-                <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Panel Profesor
+                <span style={{ fontSize: '0.75rem', color: userRole === 'ADMIN' ? '#d97706' : 'var(--primary)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  {userRole === 'ADMIN' ? '👑 Panel Directora' : 'Panel Profesor'}
                 </span>
               </div>
             </div>
@@ -214,13 +219,15 @@ const TeacherLayout: React.FC = () => {
           {/* Sección de Usuario & Salir */}
           <div style={{ padding: '1rem', borderTop: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem' }}>
-              <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: userRole === 'ADMIN' ? '#d97706' : 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <GraduationCap size={18} />
               </div>
               <div style={{ flex: 1, overflow: 'hidden' }}>
-                <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: '600', color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Profesor</p>
+                <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: '600', color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {userRole === 'ADMIN' ? '👑 Directora' : '👨‍🏫 Profesor'}
+                </p>
                 <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {localStorage.getItem('userEmail') || 'profesor@hitschool.com'}
+                  {localStorage.getItem('userEmail') || 'usuario@hitschool.com'}
                 </p>
               </div>
             </div>

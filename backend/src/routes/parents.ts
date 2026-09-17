@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import { PrismaClient } from '@prisma/client';
-import { authenticateToken, requireTeacher } from '../middleware/auth';
+import { authenticateToken, requireTeacher, requireAdmin } from '../middleware/auth';
 import { sendAccountReactivationEmail, sendParentWelcomeEmail } from '../services/email';
 
 const router = Router();
@@ -26,7 +26,7 @@ router.get('/', authenticateToken, requireTeacher, async (_req, res) => {
   }
 });
 
-router.post('/', authenticateToken, requireTeacher, async (req, res) => {
+router.post('/', authenticateToken, requireAdmin, async (req, res) => {
   const { firstName, lastName, email, dni, phone, address } = req.body;
   if (!firstName?.trim() || !lastName?.trim() || !email?.trim()) return res.status(400).json({ error: 'Nombre, apellidos y correo son obligatorios.' });
   const temporaryPassword = `hit${Math.floor(1000 + Math.random() * 9000)}`;
@@ -54,7 +54,7 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
   }
 });
 
-router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
+router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
   const parentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const { firstName, lastName, email, dni, phone, address } = req.body;
   if (!firstName?.trim() || !lastName?.trim() || !email?.trim()) return res.status(400).json({ error: 'Nombre, apellidos y correo son obligatorios.' });
@@ -93,7 +93,7 @@ router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
   }
 });
 
-router.patch('/:id/status', authenticateToken, requireTeacher, async (req, res) => {
+router.patch('/:id/status', authenticateToken, requireAdmin, async (req, res) => {
   const parentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const status = req.body.status === 'ACTIVE' ? 'ACTIVE' : req.body.status === 'INACTIVE' ? 'INACTIVE' : null;
   if (!status) return res.status(400).json({ error: 'Estado no válido' });
@@ -114,7 +114,7 @@ router.patch('/:id/status', authenticateToken, requireTeacher, async (req, res) 
   }
 });
 
-router.delete('/:id', authenticateToken, requireTeacher, async (req, res) => {
+router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
   const parentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   try {
     const children = await prisma.user.count({ where: { parentId } });

@@ -119,6 +119,7 @@ const getImageAuthorizationValue = (profile?: Student['profile']): ImageAuthoriz
 
 const StudentsManagement: React.FC = () => {
   const navigate = useNavigate();
+  const userRole = localStorage.getItem('userRole');
   const [students, setStudents] = useState<Student[]>([]);
   const [parents, setParents] = useState<ParentData[]>([]);
   const [parentSearchTerm, setParentSearchTerm] = useState('');
@@ -664,13 +665,15 @@ const StudentsManagement: React.FC = () => {
           <button onClick={handleExportExcel} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: '#ecfdf5', color: '#047857', border: '1px solid #6ee7b7', padding: '0.65rem 1rem', borderRadius: '12px', fontSize: '0.875rem', fontWeight: 500, cursor: 'pointer', transition: 'background 0.2s ease' }}>
             <FileSpreadsheet size={17} /> Exportar a Excel
           </button>
-          <button
-            onClick={() => { resetCreateForm(); setShowCreateModal(true); }}
-            className="btn-primary"
-            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.25rem' }}
-          >
-            <UserPlus size={18} /> Nuevo Alumno
-          </button>
+          {userRole === 'ADMIN' && (
+            <button
+              onClick={() => { resetCreateForm(); setShowCreateModal(true); }}
+              className="btn-primary"
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.25rem' }}
+            >
+              <UserPlus size={18} /> Nuevo Alumno
+            </button>
+          )}
         </div>
       </div>
 
@@ -893,22 +896,24 @@ const StudentsManagement: React.FC = () => {
                           }}>
                             {isActive ? 'Alta' : 'Baja'}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => isActive ? handleBaja(s) : handleOpenAlta(s)}
-                            style={{
-                              padding: '0.3rem 0.55rem',
-                              borderRadius: '6px',
-                              border: `1px solid ${isActive ? '#fca5a5' : '#86efac'}`,
-                              background: isActive ? '#fff1f2' : '#f0fdf4',
-                              color: isActive ? '#b91c1c' : '#15803d',
-                              cursor: 'pointer',
-                              fontSize: '0.75rem',
-                              fontWeight: 600
-                            }}
-                          >
-                            {isActive ? 'Dar de baja' : 'Dar de alta'}
-                          </button>
+                          {userRole === 'ADMIN' && (
+                            <button
+                              type="button"
+                              onClick={() => isActive ? handleBaja(s) : handleOpenAlta(s)}
+                              style={{
+                                padding: '0.3rem 0.55rem',
+                                borderRadius: '6px',
+                                border: `1px solid ${isActive ? '#fca5a5' : '#86efac'}`,
+                                background: isActive ? '#fff1f2' : '#f0fdf4',
+                                color: isActive ? '#b91c1c' : '#15803d',
+                                cursor: 'pointer',
+                                fontSize: '0.75rem',
+                                fontWeight: 600
+                              }}
+                            >
+                              {isActive ? 'Dar de baja' : 'Dar de alta'}
+                            </button>
+                          )}
                         </div>
                       </td>
 
@@ -965,43 +970,47 @@ const StudentsManagement: React.FC = () => {
                             <Eye size={16} />
                           </button>
 
-                          <button
-                            onClick={() => handleStartEdit(s)}
-                            title="Editar ficha de alumno"
-                            style={{
-                              background: 'transparent',
-                              border: '1px solid var(--border)',
-                              borderRadius: '6px',
-                              padding: '0.4rem',
-                              cursor: 'pointer',
-                              color: 'var(--text-muted)',
-                              display: 'flex',
-                              alignItems: 'center'
-                            }}
-                            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--primary)'; e.currentTarget.style.borderColor = 'var(--primary)'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
-                          >
-                            <Edit2 size={16} />
-                          </button>
+                          {userRole === 'ADMIN' && (
+                            <>
+                              <button
+                                onClick={() => handleStartEdit(s)}
+                                title="Editar ficha de alumno"
+                                style={{
+                                  background: 'transparent',
+                                  border: '1px solid var(--border)',
+                                  borderRadius: '6px',
+                                  padding: '0.4rem',
+                                  cursor: 'pointer',
+                                  color: 'var(--text-muted)',
+                                  display: 'flex',
+                                  alignItems: 'center'
+                                }}
+                                onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--primary)'; e.currentTarget.style.borderColor = 'var(--primary)'; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
+                              >
+                                <Edit2 size={16} />
+                              </button>
 
-                          <button
-                            onClick={() => setDeletingStudent(s)}
-                            title="Eliminar alumno"
-                            style={{
-                              background: 'transparent',
-                              border: '1px solid var(--border)',
-                              borderRadius: '6px',
-                              padding: '0.4rem',
-                              cursor: 'pointer',
-                              color: 'var(--text-muted)',
-                              display: 'flex',
-                              alignItems: 'center'
-                            }}
-                            onMouseEnter={(e) => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.borderColor = '#ef4444'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                              <button
+                                onClick={() => setDeletingStudent(s)}
+                                title="Eliminar alumno"
+                                style={{
+                                  background: 'transparent',
+                                  border: '1px solid var(--border)',
+                                  borderRadius: '6px',
+                                  padding: '0.4rem',
+                                  cursor: 'pointer',
+                                  color: 'var(--text-muted)',
+                                  display: 'flex',
+                                  alignItems: 'center'
+                                }}
+                                onMouseEnter={(e) => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.borderColor = '#ef4444'; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1138,26 +1147,30 @@ const StudentsManagement: React.FC = () => {
               >
                 Cerrar
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const query = viewingStudent.profile?.firstName || viewingStudent.email;
-                  setViewingStudent(null);
-                  navigate(`/teacher/payments?student=${encodeURIComponent(query)}`);
-                }}
-                className="btn-secondary"
-                style={{ padding: '0.6rem 1.15rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.88rem' }}
-              >
-                <FileText size={16} /> Facturas y Pagos
-              </button>
-              <button
-                type="button"
-                onClick={() => { const s = viewingStudent; setViewingStudent(null); handleStartEdit(s); }}
-                className="btn-primary"
-                style={{ padding: '0.6rem 1.25rem' }}
-              >
-                Editar Ficha
-              </button>
+              {userRole === 'ADMIN' && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const query = viewingStudent.profile?.firstName || viewingStudent.email;
+                      setViewingStudent(null);
+                      navigate(`/teacher/payments?student=${encodeURIComponent(query)}`);
+                    }}
+                    className="btn-secondary"
+                    style={{ padding: '0.6rem 1.15rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.88rem' }}
+                  >
+                    <FileText size={16} /> Facturas y Pagos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { const s = viewingStudent; setViewingStudent(null); handleStartEdit(s); }}
+                    className="btn-primary"
+                    style={{ padding: '0.6rem 1.25rem' }}
+                  >
+                    Editar Ficha
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

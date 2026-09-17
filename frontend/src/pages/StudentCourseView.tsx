@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, MessageSquare, BookOpen, CheckCircle2, Award } from 'lucide-react';
+import { ArrowLeft, MessageSquare, BookOpen, CheckCircle2, Award, Users } from 'lucide-react';
 import StudentStreamTab from '../components/StudentStreamTab';
 import StudentClassworkTab from '../components/StudentClassworkTab';
 import StudentGradesTab from '../components/StudentGradesTab';
+import StudentPeopleTab from '../components/StudentPeopleTab';
 import { useParent } from '../context/ParentContext';
 
-type CourseTab = 'stream' | 'classwork' | 'completed' | 'grades';
+type CourseTab = 'stream' | 'classwork' | 'completed' | 'grades' | 'people';
 
 const StudentCourseView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -14,7 +15,7 @@ const StudentCourseView: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { selectedStudentId } = useParent();
 
-  const validTabs: CourseTab[] = ['stream', 'classwork', 'completed', 'grades'];
+  const validTabs: CourseTab[] = ['stream', 'classwork', 'completed', 'grades', 'people'];
   const paramTab = searchParams.get('tab') as CourseTab | null;
   const savedTab = id ? sessionStorage.getItem(`hit_student_course_tab_${id}`) as CourseTab | null : null;
   const initialTab: CourseTab = 
@@ -58,24 +59,26 @@ const StudentCourseView: React.FC = () => {
         });
         if (res.ok) {
           const courses = await res.json();
-          const currentCourse = courses.find((c: any) => c.id === id);
-          if (currentCourse) {
-            setCourse(currentCourse);
-          } else {
-            navigate('/student/courses');
-          }
+          const current = courses.find((c: any) => c.id === id);
+          if (current) setCourse(current);
         }
       } catch (err) {
-        console.error(err);
+        console.error('Error al obtener datos del curso', err);
       }
     };
     fetchCourseDetails();
-  }, [id, navigate, selectedStudentId]);
+  }, [id, selectedStudentId]);
 
-  if (!course) return <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>Cargando aula...</div>;
+  if (!course) {
+    return (
+      <div className="page-container" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
+        <p style={{ color: 'var(--text-muted)' }}>Cargando curso...</p>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#e0f2fe' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
       {/* Navbar Superior */}
       <nav style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, zIndex: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1.5rem', borderBottom: '1px solid var(--border)', gap: '1rem', flexWrap: 'wrap' }}>
@@ -99,6 +102,7 @@ const StudentCourseView: React.FC = () => {
           <TabButton active={activeTab === 'classwork'} onClick={() => setActiveTab('classwork')} icon={<BookOpen size={18}/>} label="Tareas de clase" />
           <TabButton active={activeTab === 'completed'} onClick={() => setActiveTab('completed')} icon={<CheckCircle2 size={18}/>} label="Tareas completadas" />
           <TabButton active={activeTab === 'grades'} onClick={() => setActiveTab('grades')} icon={<Award size={18}/>} label="Mis Calificaciones" />
+          <TabButton active={activeTab === 'people'} onClick={() => setActiveTab('people')} icon={<Users size={18}/>} label="Compañeros" />
         </div>
       </nav>
 
@@ -108,6 +112,7 @@ const StudentCourseView: React.FC = () => {
         {activeTab === 'classwork' && <StudentClassworkTab courseId={id!} viewMode="PENDING" />}
         {activeTab === 'completed' && <StudentClassworkTab courseId={id!} viewMode="COMPLETED" />}
         {activeTab === 'grades' && <StudentGradesTab courseId={id!} />}
+        {activeTab === 'people' && <StudentPeopleTab courseId={id!} />}
       </main>
     </div>
   );

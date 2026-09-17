@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { PaymentState, PrismaClient } from '@prisma/client';
-import { authenticateToken, requireTeacher, AuthRequest } from '../middleware/auth';
+import { authenticateToken, requireTeacher, requireAdmin, AuthRequest } from '../middleware/auth';
 import {
   DEFAULT_VISIBLE_MONTH_COUNT,
   ensureStudentPaymentScheduleById,
@@ -168,7 +168,7 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res) => {
   }
 });
 
-router.get('/', authenticateToken, requireTeacher, async (req, res) => {
+router.get('/', authenticateToken, requireAdmin, async (req, res) => {
   const visibleMonths = parseVisibleMonthCount(getQueryString(req.query.months));
   const parsed = parseMonthYear(getQueryString(req.query.month), getQueryString(req.query.year));
 
@@ -268,7 +268,7 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
   }
 });
 
-router.put('/:studentId', authenticateToken, requireTeacher, async (req: AuthRequest, res) => {
+router.put('/:studentId', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
   const studentId = Array.isArray(req.params.studentId) ? req.params.studentId[0] : req.params.studentId;
   const { isPaid, month, year } = req.body;
 

@@ -17,14 +17,25 @@ router.get('/teacher', authenticateToken, requireTeacher, async (req: AuthReques
     const isTeacher = req.user?.role === 'TEACHER';
     const teacherId = req.user?.id;
 
-    const courseWhere = isTeacher ? { teacherId } : {};
+    const courseWhere: any = isTeacher ? {
+      OR: [
+        { modality: 'PRESENCIAL' },
+        {
+          modality: 'ONLINE',
+          OR: [
+            { teacherId },
+            { assignedTeachers: { some: { teacherId } } }
+          ]
+        }
+      ]
+    } : {};
     const activeCourses = await prisma.course.count({ where: courseWhere });
 
     const activeStudents = isTeacher ? await prisma.user.count({
       where: {
         role: 'STUDENT',
         status: 'ACTIVE',
-        enrollments: { some: { course: { teacherId } } }
+        enrollments: { some: { course: courseWhere } }
       }
     }) : await prisma.user.count({
       where: { role: 'STUDENT', status: 'ACTIVE' }
@@ -34,7 +45,12 @@ router.get('/teacher', authenticateToken, requireTeacher, async (req: AuthReques
       grade: null,
       content: { not: null },
       assignment: {
-        ...(isTeacher ? { OR: [{ teacherId }, { course: { teacherId } }] } : {}),
+        ...(isTeacher ? {
+          OR: [
+            { teacherId },
+            { course: courseWhere }
+          ]
+        } : {}),
         NOT: {
           material: {
             type: 'FORM'
@@ -51,8 +67,8 @@ router.get('/teacher', authenticateToken, requireTeacher, async (req: AuthReques
       where: pendingSubmissionWhere
     });
 
-    // Overdue payments roughly (isPaid false, dueDate in past)
-    const overduePayments = await prisma.paymentStatus.count({
+    // Overdue payments is exclusive to ADMIN; teachers receive 0
+    const overduePayments = isTeacher ? 0 : await prisma.paymentStatus.count({
       where: {
         isPaid: false,
         dueDate: {
@@ -60,6 +76,8 @@ router.get('/teacher', authenticateToken, requireTeacher, async (req: AuthReques
         }
       }
     });
+
+    const activeMaterials = await prisma.material.count();
 
     const latestSubmissions = await prisma.submission.findMany({
       where: pendingSubmissionWhere,
@@ -80,6 +98,7 @@ router.get('/teacher', authenticateToken, requireTeacher, async (req: AuthReques
       activeCourses,
       unscoredSubmissions,
       overduePayments,
+      activeMaterials,
       latestSubmissions: latestSubmissions.map(sub => ({
         id: sub.id,
         assignmentId: sub.assignmentId,

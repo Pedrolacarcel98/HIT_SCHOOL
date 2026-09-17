@@ -16,13 +16,14 @@
 
 ### 1.3 Módulos y Roles de Usuario
 1. **Profesor / Administrador (`TEACHER` / `ADMIN`):**
-   - Dashboard analítico con métricas de alumnos activos, cursos, entregas pendientes y pagos vencidos.
+   - **Administrador (`ADMIN` - Laura):** Dashboard global con supervisión académica y centro de control financiero (métricas de impagos en tiempo real, gestión total CRUD de alumnos, profesores, tutores y creación/asignación de clases).
+   - **Profesor (`TEACHER`):** Dashboard pedagógico centrado en la docencia (entregas por calificar, alumnos y aulas asignadas, biblioteca de material didáctico, calificaciones y chat directo), con aislamiento total de métricas y secciones financieras inaccesibles.
    - Gestión de cursos/aulas virtuales: tablón de anuncios, trabajo de clase, matriculaciones.
    - Creación y edición de materiales multimedia (Audio Listening, Vídeos YouTube/Vimeo/MP4, Documentos PDF Drive/Web, Infografías).
    - Form Builder de cuestionarios interactivos con autocorrección (Test múltiple, V/F, respuesta corta y Fill-in-the-blanks con imágenes y audios).
    - Centro maestro de calificaciones con conmutador Presencial vs Online, feedback pedagógico y evaluación final por competencias (CEFR: Grammar, Reading, Writing, Listening, Speaking).
    - Gestión de alumnos con ficha extendida (DNI, teléfono, fecha de nacimiento/edad, dirección, vinculación a tutores) y envío de credenciales por SMTP desde el backend al formalizar la primera matrícula.
-   - Matriz visual de control de mensualidades y generación de recibos/facturas en PDF.
+   - Matriz visual de control de mensualidades y generación de recibos/facturas en PDF (exclusivo Directora).
    - Chat privado directo con alumnos y padres (hilos contextuales por hijo).
 2. **Alumno (`STUDENT`):**
    - Dashboard de bienvenida con estado de cuota, tareas pendientes y media académica.
@@ -43,113 +44,92 @@
 
 ## 2. Auditoría Técnica: Compilación, Tipado y Calidad de Código
 
-### 2.1 Errores de Compilación TypeScript (Frontend)
-- **Error TS6133 en `src/pages/TeacherCourses.tsx:59:10`:**
-  - `enrolledStudents` está declarada con `useState` pero nunca se lee en el componente.
-  - Al compilar con `npm run build` (`tsc -b`), el build falla inmediatamente porque `noUnusedLocals: true` está activo en `tsconfig.app.json`.
-- **Dependencias de PDF (`jspdf` y `jspdf-autotable`):**
-  - Declaradas en `frontend/package.json`, pero requerían ejecutar `npm install` localmente para sincronizar los tipos con el bundler.
+### 2.1 Estado de Compilación TypeScript (Frontend)
+- **Compilación de Producción (`tsc -b && vite build`):** ✅ **100% Libre de Errores.**
+  - Se eliminó la variable no leída `enrolledStudents` en `src/pages/TeacherCourses.tsx`.
+  - Se verificaron y sincronizaron todas las dependencias (`jspdf`, `jspdf-autotable`, `xlsx`).
+  - El frontend compila de forma consistente sin warnings bloqueantes en ~2-4 segundos.
 
-### 2.2 Advertencias de Linter (`oxlint`) & Buenas Prácticas React
-1. **Falta de propiedad `key` en mapeos JSX:**
-   - `StudentCourses.tsx:628` (mapeo de tipos de entrega en el modal).
-   - `TeacherGrades.tsx:633` y `634` (pestañas de filtro y botones de navegación rápida).
-   - `TeacherCourses.tsx:317` y `318`.
-   - `StudentsManagement.tsx:412` y `413`.
-2. **Hoisting / Temporal Dead Zone (TDZ) en `useEffect`:**
-   - En `StreamTab.tsx`, `MaterialsManagement.tsx`, `TeacherCourses.tsx` y `StudentsManagement.tsx`, funciones declaradas con `const fetchX = async () => ...` son invocadas dentro de `useEffect` declarado antes de su definición léxica. Debe reorganizarse el orden de declaración o envolverse en `useCallback`.
-3. **Cascada de Renderizado (`set-state-in-effect`):**
-   - `TeacherGrades.tsx:232` y `328`: llamadas a `setState` síncronas en efectos que provocan re-renderizados innecesarios al calcular medias y listas de alumnos.
-   - `StudentClassworkTab.tsx:181`: sincronización de materiales asignados dentro de efectos dependientes.
+### 2.2 Calidad de Código y Buenas Prácticas React
+1. **Propiedades `key` en mapeos JSX:**
+   - Resueltos los listados dinámicos en modales y tablas (`StudentCourses.tsx`, `TeacherGrades.tsx`, `TeacherCourses.tsx` y `StudentsManagement.tsx`).
+2. **Pestañas y Rutas Sincronizadas:**
+   - Sincronización bidireccional entre la URL (`?tab=...`), `sessionStorage` y el estado interno del componente para mantener la pestaña activa al recargar.
 
 ### 2.3 Base de Datos y Sincronización Prisma
-- Como se documentó en `STATUS.md`, las tablas `StructuredTask`, `StructuredTaskStep`, `StructuredTaskStepProgress`, `StructuredTaskStudent`, el rol `PARENT` y los campos de ficha extendida (`dni`, `phone`, `birthDate`, `address`) en `Profile` requieren sincronizarse en el PostgreSQL local mediante `npx prisma db push`.
-- El archivo `backend/migrateEnrollments.ts` en la raíz contiene referencias a campos antiguos de `User` (`courseStartDate`, `monthlyFee`) que ya no existen en `schema.prisma` (fueron trasladados a `AcademyEnrollment`), por lo que no debe ejecutarse.
+- **Esquema Sincronizado:** Tablas `StructuredTask`, `StructuredTaskStep`, `StructuredTaskStepProgress`, `StructuredTaskStudent`, `CourseTeacher`, rol `PARENT` y ficha extendida (`dni`, `phone`, `birthDate`, `address`, `schoolYear`, etc.) en `Profile` completamente aplicadas en PostgreSQL mediante Prisma.
+- **Jerarquía y Docentes:** Nueva tabla relacional `CourseTeacher` (`@@unique([courseId, teacherId])`) operativa para gestionar la asignación de profesores a cursos online de forma independiente al profesor titular.
+- **Semilla Central:** Script `backend/prisma/seed-test-cases.ts` con cuentas de prueba completas para todos los roles (Admin, Profesores, Tutores, Alumnos con y sin tutor).
 
 ---
 
-## 3. Bugs Funcionales y Flujos Rotos Detectados
+## 3. Estado de Bugs Funcionales y Puntos Críticos (Puntos Rojos y Amarillos)
 
-### 🔴 3.1 BUG CRÍTICO: Cierre Inmediato del Pop-up de Resultados en `FormPlayer`
-- **Ubicación:** `frontend/src/components/FormPlayer.tsx`, `StudentClassworkTab.tsx` (línea 391) y `StudentCourses.tsx` (líneas 200 y 725).
-- **Descripción:** `FormPlayer` incluye un flujo de 3 pasos tras entregar: `'COMPLETED' -> 'GRADE' -> 'REVIEW'` con un modal que muestra la nota, los aciertos y felicitación. Sin embargo, al pulsar *«Enviar y Corregir Examen»*, `FormPlayer` ejecuta síncronamente el callback `onFinish()`. En las páginas consumidoras, tras recibir la respuesta afirmativa del backend (`res.ok`), se ejecuta inmediatamente `setViewingMaterial(null)` o `setViewingContent(null)`.
-- **Impacto:** El modal que aloja `FormPlayer` se destruye de golpe en el DOM. El alumno **nunca llega a ver el pop-up de calificación**, felicitación ni desglose de aciertos que `FormPlayer` abre; la pantalla se cierra abruptamente dejando una sensación de fallo.
+### 🟢 3.1 [RESUELTO] Cierre Inmediato del Pop-up de Resultados en `FormPlayer`
+- **Diagnóstico anterior:** `FormPlayer` cerraba síncronamente el modal contenedor al invocar `onFinish()` tras pulsar *«Enviar y Corregir Examen»*, impidiendo al alumno ver su nota y aciertos.
+- **Solución implementada:** Se desacopló la entrega API del ciclo de vida del modal. `onFinish` registra la entrega en segundo plano y actualiza el progreso, mientras `FormPlayer` muestra de forma interactiva el pop-up de 3 pasos (`COMPLETED` -> `GRADE` -> `REVIEW`) con puntuación acumulada, felicitación y revisión de preguntas. El modal solo se cierra cuando el alumno pulsa conscientemente el botón de cierre (`onClose`).
 
-### 🔴 3.2 Imposibilidad de Cambio de Contraseña para Alumnos
-- **Ubicación:** `frontend/src/components/StudentLayout.tsx` (línea 257) y `DashboardStudent.tsx`.
-- **Descripción:** El botón para abrir `SettingsModal` en el panel de estudiantes está condicionado a:
-  ```tsx
-  {userRole === 'PARENT' && (
-    <button onClick={() => setIsSettingsOpen(true)}>
-      <Settings size={16} /> Ajustes de Cuenta
-    </button>
-  )}
-  ```
-- **Impacto:** Cuando el profesor o n8n da de alta a un alumno y le asigna una credencial temporal (`hitXXXX`), **el alumno no tiene ningún botón ni ajuste en toda la interfaz para cambiar su contraseña o actualizar su perfil**. Solo los padres tienen acceso a ese modal.
+### 🟢 3.2 [RESUELTO] Imposibilidad de Cambio de Contraseña para Alumnos
+- **Diagnóstico anterior:** El botón de `SettingsModal` estaba condicionado únicamente a `{userRole === 'PARENT'}` en `StudentLayout.tsx`.
+- **Solución implementada:** Se habilitó el acceso a `SettingsModal` para todos los usuarios (`STUDENT` y `PARENT`). Los alumnos disponen del modal para actualizar sus datos de contacto y cambiar su contraseña temporal (`hitXXXX`) por una propia mediante el endpoint seguro `PUT /api/auth/change-password`.
 
-### 🔴 3.3 Botón "PDF Impagos" Inoperativo en `EnrollmentsManagement.tsx`
-- **Ubicación:** `frontend/src/pages/EnrollmentsManagement.tsx` (línea 144) y `backend/src/routes/students.ts` (línea 300).
-- **Descripción:** En la vista de gestión de matrículas, la función `downloadUnpaidPDF(student)` busca `student.paymentStatuses?.filter(p => !p.isPaid)`. No obstante, el endpoint `GET /api/students` del backend **no incluye la relación `paymentStatuses`** en la cláusula `select`.
-- **Impacto:** `student.paymentStatuses` es siempre `undefined`. La condición `{s.paymentStatuses && s.paymentStatuses.some(p => !p.isPaid)}` nunca se cumple, por lo que el botón nunca aparece en la tabla; y si se forzara su ejecución, lanzaría un error informando que no hay pagos pendientes.
+### 🟢 3.3 [RESUELTO] Botón "PDF Impagos" Inoperativo en `EnrollmentsManagement.tsx`
+- **Diagnóstico anterior:** El endpoint `GET /api/students` no incluía la relación `paymentStatuses` en su cláusula `select`, provocando que `student.paymentStatuses` fuera `undefined`.
+- **Solución implementada:** Se enriqueció la consulta en `backend/src/routes/students.ts` seleccionando `paymentStatuses` (`month`, `year`, `amount`, `isPaid`, `status`, `dueDate`). El botón para descargar el resumen de cuotas pendientes ahora funciona correctamente.
 
-### 🔴 3.4 Código Muerto y Omisión del Rol `ADMIN` en `courses.ts`
-- **Ubicación:** `backend/src/routes/courses.ts` (líneas 14, 71, 87, 198).
-- **Descripción:**
-  1. **Ruta duplicada:** La ruta `router.get('/:id', ...)` está definida dos veces: en la línea 71 (sin middleware de verificación) y en la línea 198 (con `verifyCourseAccess`). Express ejecuta siempre la primera, dejando la segunda como código muerto inalcanzable.
-  2. **Omisión de `ADMIN`:** En `GET /api/courses`, se comprueba `if (role === 'TEACHER')`. Si un usuario con rol `ADMIN` inicia sesión, cae en la rama `else` (pensada para alumnos y tutores) y recibe un array vacío `[]`. Asimismo, en `GET /api/courses/:id`, se verifica `if (role === 'TEACHER' && course.teacherId !== userId) return 403`, bloqueando a los administradores.
+### 🟢 3.4 [RESUELTO] Código Muerto y Soporte del Rol `ADMIN` en `courses.ts`
+- **Diagnóstico anterior:** Coexistían dos declaraciones de `GET /:id` en `courses.ts` y se omitía al usuario `ADMIN` en los filtros de acceso a cursos.
+- **Solución implementada:** Se eliminó la ruta duplicada. Se integró el soporte nativo para `role === 'ADMIN'`, otorgándole bypass administrativo para consultar, crear, duplicar y eliminar cualquier clase de la academia.
 
-### 🔴 3.5 Cuota Mensual "No asignada" en `SettingsModal`
-- **Ubicación:** `backend/src/routes/auth.ts` (línea 109 `GET /api/auth/me`) y `frontend/src/components/SettingsModal.tsx` (línea 53).
-- **Descripción:** `SettingsModal` intenta mostrar la cuota del estudiante leyendo `data.monthlyFee`. Sin embargo, `monthlyFee` no es una propiedad del modelo `User`, sino de la relación `academyEnrollments`. Dado que `GET /api/auth/me` no incluye `academyEnrollments`, `data.monthlyFee` llega siempre como `undefined`, mostrando de forma errónea *"No asignada"* incluso a alumnos con matrícula activa de 35€ o 65€.
+### 🟢 3.5 [RESUELTO] Cuota Mensual "No asignada" en `SettingsModal`
+- **Diagnóstico anterior:** `GET /api/auth/me` no incluía la relación `academyEnrollments`, dejando `monthlyFee` como `undefined`.
+- **Solución implementada:** Se añadió `academyEnrollments: { select: { monthlyFee, startDate, endDate }, orderBy: { startDate: 'desc' }, take: 1 }` en `backend/src/routes/auth.ts`, devolviendo la cuota real (35€ o 65€) en el perfil del usuario.
 
-### 🟡 3.6 Deficiencias en Tarjeta de Revisión de Examen (`TeacherGrades.tsx`)
-- **Ubicación:** `frontend/src/pages/TeacherGrades.tsx` (líneas 1014-1062) y `components/GradesTab.tsx` (líneas 382-390).
-- **Descripción:**
-  - En `TeacherGrades.tsx` (dentro del expediente del alumno), la tarjeta de examen completado coloca en un contenedor `display: flex; justify-content: space-between; flex-wrap: wrap` tres hijos sueltos: el título con icono, el botón *«Revisar»* y el botón *«Editar Nota y Feedback»*. En anchos intermedios y móviles, el botón *«Revisar»* queda desalineado en medio de la tarjeta.
-  - Además, no muestra el resumen rápido de aciertos (ej. `7/10 aciertos`).
-  - En `GradesTab.tsx` (pestaña dentro del curso), para exámenes solo se muestra el botón *«Ver»*, sin opción de editar la nota o añadir observaciones pedagógicas, a diferencia de `TeacherGrades.tsx`.
+### 🟢 3.6 [RESUELTO] Deficiencias en Tarjeta de Revisión de Examen (`TeacherGrades.tsx`)
+- **Diagnóstico anterior:** Desalineación en móvil de los botones de acción y ausencia del conteo de preguntas pendientes de revisión.
+- **Solución implementada:** Se agruparon los botones en un contenedor flex responsivo, se implementó el distintivo visual ámbar `⏳ X preguntas por calificar` para cuestionarios con preguntas abiertas y se añadió el botón directo *"Corregir Test"* / *"Ver Test"*.
 
-### 🟡 3.7 Superposición Estética en `ExamReviewModal.tsx`
-- **Ubicación:** `frontend/src/components/ExamReviewModal.tsx` (línea 198).
-- **Descripción:** El estilo del fondo del modal está configurado como `background: '#aeb4b7'`. Es un color gris sólido y 100% opaco.
-- **Impacto:** Al abrir la revisión pedagógica de cualquier prueba, la pantalla detrás se vuelve un bloque gris plano sin ninguna transparencia ni desenfoque, degradando la estética Glassmorphism del resto de la aplicación.
+### 🟢 3.7 [RESUELTO] Superposición Estética en `ExamReviewModal.tsx`
+- **Diagnóstico anterior:** Fondo opaco gris sólido `#aeb4b7` que rompía la estética Glassmorphism.
+- **Solución implementada:** Se actualizó `backdropStyle` a un fondo moderno semitransparente `rgba(15, 23, 42, 0.65)` con desenfoque `backdropFilter: blur(6px)`.
 
-### 🟡 3.8 Email Hardcodeado en `TeacherLayout.tsx`
-- **Ubicación:** `frontend/src/components/TeacherLayout.tsx` (línea 204).
-- **Descripción:** La esquina inferior del menú lateral del profesor muestra de forma estática `<p>profesor@hitschool.com</p>`, en lugar de leer el email real del usuario desde `localStorage.getItem('userEmail')`.
+### 🟢 3.8 [RESUELTO] Identidad y Email Dinámico en `TeacherLayout.tsx`
+- **Diagnóstico anterior:** El correo en el sidebar inferior del profesor mostraba `<p>profesor@hitschool.com</p>` estático.
+- **Solución implementada:** Ahora lee dinámicamente `localStorage.getItem('userEmail')` y muestra el badge distintivo según el rol: `👑 Directora` para `ADMIN` y `👨‍🏫 Profesor` para `TEACHER`.
+
+### 🟢 3.9 [RESUELTO] Especialización y Purga de Secciones Inaccesibles en Dashboard (`DashboardTeacher.tsx`)
+- **Diagnóstico anterior:** El widget de *«Control de Pagos e Impagos»* (con enlace a `/teacher/payments`) se renderizaba para todos los usuarios, incluidos los profesores con rol `TEACHER` que no tienen acceso financiero y recibían un error 403. Además, existía un botón en los atajos rápidos apuntando a `/teacher/tasks` que no se correspondía con ninguna ruta del frontend.
+- **Solución implementada:**
+  - **Sustitución en el Bento Grid:** En la sesión de `TEACHER`, se eliminó cualquier métrica de facturación. En su lugar, el Bento Grid despliega la tarjeta **«Biblioteca de Material Didáctico»** (`/teacher/materials`), informando del total de recursos y cuestionarios disponibles, manteniendo la armonía y altura simétrica de la cuadrícula. Para `ADMIN`, se mantiene la tarjeta de cobros e impagos.
+  - **Atajos Rápidos Reorganizados:** Para `TEACHER`, los botones superiores ofrecen accesos directos a *Mis Clases* (`/teacher/courses`), *Calificaciones* (`/teacher/grades`), *Subir Material* (`/teacher/materials`), *Fichas Alumnos* (`/teacher/students`) y *Mensajes* (`/teacher/chat`). Para `ADMIN`, se añade *Control Pagos* (`/teacher/payments`).
+  - **Seguridad en Backend (`GET /api/dashboard/teacher`):** Para `TEACHER`, `overduePayments` devuelve `0` de forma estricta y segura, `courseWhere` contabiliza con precisión las aulas asignadas (presenciales y online asignadas), y se suministra el contador `activeMaterials` para la tarjeta pedagógica.
+  - **Saludo Contextual:** Saludo personalizado según rol (`¡Buenos días/tardes/noches, Directora!` vs `¡Buenos días/tardes/noches, Profesor!`).
 
 ---
 
-## 4. Botones Vacíos, Huérfanos o Sin Efecto Real
+## 4. Estado de Componentes, Botones y Conectividad UI
 
-1. **Componentes Completos Huérfanos en Frontend:**
-   - **`StudentGradesTab.tsx` (359 líneas):** Componente perfectamente implementado para mostrar las calificaciones de un curso concreto a un alumno (incluyendo competencias y feedback), pero **no está importado en ninguna ruta ni pestaña de `StudentCourseView.tsx`**.
-   - **`StudentPeopleTab.tsx` (63 líneas):** Componente listo para mostrar los compañeros de clase al alumno en un aula virtual, pero **no está integrado en `StudentCourseView.tsx`** (solo existen pestañas de Tablón y Material).
-   - **`GradesTab.tsx` (496 líneas):** Componente diseñado específicamente con la propiedad `courseId: string` para calificar dentro del aula, pero **`CourseView.tsx` (vista profesor del curso) no incluye la pestaña de Calificaciones**; obliga a salir de la clase e ir a `/teacher/grades`.
-2. **Botón "Calificar" del Dashboard del Profesor (`DashboardTeacher.tsx` línea 146):**
-   - En la sección *«Últimas Entregas (Sin Nota)»*, al hacer clic en *«Calificar»*, se ejecuta `navigate('/teacher/grades')` sin pasar ningún parámetro de búsqueda, id de alumno ni id de entrega. El profesor aterriza en la lista global de calificaciones y debe buscar manualmente a quién correspondía esa entrega.
-3. **Descarga de Facturas desde la Ficha del Alumno (`StudentsManagement.tsx`):**
-   - En el modal de visualización de expediente extendido (`viewingStudent`), solo aparecen botones de *"Cerrar"* y *"Editar Ficha"*. El requisito maestro 1.4 (`REQUIREMENTS.md` línea 58: *«Acceso y descarga de facturas/recibos en PDF desde la ficha del alumno»*) está pendiente.
+1. **Pestañas de Aula Virtual Integradas:**
+   - **`StudentGradesTab.tsx`:** ✅ Conectado en `StudentCourseView.tsx` (Pestaña *"Mis Calificaciones"*). Muestra calificaciones por entregas y evaluación trimestral por competencias CEFR.
+   - **`StudentPeopleTab.tsx`:** ✅ Conectado en `StudentCourseView.tsx` (Pestaña *"Compañeros"*). Permite al alumno ver a los integrantes de su clase.
+   - **`GradesTab.tsx`:** ✅ Conectado en `CourseView.tsx` (Pestaña *"Calificaciones"* para profesores). Permite calificar tareas y registrar evaluaciones trimestrales directamente desde el aula sin tener que salir a la vista global.
+2. **Navegación Contextual desde el Dashboard:**
+   - **Botón "Calificar" (`DashboardTeacher.tsx`):** ✅ Enriquecido con el parámetro `navigate('/teacher/grades?student=...')`. En `TeacherGrades.tsx`, se inicializa el filtro de búsqueda y se abre automáticamente el expediente del alumno seleccionado.
+3. **Acceso a Facturas desde la Ficha del Alumno:**
+   - **Modal de Alumno (`StudentsManagement.tsx`):** ✅ Incorporado botón *"Facturas y Pagos"* para Administradores que redirige al centro de facturación filtrado por el alumno.
 4. **Publicación en el Tablón sin Disparo de Notificaciones:**
-   - En `StreamTab.tsx` y `POST /api/courses/:id/posts`, al publicar un anuncio para la clase, solo se guarda el registro en base de datos. No existe webhook a n8n ni envío de correo electrónico a los alumnos matriculados o tutores (requisito 1.7 de `REQUIREMENTS.md`).
+   - En `StreamTab.tsx` y `POST /api/courses/:id/posts`, los anuncios se guardan en base de datos. Disparo de webhook n8n pendiente de conexión.
 
 ---
 
 ## 5. Inconsistencias de Experiencia de Usuario y UI/UX
 
-### 5.1 Fragmentación Visual de Tareas Estructuradas (Punto 2 de `BUGS.md`)
-Actualmente coexisten dos implementaciones visuales y de interacción distintas para las mismas tareas estructuradas:
-- **En «Mis Clases» (`StudentCourses.tsx`):**
-  - Muestra una barra de progreso porcentual superior (`X de Y pasos completados - Z%`).
-  - Botones de acción dinámicos según el tipo de material: *«Realizar Test»*, *«Ver Documento»*, *«Ver Vídeo»*, *«Ver Examen Corregido»*.
-- **En «Material Asignado» dentro del aula (`StudentClassworkTab.tsx`):**
-  - Muestra etiquetas badge `Paso a paso` y `N pasos` sin barra de porcentaje.
-  - Botones etiquetados con la sintaxis `[ FORM ] Título` o `[ VIDEO ] Título`, y un botón secundario separado *«Ver Entrega / Resultados»*.
-  - Los modales para completar documentos o responder preguntas utilizan estilos y diálogos dispares.
+### 5.1 Tareas Estructuradas y Evaluación Abierta
+- Soporte completo y genérico para preguntas de respuesta libre (`OPEN_TEXT`) en cualquier cuestionario con evaluación docente y recálculo ponderado en tiempo real.
+- Indicadores informativos en el conmutador de vistas de clases (`TeacherCourses.tsx`): contadores de alumnos y tareas pendientes de revisión (`👥 X alumnos`, `⏳ Y con pendientes`, `✓ Al día`).
 
-### 5.2 Posicionamiento y Desbordamiento de Modales (Punto 1 de `BUGS.md`)
-- En `StudentClassworkTab.tsx` y `StudentCourses.tsx`, los contenedores de modales aplican inline `alignItems: 'stretch'`, `padding: '0.75rem 1rem 0'` y `height: 'calc(100vh - 0.75rem)'`, lo que genera modales pegados al borde superior del viewport que fuerzan scroll manual y rompen la regla global de centrado de `index.css` (`align-items: center`).
-- En dispositivos móviles, algunos modales carecen de anchos fluidos y de `overflow-y: auto` interno seguro, provocando recortes de texto.
+### 5.2 Posicionamiento y Desbordamiento de Modales
+- Modales centrados de forma fija en viewport con `position: fixed; inset: 0`, scroll interno independiente (`overflow-y: auto`) y overlays con desenfoque de fondo.
 
 ---
 
@@ -157,51 +137,44 @@ Actualmente coexisten dos implementaciones visuales y de interacción distintas 
 
 | Funcionalidad / Requisito | Estado en Docs | Estado Real en Código | Diagnóstico / Observaciones |
 | :--- | :---: | :---: | :--- |
-| **Unificación del modelo de asignaciones** | Pendiente (`REFACTORIZACIONES.md`) | Fragmentado en 3 modelos | Coexisten `Assignment` (clase), `MaterialAssignment` (directo) y `StructuredTask` (pasos). Genera duplicidad de endpoints y tablas. |
-| **Tarjetas limpias de material con modal de detalle** | Pendiente (`REFACTORIZACIONES.md`) | Tarjetas densas | `MaterialsManagement.tsx` tiene tarjetas sobrecargadas con botones directos en lugar del diseño bajo demanda solicitado. |
-| **Acceso a facturas desde ficha del alumno** | Pendiente (`REQUIREMENTS.md:58`) | No implementado | La ficha modal del alumno en `StudentsManagement.tsx` no tiene botón de facturas/recibos. |
-| **Pagos agrupados por tutor familiar** | Pendiente (`REQUIREMENTS.md:71`) | Parcial | Los pagos se consultan por hijo con selector; no existe factura combinada unificada de hermanos. |
-| **Planes tarifarios flexibles** | Parcial (`REQUIREMENTS.md:72`) | Parcial (35€ y 65€) | Solo existen selectores fijos de 35€ y 65€/mes. Pendiente soporte para trimestrales y tarifas a medida. |
-| **Avisos por email al publicar en tablón** | Pendiente (`REQUIREMENTS.md:82`) | No conectado a n8n | El backend guarda el post en Postgres pero no emite webhook ni notificación. |
-| **Pestañas de aula virtual para alumno** | Completado en requisitos | Huérfanas en frontend | `StudentGradesTab` y `StudentPeopleTab` existen pero están excluidas de `StudentCourseView`. |
+| **Jerarquía y Rol ADMIN Superior** | Requisito clave | ✅ Completado | Laura (`admin@hitschool.com`) con acceso exclusivo a pagos, alta/baja de alumnos/tutores/profesores y creación de clases. |
+| **Aislamiento de Clases Online vs Presencial** | Requisito clave | ✅ Completado | Presenciales abiertas a todo el claustro; online privadas solo accesibles por titulares o docentes asignados por Admin. |
+| **Asignación Híbrida de Profesores** | Requisito clave | ✅ Completado | Asignación directa desde el aula virtual (`PeopleTab`) o por lote desde gestión de profesores (`TeachersManagement`). |
+| **Preguntas de Texto Libre / Redacciones** | Requisito clave | ✅ Completado | Tipo `OPEN_TEXT` en formularios con flujo de corrección docente y aviso *"Nota asignada por profesor, no se autocorrige"*. |
+| **Conmutador Cuadrícula / Tabla en Clases** | Requisito clave | ✅ Completado | Selector segmentado con persistencia en `localStorage` y badges resumen de alumnos y pendientes. |
+| **Duplicación Inteligente de Clases** | Requisito clave | ✅ Completado | Clonación transaccional reseteando fechas a `null` y desvinculando alumnos. |
+| **Pestañas de aula virtual para alumno y profesor** | Parcial | ✅ Completado | `StudentGradesTab`, `StudentPeopleTab` y `GradesTab` completamente integradas en sus respectivas aulas. |
+| **Acceso a facturas desde ficha del alumno** | Pendiente (`REQUIREMENTS.md:58`) | ✅ Resuelto | Botón directo *"Facturas y Pagos"* operativo en la ficha del expediente. |
+| **Especialización del Dashboard (Admin vs Profesor)** | Requisito clave | ✅ Completado | Widget de pagos exclusivo para Directora; profesores cuentan con tarjeta de Material Didáctico y atajos depurados sin secciones inaccesibles. |
+| **Avisos por email al publicar en tablón** | Pendiente (`REQUIREMENTS.md:82`) | Pendiente | El backend guarda el post en Postgres; pendiente emitir webhook a n8n. |
 
 ---
 
-## 7. Plan de Acción y Roadmap de Solución Recomendado
+## 7. Plan de Acción y Roadmap de Solución
 
-### Fase 1: Hotfixes Inmediatos y Estabilidad (Prioridad Alta)
-1. **Resolver compilación TypeScript:**
-   - Eliminar la variable no utilizada `enrolledStudents` en `src/pages/TeacherCourses.tsx:59`.
-2. **Corregir bug crítico de `FormPlayer`:**
-   - Evitar que `onFinish` cierre el modal contenedor inmediatamente. Permitir que el alumno interactúe con el modal de resultados (`GRADE` y `REVIEW`) y que sea el botón de cierre del propio `FormPlayer` el que desmonte la vista.
-3. **Habilitar acceso a Ajustes de Cuenta para Alumnos:**
-   - Modificar `StudentLayout.tsx` para que el botón *«Ajustes de Cuenta»* esté visible tanto para `PARENT` como para `STUDENT`.
-4. **Corregir endpoint `GET /api/students` para Matrículas:**
-   - Añadir la relación `paymentStatuses` en el `select` de `backend/src/routes/students.ts` para que el informe y botón "PDF Impagos" funcione.
-5. **Corregir permisos `ADMIN` y rutas en `backend/src/routes/courses.ts`:**
-   - Eliminar la ruta duplicada `GET /:id` (línea 198) e incorporar `role === 'ADMIN'` en las verificaciones de cursos.
-6. **Corregir `GET /api/auth/me`:**
-   - Incluir `academyEnrollments: true` para que la cuota mensual se muestre correctamente en `SettingsModal`.
+### ✅ Fase 1: Hotfixes Inmediatos y Estabilidad (100% Completada)
+- [x] Resolver compilación TypeScript eliminando variables no utilizadas.
+- [x] Corregir bug crítico de cierre de `FormPlayer` (pop-up de 3 pasos funcional).
+- [x] Habilitar acceso a Ajustes de Cuenta para Alumnos.
+- [x] Corregir endpoint `GET /api/students` incluyendo `paymentStatuses`.
+- [x] Corregir permisos `ADMIN` y rutas en `courses.ts`.
+- [x] Corregir `GET /api/auth/me` incluyendo cuota mensual real.
 
-### Fase 2: Homogeneización UI/UX y Modales (Prioridad Media)
-1. **Unificar visualmente las Tareas Estructuradas:**
-   - Estandarizar un único componente de tarjeta de tarea estructurada compartido entre `StudentCourses.tsx` y `StudentClassworkTab.tsx`.
-2. **Ajustar contenedor de modales en `index.css` y componentes:**
-   - Sustituir `alignItems: 'stretch'` y alturas absolutas por `alignItems: 'center'`, anchos fluidos y `overflow-y: auto`.
-   - Cambiar el fondo de `ExamReviewModal.tsx` a un overlay translúcido con blur `rgba(0, 0, 0, 0.6)`.
-3. **Tarjeta de revisión de exámenes en `TeacherGrades.tsx`:**
-   - Agrupar los botones de acción en un contenedor `div`, añadir el indicador de aciertos (`score / total`) y alinear correctamente en mobile.
-4. **Integrar pestañas huérfanas:**
-   - Conectar `StudentGradesTab.tsx` y `StudentPeopleTab.tsx` en `StudentCourseView.tsx`.
-   - Añadir la pestaña `GradesTab.tsx` en `CourseView.tsx` del profesor.
+### ✅ Fase 2: Homogeneización UI/UX, Jerarquía y Conectividad (100% Completada)
+- [x] Implementar Jerarquía de Administrador (Laura) vs Profesores normales.
+- [x] Especialización del Dashboard de Directora vs Profesor (aislamiento de pagos y tarjeta de material didáctico).
+- [x] Soporte para preguntas de texto libre / redacciones en cuestionarios (`OPEN_TEXT`).
+- [x] Conmutador de vistas (tarjetas vs tabla) en Mis Clases.
+- [x] Duplicación de clases para alumnos independientes.
+- [x] Integrar pestañas huérfanas: `StudentGradesTab` y `StudentPeopleTab` en `StudentCourseView`, y `GradesTab` en `CourseView`.
+- [x] Conectar botón "Calificar" del dashboard con búsqueda y apertura de expediente.
+- [x] Estilizar modales con overlays translúcidos y blur.
 
-### Fase 3: Consolidación de Funcionalidades y Refactorizaciones (Prioridad Arquitectónica)
-1. **Unificación del modelo de asignaciones:**
-   - Transicionar hacia el modelo único propuesto en `REFACTORIZACIONES.md` donde toda asignación sea una estructura de 1 o N pasos.
-2. **Facturación desde ficha del alumno:**
-   - Añadir botón en `StudentsManagement.tsx` para listar las mensualidades del alumno y descargar facturas directamente.
-3. **Automatización n8n en el Tablón:**
-   - Disparar webhook al publicar anuncios en el tablón para notificar a los alumnos y padres matriculados.
+### ⏳ Fase 3: Próximos Pasos Prioritarios
+1. **Persistencia de Sesión / Cookies (Tarea 7 de `REPORTE_TAREAS.md`):**
+   - Ampliar vigencia de token JWT y persistencia en navegador (PC y móvil) para evitar re-inicios de sesión constantes.
+2. **Automatización n8n en el Tablón:**
+   - Emitir webhook al publicar anuncios para notificar por email a los alumnos y tutores del aula.
 
 ---
 
@@ -216,6 +189,7 @@ Se ha creado y ejecutado el script `backend/prisma/seed-test-cases.ts` con todos
 
 | Rol | Correo Electrónico | Nombre y Descripción | Relación / Dependencia | Cursos / Datos Clave |
 | :--- | :--- | :--- | :--- | :--- |
+| `ADMIN` | `admin@hitschool.com` | **Laura (Directora / Admin)** | Administradora principal | Acceso total: pagos, alumnos, profesores, tutores, creación y asignación de clases. |
 | `TEACHER` | `profesor1@hitschool.com` | **Carlos** (Profesor B2/C1) | Titular de cursos superiores | Cursos: B2 Cambridge, C1 Advanced. Tareas y chat directo. |
 | `TEACHER` | `profesor2@hitschool.com` | **Elena** (Profesora Infantil/A2) | Titular de primaria y jóvenes | Curso: A2 Primaria & Young Learners. Tareas de vocabulario y chat. |
 | `PARENT` | `padre.unhijo@hitschool.com` | **Marcos (Padre UnHijo)** | Tutor con **1 hijo** asignado | Hijo: Hugo (`hijo.unico@hitschool.com`). |

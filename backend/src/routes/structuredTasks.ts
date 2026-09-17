@@ -322,9 +322,16 @@ const resolveVisibleStudentId = async (req: AuthRequest, requestedStudentId?: st
 router.get('/teacher', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
   try {
     const isTemplateParam = req.query.isTemplate;
-    const whereClause: any = {
-      OR: [{ teacherId: req.user!.id }, { course: { teacherId: req.user!.id } }]
-    };
+    const whereClause: any = req.user!.role === 'ADMIN'
+      ? {}
+      : {
+          OR: [
+            { teacherId: req.user!.id },
+            { course: { teacherId: req.user!.id } },
+            { course: { modality: 'PRESENCIAL' } },
+            { course: { assignedTeachers: { some: { teacherId: req.user!.id } } } }
+          ]
+        };
 
     if (isTemplateParam === 'true') {
       whereClause.isTemplate = true;
@@ -701,7 +708,20 @@ router.post('/', authenticateToken, requireTeacher, async (req: AuthRequest, res
 
   try {
     if (!isTemplateTask && assignmentType === 'CLASS') {
-      const course = await prisma.course.findFirst({ where: { id: courseId, teacherId: req.user!.id } });
+      const course = await prisma.course.findFirst({
+        where: {
+          id: courseId,
+          ...(req.user!.role === 'ADMIN'
+            ? {}
+            : {
+                OR: [
+                  { modality: 'PRESENCIAL' },
+                  { teacherId: req.user!.id },
+                  { assignedTeachers: { some: { teacherId: req.user!.id } } }
+                ]
+              })
+        }
+      });
       if (!course) return res.status(403).json({ error: 'No puedes asignar tareas a esta clase.' });
     }
 
@@ -857,7 +877,19 @@ router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, r
 
   try {
     const existing = await prisma.structuredTask.findFirst({
-      where: { id: taskId, OR: [{ teacherId: req.user!.id }, { course: { teacherId: req.user!.id } }] },
+      where: {
+        id: taskId,
+        ...(req.user!.role === 'ADMIN'
+          ? {}
+          : {
+              OR: [
+                { teacherId: req.user!.id },
+                { course: { teacherId: req.user!.id } },
+                { course: { modality: 'PRESENCIAL' } },
+                { course: { assignedTeachers: { some: { teacherId: req.user!.id } } } }
+              ]
+            })
+      },
       include: { steps: true }
     });
     if (!existing) return res.status(404).json({ error: 'Tarea no encontrada.' });
@@ -866,7 +898,20 @@ router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, r
     if (parsedPublishAt.error) return res.status(400).json({ error: parsedPublishAt.error });
 
     if (!isTemplateTask && assignmentType === 'CLASS') {
-      const course = await prisma.course.findFirst({ where: { id: courseId, teacherId: req.user!.id } });
+      const course = await prisma.course.findFirst({
+        where: {
+          id: courseId,
+          ...(req.user!.role === 'ADMIN'
+            ? {}
+            : {
+                OR: [
+                  { modality: 'PRESENCIAL' },
+                  { teacherId: req.user!.id },
+                  { assignedTeachers: { some: { teacherId: req.user!.id } } }
+                ]
+              })
+        }
+      });
       if (!course) return res.status(404).json({ error: 'Clase no encontrada.' });
     }
 
@@ -1005,7 +1050,19 @@ router.post('/:id/grade-delivery', authenticateToken, requireTeacher, async (req
 
   try {
     const task = await prisma.structuredTask.findFirst({
-      where: { id: taskId, OR: [{ teacherId: req.user!.id }, { course: { teacherId: req.user!.id } }] },
+      where: {
+        id: taskId,
+        ...(req.user!.role === 'ADMIN'
+          ? {}
+          : {
+              OR: [
+                { teacherId: req.user!.id },
+                { course: { teacherId: req.user!.id } },
+                { course: { modality: 'PRESENCIAL' } },
+                { course: { assignedTeachers: { some: { teacherId: req.user!.id } } } }
+              ]
+            })
+      },
       include: {
         course: true,
         steps: {
@@ -1097,7 +1154,19 @@ router.delete('/:id', authenticateToken, requireTeacher, async (req: AuthRequest
   const taskId = req.params.id as string;
   try {
     const existing = await prisma.structuredTask.findFirst({
-      where: { id: taskId, OR: [{ teacherId: req.user!.id }, { course: { teacherId: req.user!.id } }] }
+      where: {
+        id: taskId,
+        ...(req.user!.role === 'ADMIN'
+          ? {}
+          : {
+              OR: [
+                { teacherId: req.user!.id },
+                { course: { teacherId: req.user!.id } },
+                { course: { modality: 'PRESENCIAL' } },
+                { course: { assignedTeachers: { some: { teacherId: req.user!.id } } } }
+              ]
+            })
+      }
     });
     if (!existing) return res.status(404).json({ error: 'Tarea no encontrada.' });
 

@@ -69,6 +69,7 @@ const modalBackdrop: React.CSSProperties = {
 };
 
 const ParentsManagement: React.FC = () => {
+  const userRole = localStorage.getItem("userRole");
   const [parents, setParents] = useState<Parent[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<
@@ -275,13 +276,15 @@ const ParentsManagement: React.FC = () => {
             <Users style={{ color: "var(--primary)" }} size={24} /> Tutores
           </h1>
         </div>
-        <button
-          className="btn-primary"
-          onClick={openCreate}
-          style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
-        >
-          <UserPlus size={18} /> Nuevo Tutor
-        </button>
+        {userRole === "ADMIN" && (
+          <button
+            className="btn-primary"
+            onClick={openCreate}
+            style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
+          >
+            <UserPlus size={18} /> Nuevo Tutor
+          </button>
+        )}
       </div>
       <div
         className="parents-management__filters"
@@ -462,20 +465,22 @@ const ParentsManagement: React.FC = () => {
                         >
                           {isActive ? "Alta" : "Baja"}
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => toggleStatus(parent)}
-                          style={{
-                            marginLeft: 8,
-                            padding: "0.3rem 0.55rem",
-                            borderRadius: 6,
-                            border: "1px solid var(--border)",
-                            background: "var(--surface)",
-                            cursor: "pointer",
-                          }}
-                        >
-                          {isActive ? "Dar de baja" : "Dar de alta"}
-                        </button>
+                        {userRole === "ADMIN" && (
+                          <button
+                            type="button"
+                            onClick={() => toggleStatus(parent)}
+                            style={{
+                              marginLeft: 8,
+                              padding: "0.3rem 0.55rem",
+                              borderRadius: 6,
+                              border: "1px solid var(--border)",
+                              background: "var(--surface)",
+                              cursor: "pointer",
+                            }}
+                          >
+                            {isActive ? "Dar de baja" : "Dar de alta"}
+                          </button>
+                        )}
                       </td>
                       <td
                         style={{ padding: "1rem 1.25rem", textAlign: "right" }}
@@ -494,20 +499,24 @@ const ParentsManagement: React.FC = () => {
                           >
                             <Eye size={16} />
                           </button>
-                          <button
-                            type="button"
-                            title="Editar"
-                            onClick={() => openEdit(parent)}
-                          >
-                            <Edit2 size={16} />
-                          </button>
-                          <button
-                            type="button"
-                            title="Eliminar"
-                            onClick={() => setDeleting(parent)}
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          {userRole === "ADMIN" && (
+                            <>
+                              <button
+                                type="button"
+                                title="Editar"
+                                onClick={() => openEdit(parent)}
+                              >
+                                <Edit2 size={16} />
+                              </button>
+                              <button
+                                type="button"
+                                title="Eliminar"
+                                onClick={() => setDeleting(parent)}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

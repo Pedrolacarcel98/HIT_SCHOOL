@@ -31,6 +31,7 @@ const TeacherCourses: React.FC = () => {
     return (localStorage.getItem('hit_courses_view_mode') as 'grid' | 'table') || 'grid';
   });
   const navigate = useNavigate();
+  const userRole = localStorage.getItem('userRole');
 
   const handleToggleViewMode = (mode: 'grid' | 'table') => {
     setViewMode(mode);
@@ -246,7 +247,7 @@ const TeacherCourses: React.FC = () => {
             </button>
           </div>
 
-          {!isCreating && (
+          {!isCreating && userRole === 'ADMIN' && (
             <button onClick={() => setIsCreating(true)} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.65rem 1.25rem' }}>
               <Plus size={18} /> Crear nueva clase
             </button>
@@ -333,8 +334,12 @@ const TeacherCourses: React.FC = () => {
                       <button title="Acciones de la clase" aria-label="Acciones de la clase" onClick={() => setOpenMenuId(openMenuId === course.id ? null : course.id)} style={iconButtonStyle}><MoreVertical size={20} /></button>
                       {openMenuId === course.id && <div style={{ position: 'absolute', right: 0, top: '2rem', zIndex: 10, width: '185px', padding: '0.35rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', boxShadow: 'var(--shadow-lg)' }}>
                         <button onClick={() => { setEditingCourse(course); setCourseTitle(course.title); setCourseModality(course.modality || 'PRESENCIAL'); setOpenMenuId(null); }} style={menuButtonStyle}><Pencil size={15} /> Editar título</button>
-                        <button onClick={() => { setDuplicatingCourse(course); setDuplicateTitle(`${course.title} (Copia)`); setDuplicateModality(course.modality || 'PRESENCIAL'); setOpenMenuId(null); }} style={menuButtonStyle}><Copy size={15} /> Duplicar clase</button>
-                        <button onClick={() => { setDeletingCourse(course); setOpenMenuId(null); }} style={{ ...menuButtonStyle, color: '#9e2a2b' }}><Trash2 size={15} /> Eliminar clase</button>
+                        {userRole === 'ADMIN' && (
+                          <>
+                            <button onClick={() => { setDuplicatingCourse(course); setDuplicateTitle(`${course.title} (Copia)`); setDuplicateModality(course.modality || 'PRESENCIAL'); setOpenMenuId(null); }} style={menuButtonStyle}><Copy size={15} /> Duplicar clase</button>
+                            <button onClick={() => { setDeletingCourse(course); setOpenMenuId(null); }} style={{ ...menuButtonStyle, color: '#9e2a2b' }}><Trash2 size={15} /> Eliminar clase</button>
+                          </>
+                        )}
                       </div>}
                     </div>
                   </div>
@@ -544,8 +549,12 @@ const TeacherCourses: React.FC = () => {
                               {openMenuId === `tbl_${course.id}` && (
                                 <div style={{ position: 'absolute', right: 0, top: '2rem', zIndex: 10, width: '185px', padding: '0.35rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', boxShadow: 'var(--shadow-lg)' }}>
                                   <button onClick={() => { setEditingCourse(course); setCourseTitle(course.title); setCourseModality(course.modality || 'PRESENCIAL'); setOpenMenuId(null); }} style={menuButtonStyle}><Pencil size={15} /> Editar título</button>
-                                  <button onClick={() => { setDuplicatingCourse(course); setDuplicateTitle(`${course.title} (Copia)`); setDuplicateModality(course.modality || 'PRESENCIAL'); setOpenMenuId(null); }} style={menuButtonStyle}><Copy size={15} /> Duplicar clase</button>
-                                  <button onClick={() => { setDeletingCourse(course); setOpenMenuId(null); }} style={{ ...menuButtonStyle, color: '#9e2a2b' }}><Trash2 size={15} /> Eliminar clase</button>
+                                  {userRole === 'ADMIN' && (
+                                    <>
+                                      <button onClick={() => { setDuplicatingCourse(course); setDuplicateTitle(`${course.title} (Copia)`); setDuplicateModality(course.modality || 'PRESENCIAL'); setOpenMenuId(null); }} style={menuButtonStyle}><Copy size={15} /> Duplicar clase</button>
+                                      <button onClick={() => { setDeletingCourse(course); setOpenMenuId(null); }} style={{ ...menuButtonStyle, color: '#9e2a2b' }}><Trash2 size={15} /> Eliminar clase</button>
+                                    </>
+                                  )}
                                 </div>
                               )}
                             </div>

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import {
   Award,
@@ -397,10 +398,13 @@ const TeacherGrades: React.FC = () => {
   const [assignments, setAssignments] = useState<AssignmentItem[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [searchParams] = useSearchParams();
+  const initialStudentQuery = searchParams.get('student') || '';
+
   // Vistas y Filtros
   const [viewMode, setViewMode] = useState<'STUDENTS' | 'CLASSES'>('STUDENTS');
   const [modalityFilter, setModalityFilter] = useState<'ALL' | 'PRESENCIAL' | 'ONLINE'>('ALL');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(initialStudentQuery);
   const [selectedStudentForDossier, setSelectedStudentForDossier] = useState<StudentWithMeta | null>(null);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedTerm, setSelectedTerm] = useState(1);
@@ -671,6 +675,16 @@ const TeacherGrades: React.FC = () => {
     () => activeDossierStudent ? groupStructuredSubmissions(activeDossierStudent.submissions) : [],
     [activeDossierStudent]
   );
+
+  useEffect(() => {
+    if (initialStudentQuery && studentsWithMeta.length > 0 && !selectedStudentForDossier) {
+      const q = initialStudentQuery.trim().toLowerCase();
+      const match = studentsWithMeta.find(st => st.fullName.toLowerCase().includes(q) || st.email.toLowerCase().includes(q));
+      if (match) {
+        setSelectedStudentForDossier(match);
+      }
+    }
+  }, [initialStudentQuery, studentsWithMeta, selectedStudentForDossier]);
 
   // Filtrado de Alumnos
   const filteredStudents = useMemo(() => {
