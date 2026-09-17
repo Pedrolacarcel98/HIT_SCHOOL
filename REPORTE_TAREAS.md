@@ -23,9 +23,15 @@ Lista de control para el seguimiento y resolucion de las tareas, bugs y peticion
     - **Borrado completo:** Si se elimina al alumno desde la gestion de alumnos, sus matrículas se purgan en cascada; al volver a registrarlo y matricularlo se procesa como primera alta.
   - **Estado:** ✅ **Completado y Verificado.**
 
-- [ ] **3. Duplicar Clase**
-  - **Descripcion:** Clonar una clase existente replicando su estructura y sus tareas estructuradas completas, pero sin los alumnos matriculados y sin las fechas de publicacion ni de entrega de las tareas originales (para fijar las del nuevo curso).
-  - **Estado:** ⏳ **Pendiente de atacar.**
+- [x] **3. Duplicar Clase**
+  - **Descripcion:** Clonar una clase existente replicando su estructura y sus tareas estructuradas completas, pero sin los alumnos matriculados y sin las fechas de publicacion ni de entrega de las tareas originales (para fijar las del nuevo alumno o curso).
+  - **Solucion implementada:**
+    - Endpoint backend `POST /api/courses/:id/duplicate` transaccional con clonacion de tareas estructuradas (`StructuredTask`), pasos (`StructuredTaskStep`) y recursos asociados.
+    - Reseteo automatico de fechas a `null` (`dueDate: null`, `publishAt: null`, `notificationSentAt: null`).
+    - Desvinculacion total de alumnos (`assignedStudentId: null`, `enrollments: []`) y exclusion de entregas o notas anteriores.
+    - Soporte en `GET /api/courses` y `verifyCourseAccess` para permisos globales de `ADMIN`.
+    - Modal de duplicacion intuitivo con nombre editable y selector de modalidad integrado en el menu de tarjetas de `TeacherCourses.tsx` y en la cabecera del aula en `CourseView.tsx`.
+  - **Estado:** ✅ **Completado y Verificado.**
 
 - [ ] **4. Jerarquia y Rol ADMIN Superior (Laura)**
   - **Descripcion:** Configurar una jerarquia de permisos administrativos donde unicamente el usuario con rol ADMIN (Laura) tenga permisos para crear clases y asignarlas al resto de profesores, mientras que los profesores gestionan su contenido sin crear aulas globales por su cuenta.

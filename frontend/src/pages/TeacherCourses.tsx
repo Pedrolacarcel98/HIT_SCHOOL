@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, GraduationCap, Laptop, MoreVertical, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { BookOpen, Copy, GraduationCap, Laptop, MoreVertical, Pencil, Plus, Trash2, X } from 'lucide-react';
 
 interface Course {
   id: string;
@@ -17,6 +17,10 @@ const TeacherCourses: React.FC = () => {
   const [courseTitle, setCourseTitle] = useState('');
   const [courseModality, setCourseModality] = useState<'PRESENCIAL' | 'ONLINE' | 'HIBRIDO'>('PRESENCIAL');
   const [deletingCourse, setDeletingCourse] = useState<Course | null>(null);
+  const [duplicatingCourse, setDuplicatingCourse] = useState<Course | null>(null);
+  const [duplicateTitle, setDuplicateTitle] = useState('');
+  const [duplicateModality, setDuplicateModality] = useState<'PRESENCIAL' | 'ONLINE' | 'HIBRIDO'>('PRESENCIAL');
+  const [isDuplicating, setIsDuplicating] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [courseError, setCourseError] = useState('');
   const [modalityFilter, setModalityFilter] = useState<'ALL' | 'PRESENCIAL' | 'ONLINE'>('ALL');
@@ -100,6 +104,42 @@ const TeacherCourses: React.FC = () => {
       fetchCourses();
     } else {
       setCourseError('No se pudo eliminar la clase.');
+    }
+  };
+
+  const handleDuplicateCourse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!duplicatingCourse || !duplicateTitle.trim()) return;
+
+    try {
+      setIsDuplicating(true);
+      setCourseError('');
+      const token = localStorage.getItem('token');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+      const res = await fetch(`${apiUrl}/api/courses/${duplicatingCourse.id}/duplicate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          title: duplicateTitle.trim(),
+          modality: duplicateModality
+        })
+      });
+
+      if (res.ok) {
+        setDuplicatingCourse(null);
+        await fetchCourses();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setCourseError(data.error || 'No se pudo duplicar la clase.');
+      }
+    } catch (err) {
+      console.error('Error duplicating course', err);
+      setCourseError('Error de conexión al duplicar la clase.');
+    } finally {
+      setIsDuplicating(false);
     }
   };
 
@@ -230,8 +270,9 @@ const TeacherCourses: React.FC = () => {
                 </div>
                 <div style={{ marginLeft: 'auto', position: 'relative' }} onClick={(event) => event.stopPropagation()}>
                   <button title="Acciones de la clase" aria-label="Acciones de la clase" onClick={() => setOpenMenuId(openMenuId === course.id ? null : course.id)} style={iconButtonStyle}><MoreVertical size={20} /></button>
-                  {openMenuId === course.id && <div style={{ position: 'absolute', right: 0, top: '2rem', zIndex: 10, width: '170px', padding: '0.35rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', boxShadow: 'var(--shadow-lg)' }}>
+                  {openMenuId === course.id && <div style={{ position: 'absolute', right: 0, top: '2rem', zIndex: 10, width: '185px', padding: '0.35rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', boxShadow: 'var(--shadow-lg)' }}>
                     <button onClick={() => { setEditingCourse(course); setCourseTitle(course.title); setCourseModality(course.modality || 'PRESENCIAL'); setOpenMenuId(null); }} style={menuButtonStyle}><Pencil size={15} /> Editar título</button>
+                    <button onClick={() => { setDuplicatingCourse(course); setDuplicateTitle(`${course.title} (Copia)`); setDuplicateModality(course.modality || 'PRESENCIAL'); setOpenMenuId(null); }} style={menuButtonStyle}><Copy size={15} /> Duplicar clase</button>
                     <button onClick={() => { setDeletingCourse(course); setOpenMenuId(null); }} style={{ ...menuButtonStyle, color: '#9e2a2b' }}><Trash2 size={15} /> Eliminar clase</button>
                   </div>}
                 </div>
@@ -249,6 +290,61 @@ const TeacherCourses: React.FC = () => {
           </div>
         )}
       </div>
+
+      {duplicatingCourse && (
+        <div style={modalBackdropStyle} onClick={() => !isDuplicating && setDuplicatingCourse(null)}>
+          <div className="glass-panel animate-fade-in" onClick={(event) => event.stopPropagation()} style={{ width: 'min(100%, 480px)', padding: '1.5rem' }}>
+            <button onClick={() => !isDuplicating && setDuplicatingCourse(null)} aria-label="Cerrar" style={{ ...iconButtonStyle, float: 'right' }}><X size={19} /></button>
+            <form onSubmit={handleDuplicateCourse}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>
+                <div style={{ background: 'var(--primary-light)', padding: '0.5rem', borderRadius: '8px', color: 'var(--primary)', display: 'flex', alignItems: 'center' }}>
+                  <Copy size={20} />
+                </div>
+                <h2 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--text-main)' }}>Duplicar Clase</h2>
+              </div>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.86rem', lineHeight: '1.45', margin: '0 0 1rem' }}>
+                Se clonará la clase con todas sus <strong>tareas estructuradas y pasos</strong>. Las fechas de entrega y publicación quedarán en blanco para que puedas fijarlas al ritmo del nuevo alumno. <strong>No se transferirá ningún alumno ni nota previa.</strong>
+              </p>
+
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.35rem' }}>
+                Nombre de la nueva clase:
+              </label>
+              <input
+                value={duplicateTitle}
+                onChange={(event) => setDuplicateTitle(event.target.value)}
+                placeholder="Ej. B2 First Cambridge (Alumno 2)"
+                autoFocus
+                required
+                disabled={isDuplicating}
+                style={inputStyle}
+              />
+
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)', marginTop: '0.85rem', marginBottom: '0.35rem' }}>
+                Modalidad:
+              </label>
+              <select
+                value={duplicateModality}
+                onChange={(e) => setDuplicateModality(e.target.value as 'PRESENCIAL' | 'ONLINE' | 'HIBRIDO')}
+                disabled={isDuplicating}
+                style={inputStyle}
+              >
+                <option value="PRESENCIAL">Presencial (Academia)</option>
+                <option value="ONLINE">Online / Particulares</option>
+                <option value="HIBRIDO">Híbrido</option>
+              </select>
+
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+                <button type="button" className="btn-secondary" onClick={() => setDuplicatingCourse(null)} disabled={isDuplicating}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn-primary" disabled={isDuplicating || !duplicateTitle.trim()}>
+                  {isDuplicating ? 'Duplicando clase...' : 'Duplicar clase'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {(editingCourse || deletingCourse) && <div style={modalBackdropStyle} onClick={() => { setEditingCourse(null); setDeletingCourse(null); }}>
         <div className="glass-panel animate-fade-in" onClick={(event) => event.stopPropagation()} style={{ width: 'min(100%, 440px)', padding: '1.5rem' }}>

@@ -67,9 +67,10 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
     const userId = req.user!.id;
     const role = req.user!.role;
 
-    if (role === 'TEACHER') {
+    if (role === 'TEACHER' || role === 'ADMIN') {
+      const whereCondition = role === 'ADMIN' ? {} : { teacherId: userId };
       const courses = await prisma.course.findMany({
-        where: { teacherId: userId },
+        where: whereCondition,
         include: {
           teacher: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } }
         }
@@ -227,9 +228,126 @@ router.delete('/:id', authenticateToken, requireTeacher, async (req: AuthRequest
   }
 });
 
+// Duplicar curso con sus tareas estructuradas (sin alumnos y con fechas reseteadas)
+router.post('/:id/duplicate', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
+  const sourceCourseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const { title, modality } = req.body;
+
+  if (!title || typeof title !== 'string' || !title.trim()) {
+    return res.status(400).json({ error: 'El nombre de la nueva clase es obligatorio.' });
+  }
+
+  try {
+    const sourceCourseWhere = req.user!.role === 'ADMIN'
+      ? { id: sourceCourseId }
+      : { id: sourceCourseId, teacherId: req.user!.id };
+
+    const sourceCourse = await prisma.course.findFirst({
+      where: sourceCourseWhere,
+      include: {
+        structuredTasks: {
+          where: { isTemplate: false },
+          include: {
+            steps: { orderBy: { order: 'asc' } }
+          }
+        },
+        assignments: {
+          where: { structuredTaskStepId: null }
+        }
+      }
+    });
+
+    if (!sourceCourse) {
+      return res.status(404).json({ error: 'Clase de origen no encontrada o sin permisos.' });
+    }
+
+    const courseModality = modality && ['PRESENCIAL', 'ONLINE', 'HIBRIDO'].includes(modality)
+      ? modality
+      : sourceCourse.modality;
+
+    const teacherId = req.user!.role === 'ADMIN' ? (sourceCourse.teacherId || req.user!.id) : req.user!.id;
+
+    const duplicatedCourse = await prisma.$transaction(async (tx) => {
+      // 1. Crear la nueva clase
+      const newCourse = await tx.course.create({
+        data: {
+          title: title.trim(),
+          modality: courseModality,
+          teacherId
+        }
+      });
+
+      // 2. Duplicar las tareas estructuradas (con pasos y reseteo de fechas)
+      for (const task of sourceCourse.structuredTasks) {
+        await tx.structuredTask.create({
+          data: {
+            title: task.title,
+            description: task.description,
+            dueDate: null, // Fecha de entrega reseteada
+            publishAt: null, // Fecha de publicación reseteada
+            notificationSentAt: null,
+            term: task.term,
+            isTemplate: false,
+            category: task.category,
+            courseId: newCourse.id,
+            teacherId,
+            assignmentType: task.assignmentType,
+            isSequential: task.isSequential,
+            assignedStudentId: null, // Sin alumnos
+            steps: {
+              create: task.steps.map((step) => ({
+                order: step.order,
+                title: step.title,
+                materialId: step.materialId,
+                requiresSubmission: step.requiresSubmission
+              }))
+            }
+          }
+        });
+      }
+
+      // 3. Duplicar asignaciones directas/independientes si las hubiera
+      for (const assignment of sourceCourse.assignments) {
+        await tx.assignment.create({
+          data: {
+            teacherId,
+            courseId: newCourse.id,
+            studentId: null, // Sin alumno
+            materialId: assignment.materialId,
+            title: assignment.title,
+            description: assignment.description,
+            dueDate: null, // Fecha reseteada
+            publishAt: null, // Fecha reseteada
+            category: assignment.category
+          }
+        });
+      }
+
+      return newCourse;
+    });
+
+    // Obtener datos completos del nuevo curso
+    const fullNewCourse = await prisma.course.findUnique({
+      where: { id: duplicatedCourse.id },
+      include: {
+        teacher: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true, avatarUrl: true } } } },
+        _count: { select: { structuredTasks: true, enrollments: true } }
+      }
+    });
+
+    res.status(201).json(fullNewCourse);
+  } catch (error) {
+    console.error('Error al duplicar clase:', error);
+    res.status(500).json({ error: 'Error al duplicar la clase.' });
+  }
+});
+
 // --- SUB-RUTAS DE CURSO ---
 
 const verifyCourseAccess = async (req: any, res: any, next: any) => {
+  if (req.user!.role === 'ADMIN') {
+    return next();
+  }
   const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const userId = req.user!.id;
   
