@@ -72,10 +72,61 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       const courses = await prisma.course.findMany({
         where: whereCondition,
         include: {
-          teacher: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } }
-        }
+          teacher: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } },
+          enrollments: { select: { studentId: true } },
+          structuredTasks: {
+            where: { isTemplate: false },
+            select: {
+              id: true,
+              deliveries: { select: { studentId: true, grade: true } },
+              steps: {
+                select: {
+                  assignment: {
+                    select: {
+                      submissions: { select: { studentId: true, grade: true } }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        orderBy: { title: 'asc' }
       });
-      res.json(courses);
+
+      const enrichedCourses = courses.map((course) => {
+        const studentIds = new Set(course.enrollments.map((e) => e.studentId));
+        const studentsCount = studentIds.size;
+        const pendingStudentsSet = new Set<string>();
+
+        for (const task of course.structuredTasks) {
+          for (const delivery of task.deliveries) {
+            if (delivery.grade === null) {
+              pendingStudentsSet.add(delivery.studentId);
+            }
+          }
+          for (const step of task.steps) {
+            for (const sub of step.assignment?.submissions || []) {
+              if (sub.grade === null) {
+                pendingStudentsSet.add(sub.studentId);
+              }
+            }
+          }
+        }
+
+        return {
+          id: course.id,
+          title: course.title,
+          modality: course.modality,
+          teacherId: course.teacherId,
+          teacher: course.teacher,
+          studentsCount,
+          tasksCount: course.structuredTasks.length,
+          pendingStudentsCount: pendingStudentsSet.size
+        };
+      });
+
+      res.json(enrichedCourses);
     } else {
       let targetStudentId = userId;
       if (role === 'PARENT') {

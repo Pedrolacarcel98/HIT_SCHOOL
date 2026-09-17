@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, Copy, GraduationCap, Laptop, MoreVertical, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { BookOpen, CheckCircle2, Clock, Copy, GraduationCap, Laptop, LayoutGrid, List, MoreVertical, Pencil, Plus, Trash2, Users, X } from 'lucide-react';
 
 interface Course {
   id: string;
   title: string;
   modality?: 'PRESENCIAL' | 'ONLINE' | 'HIBRIDO';
+  studentsCount?: number;
+  tasksCount?: number;
+  pendingStudentsCount?: number;
 }
 
 const TeacherCourses: React.FC = () => {
@@ -24,7 +27,15 @@ const TeacherCourses: React.FC = () => {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [courseError, setCourseError] = useState('');
   const [modalityFilter, setModalityFilter] = useState<'ALL' | 'PRESENCIAL' | 'ONLINE'>('ALL');
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>(() => {
+    return (localStorage.getItem('hit_courses_view_mode') as 'grid' | 'table') || 'grid';
+  });
   const navigate = useNavigate();
+
+  const handleToggleViewMode = (mode: 'grid' | 'table') => {
+    setViewMode(mode);
+    localStorage.setItem('hit_courses_view_mode', mode);
+  };
 
   useEffect(() => {
     fetchCourses();
@@ -190,11 +201,57 @@ const TeacherCourses: React.FC = () => {
           ))}
         </div>
 
-        {!isCreating && (
-          <button onClick={() => setIsCreating(true)} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.65rem 1.25rem' }}>
-            <Plus size={18} /> Crear nueva clase
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          {/* Conmutador de vista: Cuadrícula vs Tabla */}
+          <div style={{ display: 'inline-flex', background: 'var(--surface-alt)', border: '1px solid var(--border)', borderRadius: '8px', padding: '3px', gap: '3px' }}>
+            <button
+              type="button"
+              onClick={() => handleToggleViewMode('grid')}
+              title="Vista en cuadrícula (tarjetas)"
+              aria-label="Vista en cuadrícula"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '5px 8px',
+                borderRadius: '6px',
+                border: 'none',
+                background: viewMode === 'grid' ? 'var(--surface)' : 'transparent',
+                color: viewMode === 'grid' ? 'var(--primary)' : 'var(--text-muted)',
+                boxShadow: viewMode === 'grid' ? 'var(--shadow-sm)' : 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <LayoutGrid size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleToggleViewMode('table')}
+              title="Vista en tabla (resumen)"
+              aria-label="Vista en tabla"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '5px 8px',
+                borderRadius: '6px',
+                border: 'none',
+                background: viewMode === 'table' ? 'var(--surface)' : 'transparent',
+                color: viewMode === 'table' ? 'var(--primary)' : 'var(--text-muted)',
+                boxShadow: viewMode === 'table' ? 'var(--shadow-sm)' : 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <List size={16} />
+            </button>
+          </div>
+
+          {!isCreating && (
+            <button onClick={() => setIsCreating(true)} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.65rem 1.25rem' }}>
+              <Plus size={18} /> Crear nueva clase
+            </button>
+          )}
+        </div>
       </div>
 
       <div style={{ marginBottom: '2rem' }}>
@@ -221,75 +278,297 @@ const TeacherCourses: React.FC = () => {
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '1.25rem' }}>
-        {filteredCourses.map(course => {
-          const modality = course.modality || 'PRESENCIAL';
-          const isOnline = modality === 'ONLINE' || modality === 'HIBRIDO';
+      {filteredCourses.length > 0 ? (
+        viewMode === 'grid' ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '1.25rem' }}>
+            {filteredCourses.map(course => {
+              const modality = course.modality || 'PRESENCIAL';
+              const isOnline = modality === 'ONLINE' || modality === 'HIBRIDO';
+              const hasStudents = typeof course.studentsCount === 'number' && course.studentsCount > 0;
+              const hasPending = typeof course.pendingStudentsCount === 'number' && course.pendingStudentsCount > 0;
 
-          return (
-            <div 
-              key={course.id} 
-              className="glass-panel" 
-              style={{ cursor: 'pointer', transition: 'all 0.2s ease', padding: '1.5rem', border: '1px solid var(--border)' }}
-              onClick={() => navigate(`/teacher/course/${course.id}`)}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-4px)';
-                e.currentTarget.style.borderColor = 'var(--primary)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.borderColor = 'var(--border)';
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-                <div style={{
-                  background: isOnline ? '#eef2ff' : 'var(--primary-light)',
-                  padding: '0.75rem',
-                  borderRadius: '12px',
-                  color: isOnline ? '#4338ca' : 'var(--primary)'
-                }}>
-                  {isOnline ? <Laptop size={24} /> : <BookOpen size={24} />}
+              return (
+                <div 
+                  key={course.id} 
+                  className="glass-panel" 
+                  style={{ cursor: 'pointer', transition: 'all 0.2s ease', padding: '1.5rem', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column' }}
+                  onClick={() => navigate(`/teacher/course/${course.id}`)}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-4px)';
+                    e.currentTarget.style.borderColor = 'var(--primary)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.borderColor = 'var(--border)';
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+                    <div style={{
+                      background: isOnline ? '#eef2ff' : 'var(--primary-light)',
+                      padding: '0.75rem',
+                      borderRadius: '12px',
+                      color: isOnline ? '#4338ca' : 'var(--primary)'
+                    }}>
+                      {isOnline ? <Laptop size={24} /> : <BookOpen size={24} />}
+                    </div>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <h3 style={{ margin: 0, color: 'var(--text)', fontSize: '1.15rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{course.title}</h3>
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.25rem',
+                        marginTop: '2px',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        padding: '1px 7px',
+                        borderRadius: '10px',
+                        background: isOnline ? '#e0f2fe' : '#f3e8ff',
+                        color: isOnline ? '#0369a1' : '#7e22ce',
+                        border: `1px solid ${isOnline ? '#bae6fd' : '#d8b4fe'}`
+                      }}>
+                        {modality === 'HIBRIDO' ? 'Híbrido' : isOnline ? 'Online' : 'Presencial'}
+                      </span>
+                    </div>
+                    <div style={{ marginLeft: 'auto', position: 'relative' }} onClick={(event) => event.stopPropagation()}>
+                      <button title="Acciones de la clase" aria-label="Acciones de la clase" onClick={() => setOpenMenuId(openMenuId === course.id ? null : course.id)} style={iconButtonStyle}><MoreVertical size={20} /></button>
+                      {openMenuId === course.id && <div style={{ position: 'absolute', right: 0, top: '2rem', zIndex: 10, width: '185px', padding: '0.35rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', boxShadow: 'var(--shadow-lg)' }}>
+                        <button onClick={() => { setEditingCourse(course); setCourseTitle(course.title); setCourseModality(course.modality || 'PRESENCIAL'); setOpenMenuId(null); }} style={menuButtonStyle}><Pencil size={15} /> Editar título</button>
+                        <button onClick={() => { setDuplicatingCourse(course); setDuplicateTitle(`${course.title} (Copia)`); setDuplicateModality(course.modality || 'PRESENCIAL'); setOpenMenuId(null); }} style={menuButtonStyle}><Copy size={15} /> Duplicar clase</button>
+                        <button onClick={() => { setDeletingCourse(course); setOpenMenuId(null); }} style={{ ...menuButtonStyle, color: '#9e2a2b' }}><Trash2 size={15} /> Eliminar clase</button>
+                      </div>}
+                    </div>
+                  </div>
+
+                  {/* Resumen Alumnos y Tareas */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.85rem', flexWrap: 'wrap', marginTop: 'auto' }}>
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.3rem',
+                      padding: '0.2rem 0.55rem',
+                      borderRadius: '12px',
+                      background: hasStudents ? '#f0fdf4' : 'var(--surface-alt)',
+                      color: hasStudents ? '#166534' : 'var(--text-muted)',
+                      border: `1px solid ${hasStudents ? '#bbf7d0' : 'var(--border)'}`,
+                      fontSize: '0.76rem',
+                      fontWeight: 600
+                    }}>
+                      <Users size={12} /> {hasStudents ? `${course.studentsCount} ${course.studentsCount === 1 ? 'alumno' : 'alumnos'}` : 'Sin alumnos'}
+                    </span>
+
+                    {hasStudents && (
+                      hasPending ? (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.3rem',
+                          padding: '0.2rem 0.55rem',
+                          borderRadius: '12px',
+                          background: '#fef3c7',
+                          color: '#92400e',
+                          border: '1px solid #fde68a',
+                          fontSize: '0.76rem',
+                          fontWeight: 600
+                        }}>
+                          <Clock size={12} /> {course.pendingStudentsCount} con pendientes
+                        </span>
+                      ) : (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.3rem',
+                          padding: '0.2rem 0.55rem',
+                          borderRadius: '12px',
+                          background: '#e0f2fe',
+                          color: '#0369a1',
+                          border: '1px solid #bae6fd',
+                          fontSize: '0.76rem',
+                          fontWeight: 600
+                        }}>
+                          <CheckCircle2 size={12} /> Al día
+                        </span>
+                      )
+                    )}
+                  </div>
+
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.84rem', margin: 0 }}>Gestionar temario y aula →</p>
                 </div>
-                <div>
-                  <h3 style={{ margin: 0, color: 'var(--text)', fontSize: '1.15rem' }}>{course.title}</h3>
-                  <span style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.25rem',
-                    marginTop: '2px',
-                    fontSize: '0.72rem',
-                    fontWeight: 700,
-                    padding: '1px 7px',
-                    borderRadius: '10px',
-                    background: isOnline ? '#e0f2fe' : '#f3e8ff',
-                    color: isOnline ? '#0369a1' : '#7e22ce',
-                    border: `1px solid ${isOnline ? '#bae6fd' : '#d8b4fe'}`
-                  }}>
-                    {modality === 'HIBRIDO' ? 'Híbrido' : isOnline ? 'Online' : 'Presencial'}
-                  </span>
-                </div>
-                <div style={{ marginLeft: 'auto', position: 'relative' }} onClick={(event) => event.stopPropagation()}>
-                  <button title="Acciones de la clase" aria-label="Acciones de la clase" onClick={() => setOpenMenuId(openMenuId === course.id ? null : course.id)} style={iconButtonStyle}><MoreVertical size={20} /></button>
-                  {openMenuId === course.id && <div style={{ position: 'absolute', right: 0, top: '2rem', zIndex: 10, width: '185px', padding: '0.35rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', boxShadow: 'var(--shadow-lg)' }}>
-                    <button onClick={() => { setEditingCourse(course); setCourseTitle(course.title); setCourseModality(course.modality || 'PRESENCIAL'); setOpenMenuId(null); }} style={menuButtonStyle}><Pencil size={15} /> Editar título</button>
-                    <button onClick={() => { setDuplicatingCourse(course); setDuplicateTitle(`${course.title} (Copia)`); setDuplicateModality(course.modality || 'PRESENCIAL'); setOpenMenuId(null); }} style={menuButtonStyle}><Copy size={15} /> Duplicar clase</button>
-                    <button onClick={() => { setDeletingCourse(course); setOpenMenuId(null); }} style={{ ...menuButtonStyle, color: '#9e2a2b' }}><Trash2 size={15} /> Eliminar clase</button>
-                  </div>}
-                </div>
-              </div>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', margin: 0 }}>Haz clic para gestionar el aula y el temario →</p>
+              );
+            })}
+          </div>
+        ) : (
+          /* Vista en Tabla Resumen */
+          <div className="glass-panel" style={{ padding: 0, overflow: 'hidden', border: '1px solid var(--border)', borderRadius: '12px' }}>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+                <thead>
+                  <tr style={{ background: 'var(--surface-alt)', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    <th style={{ padding: '0.85rem 1.25rem', fontWeight: 600 }}>Clase</th>
+                    <th style={{ padding: '0.85rem 1rem', fontWeight: 600 }}>Modalidad</th>
+                    <th style={{ padding: '0.85rem 1rem', fontWeight: 600 }}>Alumnos</th>
+                    <th style={{ padding: '0.85rem 1rem', fontWeight: 600 }}>Estado Tareas</th>
+                    <th style={{ padding: '0.85rem 1.25rem', fontWeight: 600, textAlign: 'right' }}>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredCourses.map((course) => {
+                    const modality = course.modality || 'PRESENCIAL';
+                    const isOnline = modality === 'ONLINE' || modality === 'HIBRIDO';
+                    const hasStudents = typeof course.studentsCount === 'number' && course.studentsCount > 0;
+                    const hasPending = typeof course.pendingStudentsCount === 'number' && course.pendingStudentsCount > 0;
+
+                    return (
+                      <tr
+                        key={course.id}
+                        onClick={() => navigate(`/teacher/course/${course.id}`)}
+                        style={{
+                          borderBottom: '1px solid var(--border)',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.15s ease'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-alt)'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                      >
+                        {/* Clase */}
+                        <td style={{ padding: '0.9rem 1.25rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <div style={{
+                              background: isOnline ? '#eef2ff' : 'var(--primary-light)',
+                              padding: '0.5rem',
+                              borderRadius: '8px',
+                              color: isOnline ? '#4338ca' : 'var(--primary)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}>
+                              {isOnline ? <Laptop size={18} /> : <BookOpen size={18} />}
+                            </div>
+                            <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>{course.title}</span>
+                          </div>
+                        </td>
+
+                        {/* Modalidad */}
+                        <td style={{ padding: '0.9rem 1rem' }}>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            padding: '2px 8px',
+                            borderRadius: '10px',
+                            background: isOnline ? '#e0f2fe' : '#f3e8ff',
+                            color: isOnline ? '#0369a1' : '#7e22ce',
+                            border: `1px solid ${isOnline ? '#bae6fd' : '#d8b4fe'}`
+                          }}>
+                            {modality === 'HIBRIDO' ? 'Híbrido' : isOnline ? 'Online' : 'Presencial'}
+                          </span>
+                        </td>
+
+                        {/* Alumnos */}
+                        <td style={{ padding: '0.9rem 1rem' }}>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.35rem',
+                            padding: '0.22rem 0.6rem',
+                            borderRadius: '12px',
+                            background: hasStudents ? '#f0fdf4' : 'var(--surface-alt)',
+                            color: hasStudents ? '#166534' : 'var(--text-muted)',
+                            border: `1px solid ${hasStudents ? '#bbf7d0' : 'var(--border)'}`,
+                            fontSize: '0.78rem',
+                            fontWeight: 600
+                          }}>
+                            <Users size={13} /> {hasStudents ? `${course.studentsCount} ${course.studentsCount === 1 ? 'alumno' : 'alumnos'}` : 'Sin alumnos'}
+                          </span>
+                        </td>
+
+                        {/* Estado Tareas */}
+                        <td style={{ padding: '0.9rem 1rem' }}>
+                          {hasStudents ? (
+                            hasPending ? (
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.35rem',
+                                padding: '0.22rem 0.6rem',
+                                borderRadius: '12px',
+                                background: '#fef3c7',
+                                color: '#92400e',
+                                border: '1px solid #fde68a',
+                                fontSize: '0.78rem',
+                                fontWeight: 600
+                              }}>
+                                <Clock size={13} /> {course.pendingStudentsCount} con pendientes
+                              </span>
+                            ) : (
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.35rem',
+                                padding: '0.22rem 0.6rem',
+                                borderRadius: '12px',
+                                background: '#e0f2fe',
+                                color: '#0369a1',
+                                border: '1px solid #bae6fd',
+                                fontSize: '0.78rem',
+                                fontWeight: 600
+                              }}>
+                                <CheckCircle2 size={13} /> Al día
+                              </span>
+                            )
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>—</span>
+                          )}
+                        </td>
+
+                        {/* Acciones */}
+                        <td style={{ padding: '0.9rem 1.25rem', textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/teacher/course/${course.id}`)}
+                              className="btn-secondary"
+                              style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', borderRadius: '6px' }}
+                            >
+                              Entrar →
+                            </button>
+                            <div style={{ position: 'relative' }}>
+                              <button
+                                title="Acciones de la clase"
+                                aria-label="Acciones de la clase"
+                                onClick={() => setOpenMenuId(openMenuId === `tbl_${course.id}` ? null : `tbl_${course.id}`)}
+                                style={iconButtonStyle}
+                              >
+                                <MoreVertical size={18} />
+                              </button>
+                              {openMenuId === `tbl_${course.id}` && (
+                                <div style={{ position: 'absolute', right: 0, top: '2rem', zIndex: 10, width: '185px', padding: '0.35rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', boxShadow: 'var(--shadow-lg)' }}>
+                                  <button onClick={() => { setEditingCourse(course); setCourseTitle(course.title); setCourseModality(course.modality || 'PRESENCIAL'); setOpenMenuId(null); }} style={menuButtonStyle}><Pencil size={15} /> Editar título</button>
+                                  <button onClick={() => { setDuplicatingCourse(course); setDuplicateTitle(`${course.title} (Copia)`); setDuplicateModality(course.modality || 'PRESENCIAL'); setOpenMenuId(null); }} style={menuButtonStyle}><Copy size={15} /> Duplicar clase</button>
+                                  <button onClick={() => { setDeletingCourse(course); setOpenMenuId(null); }} style={{ ...menuButtonStyle, color: '#9e2a2b' }}><Trash2 size={15} /> Eliminar clase</button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          );
-        })}
-        {filteredCourses.length === 0 && !isCreating && (
-          <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem', gridColumn: '1 / -1' }}>
+          </div>
+        )
+      ) : (
+        !isCreating && (
+          <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem' }}>
             <BookOpen size={40} style={{ color: 'var(--primary)', opacity: 0.5, marginBottom: '1rem' }} />
             <p style={{ color: 'var(--text-muted)', margin: 0 }}>
               {modalityFilter === 'ALL' ? 'Aún no tienes ninguna clase creada. ¡Crea la primera para empezar!' : `No hay clases en la categoría ${modalityFilter === 'PRESENCIAL' ? 'Presencial' : 'Online'}.`}
             </p>
           </div>
-        )}
-      </div>
+        )
+      )}
 
       {duplicatingCourse && (
         <div style={modalBackdropStyle} onClick={() => !isDuplicating && setDuplicatingCourse(null)}>

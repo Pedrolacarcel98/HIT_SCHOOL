@@ -33,10 +33,23 @@ Lista de control para el seguimiento y resolucion de las tareas, bugs y peticion
     - Modal de duplicacion intuitivo con nombre editable y selector de modalidad integrado en el menu de tarjetas de `TeacherCourses.tsx` y en la cabecera del aula en `CourseView.tsx`.
   - **Estado:** ✅ **Completado y Verificado.**
 
-- [ ] **4. Jerarquia y Rol ADMIN Superior (Laura)**
+- [x] **4. Conmutador de Vistas en Mis Clases (Cuadrícula vs Tabla Resumen)**
+  - **Descripcion:** Permitir alternar la visualización del listado de clases entre el modo tarjetas actual y un modo tabla resumen ligero, compacto e intuitivo. Debe mostrar globos/etiquetas breves con el nº de alumnos y alumnos con tareas pendientes, sin sobrecargar la interfaz.
+  - **Solucion implementada:**
+    - Conmutador visual con botones segmentados (`LayoutGrid` y `List`) en la barra superior de `TeacherCourses.tsx`.
+    - Persistencia automática de la preferencia (`grid` o `table`) en `localStorage` (`hit_courses_view_mode`).
+    - Enriquecimiento de `GET /api/courses` con cálculo ágil en memoria de `studentsCount` y `pendingStudentsCount`.
+    - Etiquetas/globos informativos concisos:
+      - Alumnos: `👥 X alumnos` (o `— Sin alumnos`).
+      - Tareas: `⏳ Y con pendientes` (ámbar si hay entregas pendientes de revisión o tareas sin entregar) o `✓ Al día` (verde si todo está entregado y calificado).
+    - Filas interactivas en modo tabla: clic en cualquier parte de la fila para entrar al aula, botón directo "Entrar →" y menú contextual de 3 puntos (Editar, Duplicar, Eliminar).
+    - Enriquecimiento equivalente en la vista de tarjetas con los mismos globos informativos sutiles en el pie de tarjeta.
+  - **Estado:** ✅ **Completado y Verificado.**
+
+- [ ] **5. Jerarquia y Rol ADMIN Superior (Laura)**
   - **Descripcion:** Configurar una jerarquia de permisos administrativos donde unicamente el usuario con rol ADMIN (Laura) tenga permisos para crear clases y asignarlas al resto de profesores, mientras que los profesores gestionan su contenido sin crear aulas globales por su cuenta.
   - **Estado:** ⏳ **Pendiente de atacar.**
 
-- [ ] **5. Redacciones y Writings Sin Limite de Palabras**
+- [ ] **6. Redacciones y Writings Sin Limite de Palabras**
   - **Descripcion:** Clarificar y asegurar que las entregas de redaccion / writing se realicen en respuestas de texto libre sin limite restrictivo de palabras o mediante adjuntos multiformato (imagenes, documentos, audios).
   - **Estado:** ⏳ **Pendiente de atacar.**
