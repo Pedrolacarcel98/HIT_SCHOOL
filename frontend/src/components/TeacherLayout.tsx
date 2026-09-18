@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Award, BookOpen, Users, LogOut, GraduationCap, FolderArchive, CircleDollarSign, MessageCircle, Menu, X, Settings, Home, UserRoundCog, ShieldCheck } from 'lucide-react';
 import SettingsModal from './SettingsModal';
+import { useLearningNotifications } from '../hooks/useLearningNotifications';
 
 const TeacherLayout: React.FC = () => {
   const navigate = useNavigate();
@@ -9,6 +10,7 @@ const TeacherLayout: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const { hasNewGrades, markGradesSeen } = useLearningNotifications();
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -30,6 +32,10 @@ const TeacherLayout: React.FC = () => {
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (location.pathname === '/teacher/grades') markGradesSeen();
+  }, [location.pathname, markGradesSeen]);
 
   useEffect(() => {
     const fetchUnreadChatCount = async () => {
@@ -233,6 +239,9 @@ const TeacherLayout: React.FC = () => {
                   <span style={{ display: 'inline-flex', color: isActive ? '#ffffff' : item.iconColor, position: 'relative' }}>
                     {React.cloneElement(item.icon, { strokeWidth: 2.5 })}
                     {item.path === '/teacher/chat' && unreadChatCount > 0 && (
+                      <span style={{ position: 'absolute', top: -3, right: -3, width: 9, height: 9, borderRadius: '50%', background: '#ef4444', border: `2px solid ${isActive ? 'var(--primary)' : '#ffffff'}` }} />
+                    )}
+                    {item.path === '/teacher/grades' && hasNewGrades && (
                       <span style={{ position: 'absolute', top: -3, right: -3, width: 9, height: 9, borderRadius: '50%', background: '#ef4444', border: `2px solid ${isActive ? 'var(--primary)' : '#ffffff'}` }} />
                     )}
                   </span>

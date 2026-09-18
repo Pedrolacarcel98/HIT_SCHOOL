@@ -16,6 +16,10 @@ const PeopleTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const [assigningTeacherLoading, setAssigningTeacherLoading] = useState(false);
   const [teacherActionMsg, setTeacherActionMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
+  const canAssignTeacher = userRole === 'ADMIN'
+    || courseDetails?.teacherId === localStorage.getItem('userId')
+    || teachersData.assigned.some((teacher: any) => teacher.id === localStorage.getItem('userId'));
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
   const [studentSearch, setStudentSearch] = useState('');
@@ -244,7 +248,7 @@ const PeopleTab: React.FC<{ courseId: string }> = ({ courseId }) => {
           <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0, color: 'var(--primary)' }}>
             <GraduationCap size={22} /> Profesores de la Clase
           </h3>
-          {userRole === 'ADMIN' && courseDetails?.modality === 'ONLINE' && !isAssignTeacherOpen && (
+          {canAssignTeacher && !isAssignTeacherOpen && (
             <button
               onClick={handleOpenAssignTeacher}
               className="btn-primary"
@@ -269,7 +273,7 @@ const PeopleTab: React.FC<{ courseId: string }> = ({ courseId }) => {
             marginBottom: '1rem'
           }}>
             <Info size={18} style={{ flexShrink: 0 }} />
-            <span>Esta es una clase <strong>Presencial</strong>: todos los profesores del centro tienen acceso automático para impartirla y gestionar tareas.</span>
+            <span>Esta es una clase <strong>Presencial</strong>: todos los profesores del centro pueden acceder y trabajar con las acciones de profesor asignado.</span>
           </div>
         )}
 

@@ -110,11 +110,19 @@ router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: A
     const term = parseInt(req.query.term as string) || 1;
     const academicYear = (req.query.academicYear as string) || '2025-2026';
 
-    // Verificar que el curso existe y pertenece al profesor o admin
+    // Verificar que el curso pertenece al profesor titular o está asignado al profesor.
     const course = await prisma.course.findFirst({
       where: {
         id: courseId,
-        ...(req.user!.role === 'TEACHER' ? { teacherId: req.user!.id } : {})
+        ...(req.user!.role === 'TEACHER'
+          ? {
+              OR: [
+                { modality: 'PRESENCIAL' },
+                { teacherId: req.user!.id },
+                { assignedTeachers: { some: { teacherId: req.user!.id } } }
+              ]
+            }
+          : {})
       },
       include: {
         enrollments: {
@@ -268,6 +276,7 @@ router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: A
         listening: onlineSkills?.listening ?? existingRecord?.listening ?? null,
         speaking: onlineSkills?.speaking ?? existingRecord?.speaking ?? null,
         observations: existingRecord?.observations ?? '',
+        updatedAt: existingRecord?.updatedAt ?? null,
         tasksCount: evaluableTasks.length,
         completedTasksCount: studentTasksBreakdown.filter((t) => t.isCompleted).length,
         tasks: studentTasksBreakdown
@@ -311,6 +320,25 @@ router.put('/course/:courseId', authenticateToken, requireTeacher, async (req: A
       return res.status(400).json({ error: 'studentId y term son obligatorios.' });
     }
 
+    const courseAccess = await prisma.course.findFirst({
+      where: {
+        id: courseId,
+        ...(req.user!.role === 'TEACHER'
+          ? {
+              OR: [
+                { modality: 'PRESENCIAL' },
+                { teacherId: req.user!.id },
+                { assignedTeachers: { some: { teacherId: req.user!.id } } }
+              ]
+            }
+          : {})
+      },
+      select: { id: true }
+    });
+    if (!courseAccess) {
+      return res.status(403).json({ error: 'No tienes acceso a las calificaciones de esta clase.' });
+    }
+
     // Verificar estudiante y modalidad
     const student = await prisma.user.findUnique({
       where: { id: studentId },
@@ -319,6 +347,14 @@ router.put('/course/:courseId', authenticateToken, requireTeacher, async (req: A
 
     if (!student) {
       return res.status(404).json({ error: 'Estudiante no encontrado.' });
+    }
+
+    const enrollment = await prisma.enrollment.findUnique({
+      where: { studentId_courseId: { studentId, courseId } },
+      select: { id: true }
+    });
+    if (!enrollment) {
+      return res.status(400).json({ error: 'El estudiante no está matriculado en esta clase.' });
     }
 
     const existingTermGrade = await prisma.termGrade.findUnique({
@@ -364,7 +400,7 @@ router.put('/course/:courseId', authenticateToken, requireTeacher, async (req: A
 
     const taskGrades: number[] = [];
     tasks.forEach((t) => {
-      const evaluableSteps = t.steps.filter((s) => s.requiresSubmission);
+      const evaluableSteps = t.steps.filter((s) => s.requiresSubmission || s.material?.type === 'FORM');
       const gradedSubmissions = evaluableSteps
         .map((s) => s.assignment?.submissions[0]?.grade)
         .filter((g): g is number => typeof g === 'number' && !isNaN(g));
@@ -481,9 +517,27 @@ router.get('/student/:studentId', authenticateToken, async (req: AuthRequest, re
     }
 
     // Determinar cursos a consultar
-    const targetCourseIds = courseId
+    let targetCourseIds = courseId
       ? [courseId]
       : student.enrollments.map((e) => e.courseId);
+
+    if (req.user!.role === 'TEACHER') {
+      const accessibleCourses = await prisma.course.findMany({
+        where: {
+          id: { in: targetCourseIds },
+          OR: [
+            { modality: 'PRESENCIAL' },
+            { teacherId: req.user!.id },
+            { assignedTeachers: { some: { teacherId: req.user!.id } } }
+          ]
+        },
+        select: { id: true }
+      });
+      targetCourseIds = accessibleCourses.map((course) => course.id);
+      if (targetCourseIds.length === 0) {
+        return res.status(403).json({ error: 'No tienes acceso a las calificaciones de las clases de este alumno.' });
+      }
+    }
 
     // Obtener todas las tareas de esos cursos
     const tasks = await prisma.structuredTask.findMany({
@@ -610,6 +664,7 @@ router.get('/student/:studentId', authenticateToken, async (req: AuthRequest, re
         listening: onlineSkills?.listening ?? existingTermGrade?.listening ?? null,
         speaking: onlineSkills?.speaking ?? existingTermGrade?.speaking ?? null,
         observations: existingTermGrade?.observations ?? null,
+        updatedAt: existingTermGrade?.updatedAt ?? null,
         tasks: tasksFormatted
       };
     }

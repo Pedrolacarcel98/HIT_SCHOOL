@@ -72,14 +72,9 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
         ? {}
         : {
             OR: [
-              { modality: Modality.PRESENCIAL },
-              {
-                modality: Modality.ONLINE,
-                OR: [
-                  { teacherId: userId },
-                  { assignedTeachers: { some: { teacherId: userId } } }
-                ]
-              }
+              { modality: 'PRESENCIAL' },
+              { teacherId: userId },
+              { assignedTeachers: { some: { teacherId: userId } } }
             ]
           };
       const courses = await prisma.course.findMany({
@@ -224,8 +219,7 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
     if (role === 'TEACHER') {
       const isTitular = course.teacherId === userId;
       const isAssigned = course.assignedTeachers.some(at => at.teacherId === userId);
-      const isPresencial = course.modality === 'PRESENCIAL';
-      if (!isPresencial && !isTitular && !isAssigned) {
+      if (course.modality !== 'PRESENCIAL' && !isTitular && !isAssigned) {
         return res.status(403).json({ error: 'No tienes acceso a esta clase' });
       }
     }
@@ -442,8 +436,7 @@ const verifyCourseAccess = async (req: any, res: any, next: any) => {
     if (!course) return res.status(404).json({ error: 'Clase no encontrada' });
     const isTitular = course.teacherId === userId;
     const isAssigned = course.assignedTeachers.some(at => at.teacherId === userId);
-    const isPresencial = course.modality === 'PRESENCIAL';
-    if (!isPresencial && !isTitular && !isAssigned) {
+    if (course.modality !== 'PRESENCIAL' && !isTitular && !isAssigned) {
       return res.status(403).json({ error: 'No tienes acceso a este curso' });
     }
   } else if (req.user!.role === 'PARENT') {
@@ -823,20 +816,34 @@ router.get('/:id/teachers', authenticateToken, verifyCourseAccess, async (req: A
   }
 });
 
-// Asignar un profesor a una clase (ADMIN)
-router.post('/:id/teachers', authenticateToken, requireAdmin, async (req: AuthRequest, res: Response) => {
+// Asignar un profesor a una clase (ADMIN, titular o profesor ya asignado)
+router.post('/:id/teachers', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
   const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const { teacherId } = req.body;
   if (!teacherId) return res.status(400).json({ error: 'El ID del profesor es obligatorio' });
 
   try {
+    const requestingTeacherId = req.user!.id;
+    const course = await prisma.course.findUnique({
+      where: { id: courseId },
+      select: {
+        teacherId: true,
+        assignedTeachers: { select: { teacherId: true } }
+      }
+    });
+    if (!course) return res.status(404).json({ error: 'Clase no encontrada' });
+
+    const canAssignTeacher = req.user!.role === 'ADMIN'
+      || course.teacherId === requestingTeacherId
+      || course.assignedTeachers.some(assigned => assigned.teacherId === requestingTeacherId);
+    if (!canAssignTeacher) {
+      return res.status(403).json({ error: 'Solo el profesor titular o un profesor asignado puede añadir colaboradores.' });
+    }
+
     const teacher = await prisma.user.findFirst({
       where: { id: teacherId, role: 'TEACHER', status: 'ACTIVE' }
     });
     if (!teacher) return res.status(404).json({ error: 'Profesor no encontrado o no está activo' });
-
-    const course = await prisma.course.findUnique({ where: { id: courseId } });
-    if (!course) return res.status(404).json({ error: 'Clase no encontrada' });
 
     if (course.teacherId === teacherId) {
       return res.status(400).json({ error: 'Este profesor ya es el titular de la clase.' });

@@ -75,6 +75,7 @@ interface CourseData {
   id: string;
   title: string;
   teacherId: string;
+  modality?: 'PRESENCIAL' | 'ONLINE' | 'HIBRIDO';
   students?: { id: string; name?: string; email: string }[];
 }
 
@@ -396,13 +397,14 @@ const TeacherGrades: React.FC = () => {
   const [students, setStudents] = useState<StudentData[]>([]);
   const [courses, setCourses] = useState<CourseData[]>([]);
   const [assignments, setAssignments] = useState<AssignmentItem[]>([]);
+  const [courseTermGrades, setCourseTermGrades] = useState<Record<string, any[]>>({});
   const [loading, setLoading] = useState(true);
 
   const [searchParams] = useSearchParams();
   const initialStudentQuery = searchParams.get('student') || '';
 
   // Vistas y Filtros
-  const [viewMode, setViewMode] = useState<'STUDENTS' | 'CLASSES'>('STUDENTS');
+  const [viewMode, setViewMode] = useState<'STUDENTS' | 'CLASSES'>('CLASSES');
   const [modalityFilter, setModalityFilter] = useState<'ALL' | 'PRESENCIAL' | 'ONLINE'>('ALL');
   const [searchTerm, setSearchTerm] = useState(initialStudentQuery);
   const [selectedStudentForDossier, setSelectedStudentForDossier] = useState<StudentWithMeta | null>(null);
@@ -604,6 +606,37 @@ const TeacherGrades: React.FC = () => {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    const fetchCourseTermGrades = async () => {
+      if (courses.length === 0) {
+        setCourseTermGrades({});
+        return;
+      }
+
+      const token = localStorage.getItem('token');
+      const entries = await Promise.all(courses.map(async (course) => {
+        try {
+          const response = await fetch(`${apiUrl}/api/term-grades/course/${course.id}?term=${selectedTerm}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (!response.ok) return [course.id, []] as const;
+          const data = await response.json();
+          return [course.id, data.students || []] as const;
+        } catch {
+          return [course.id, []] as const;
+        }
+      }));
+
+      setCourseTermGrades(Object.fromEntries(entries));
+    };
+
+    fetchCourseTermGrades();
+  }, [courses, selectedTerm]);
+
+  useEffect(() => {
+    if (initialStudentQuery) setViewMode('STUDENTS');
+  }, [initialStudentQuery]);
+
   // Extraer todas las entregas aplanadas
   const allSubmissionsFlat = useMemo(() => {
     return assignments.flatMap(assignment =>
@@ -634,7 +667,12 @@ const TeacherGrades: React.FC = () => {
 
   // Asignar cursos a cada alumno
   const studentsWithMeta = useMemo(() => {
-    return students.map(student => {
+    const role = localStorage.getItem('userRole');
+    const visibleStudents = role === 'ADMIN'
+      ? students
+      : students.filter(student => courses.some(course => course.students?.some(courseStudent => courseStudent.id === student.id)));
+
+    return visibleStudents.map(student => {
       const studentName = student.profile ? `${student.profile.firstName} ${student.profile.lastName}`.trim() : student.email;
       
       // Clases donde está matriculado
@@ -649,6 +687,14 @@ const TeacherGrades: React.FC = () => {
       const averageGrade = gradedSubs.length > 0
         ? (gradedSubs.reduce((acc, curr) => acc + (curr.grade || 0), 0) / gradedSubs.length).toFixed(1)
         : null;
+      const courseGradeSummaries = enrolledCourses.map(course => {
+        const courseStudentGrade = (courseTermGrades[course.id] || []).find((entry: any) => entry.studentId === student.id);
+        return {
+          courseId: course.id,
+          courseTitle: course.title,
+          overallGrade: courseStudentGrade?.overallGrade ?? null
+        };
+      });
 
       const modality: 'PRESENCIAL' | 'ONLINE' = student.modality === 'ONLINE' ? 'ONLINE' : 'PRESENCIAL';
 
@@ -661,10 +707,11 @@ const TeacherGrades: React.FC = () => {
         gradedSubmissions: gradedSubs.length,
         pendingSubmissions: pendingSubs.length,
         averageGrade,
+        courseGradeSummaries,
         modality
       };
     });
-  }, [students, courses, assignments, allSubmissionsFlat]);
+  }, [students, courses, assignments, allSubmissionsFlat, courseTermGrades]);
 
   const activeDossierStudent = useMemo(() => {
     if (!selectedStudentForDossier) return null;
@@ -699,8 +746,7 @@ const TeacherGrades: React.FC = () => {
   // Clases con métricas
   const coursesWithMeta = useMemo(() => {
     return courses.map(course => {
-      const isOnline = course.title.toLowerCase().includes('online') || course.title.toLowerCase().includes('particular') || course.title.toLowerCase().includes('individual');
-      const modality: 'PRESENCIAL' | 'ONLINE' = isOnline ? 'ONLINE' : 'PRESENCIAL';
+      const modality: 'PRESENCIAL' | 'ONLINE' = course.modality === 'ONLINE' ? 'ONLINE' : 'PRESENCIAL';
 
       const classSubs = allSubmissionsFlat.filter(s => s.courseId === course.id);
       const gradedSubs = classSubs.filter(s => s.grade !== null && s.grade !== undefined);
@@ -708,6 +754,13 @@ const TeacherGrades: React.FC = () => {
 
       const averageGrade = gradedSubs.length > 0
         ? (gradedSubs.reduce((acc, curr) => acc + (curr.grade || 0), 0) / gradedSubs.length).toFixed(1)
+        : null;
+      const termGrades = courseTermGrades[course.id] || [];
+      const globalGrades = termGrades
+        .map(student => student.overallGrade)
+        .filter((grade): grade is number => typeof grade === 'number' && !Number.isNaN(grade));
+      const classOverallGrade = globalGrades.length > 0
+        ? (globalGrades.reduce((sum, grade) => sum + grade, 0) / globalGrades.length).toFixed(1)
         : null;
 
       return {
@@ -717,10 +770,12 @@ const TeacherGrades: React.FC = () => {
         submissions: classSubs,
         totalSubmissions: classSubs.length,
         pendingSubmissions: pendingSubs.length,
-        averageGrade
+        averageGrade,
+        termGrades,
+        classOverallGrade
       };
     });
-  }, [courses, allSubmissionsFlat]);
+  }, [courses, allSubmissionsFlat, courseTermGrades]);
 
   // Filtrado de Clases
   const filteredCourses = useMemo(() => {
@@ -1228,20 +1283,20 @@ const TeacherGrades: React.FC = () => {
                             )}
                           </span>
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                            <span style={{ color: 'var(--text-muted)' }}>Nota media:</span>
-                            {student.averageGrade ? (
-                              <span style={{
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                            <span style={{ color: 'var(--text-muted)' }}>Notas por clase:</span>
+                            {student.courseGradeSummaries.length > 0 ? student.courseGradeSummaries.map((courseGrade: any) => (
+                              <span key={courseGrade.courseId} title={courseGrade.courseTitle} style={{
                                 fontWeight: 700,
-                                color: parseFloat(student.averageGrade) >= 5 ? '#24583e' : '#9e2a2b',
-                                background: parseFloat(student.averageGrade) >= 5 ? '#eaf4ef' : '#fdf0f0',
+                                color: typeof courseGrade.overallGrade === 'number' && courseGrade.overallGrade >= 5 ? '#24583e' : '#9e2a2b',
+                                background: typeof courseGrade.overallGrade === 'number' && courseGrade.overallGrade >= 5 ? '#eaf4ef' : '#fdf0f0',
                                 padding: '1px 7px',
                                 borderRadius: '12px',
-                                border: `1px solid ${parseFloat(student.averageGrade) >= 5 ? '#bfe0d0' : '#f7caca'}`
+                                border: `1px solid ${typeof courseGrade.overallGrade === 'number' && courseGrade.overallGrade >= 5 ? '#bfe0d0' : '#f7caca'}`
                               }}>
-                                {student.averageGrade} / 10
+                                {courseGrade.courseTitle}: {typeof courseGrade.overallGrade === 'number' ? `${courseGrade.overallGrade.toFixed(1)} / 10` : '- / 10'}
                               </span>
-                            ) : (
+                            )) : (
                               <span style={{ color: 'var(--text-light)', fontStyle: 'italic' }}>- / 10</span>
                             )}
                             <ChevronRight size={16} style={{ color: 'var(--text-muted)' }} />
@@ -1350,14 +1405,13 @@ const TeacherGrades: React.FC = () => {
                       ))}
                     </div>
 
-                    {currentEvaluation ? (
-                      <div>
+                    <div>
                         {activeDossierStudent.modality !== 'ONLINE' && (
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '0.65rem', marginBottom: '0.85rem' }}>
                             {[
-                              ['MIDDLE TERM', currentEvaluation.middleExamGrade, 'Examen parcial (35%)'],
-                              ['FINAL TERM', currentEvaluation.finalExamGrade, 'Examen final (35%)'],
-                              ['MEDIA TAREAS', currentEvaluation.tasksAverage, 'Prácticas (30%)'],
+                              ['MIDDLE TERM', currentEvaluation?.middleExamGrade, 'Examen parcial (35%)'],
+                              ['FINAL TERM', currentEvaluation?.finalExamGrade, 'Examen final (35%)'],
+                              ['MEDIA TAREAS', currentEvaluation?.tasksAverage, 'Prácticas (30%)'],
                               ['CALIFICACIÓN TRIMESTRAL', displayedTermOverall, 'Nota ponderada']
                             ].map(([label, value, subtitle]) => (
                               <div key={label} style={{ padding: '0.65rem', background: label === 'CALIFICACIÓN TRIMESTRAL' ? 'var(--primary-light)' : 'var(--surface)', borderRadius: '8px', border: `1px solid ${label === 'CALIFICACIÓN TRIMESTRAL' ? 'var(--primary-border)' : 'var(--border)'}`, textAlign: 'center' }}>
@@ -1371,7 +1425,7 @@ const TeacherGrades: React.FC = () => {
 
                         {activeDossierStudent.modality === 'ONLINE' && (
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: '0.65rem', marginBottom: '0.85rem' }}>
-                            {[['GRAMMAR', currentEvaluation.grammar], ['READING', currentEvaluation.reading], ['WRITING', currentEvaluation.writing], ['LISTENING', currentEvaluation.listening], ['SPEAKING', currentEvaluation.speaking], ['NOTA GLOBAL', currentEvaluation.overallGrade]].map(([label, value]) => (
+                            {[['GRAMMAR', currentEvaluation?.grammar], ['READING', currentEvaluation?.reading], ['WRITING', currentEvaluation?.writing], ['LISTENING', currentEvaluation?.listening], ['SPEAKING', currentEvaluation?.speaking], ['NOTA GLOBAL', currentEvaluation?.overallGrade]].map(([label, value]) => (
                               <div key={label} style={{ padding: '0.65rem', background: label === 'NOTA GLOBAL' ? 'var(--primary-light)' : 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
                                 <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'block', fontWeight: 700 }}>{label}</span>
                                 <strong style={{ fontSize: '1.05rem', color: 'var(--primary)', display: 'block', marginTop: '0.2rem' }}>{typeof value === 'number' ? `${value.toFixed(1)} / 10` : '- / 10'}</strong>
@@ -1425,17 +1479,17 @@ const TeacherGrades: React.FC = () => {
                           </div>
                         </div>)}
 
-                        {currentEvaluation.observations && (
+                        {currentEvaluation?.observations && (
                           <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--text-main)', fontStyle: 'italic', background: 'var(--surface)', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
                             💬 Observaciones: "{currentEvaluation.observations}"
                           </p>
                         )}
-                      </div>
-                    ) : (
+                      {!currentEvaluation && (
                       <div style={{ padding: '0.75rem 0.9rem', background: '#fef7e8', borderRadius: '8px', border: '1px solid #fae0b0', color: '#8d5b12', fontSize: '0.85rem' }}>
                         ⚠️ Pendiente de evaluación final.
                       </div>
-                    )}
+                      )}
+                    </div>
                   </div>
 
                   {/* Listado de Entregas del Alumno */}
@@ -1838,9 +1892,9 @@ const TeacherGrades: React.FC = () => {
                         )}
 
                         <div style={{ textAlign: 'right' }}>
-                          <small style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.75rem' }}>Media de la clase</small>
-                          <strong style={{ fontSize: '1.05rem', color: course.averageGrade && parseFloat(course.averageGrade) >= 5 ? '#24583e' : 'var(--text-main)' }}>
-                            {course.averageGrade ? `${course.averageGrade} / 10` : '- / 10'}
+                          <small style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.75rem' }}>Nota global del {selectedTerm}º trimestre</small>
+                          <strong style={{ fontSize: '1.05rem', color: course.classOverallGrade && parseFloat(course.classOverallGrade) >= 5 ? '#24583e' : 'var(--text-main)' }}>
+                            {course.classOverallGrade ? `${course.classOverallGrade} / 10` : '- / 10'}
                           </strong>
                         </div>
 
@@ -1851,6 +1905,33 @@ const TeacherGrades: React.FC = () => {
                     {/* Desglose de Entregas de los Alumnos de la Clase */}
                     {isExpanded && (
                       <div style={{ padding: '1.5rem 1.75rem', background: 'var(--background)' }}>
+                        {course.termGrades.length > 0 && (
+                          <div style={{ marginBottom: '1.25rem' }}>
+                            <h4 style={{ margin: '0 0 0.75rem', fontSize: '1.05rem', color: 'var(--text-main)' }}>
+                              Calificaciones de los alumnos · {selectedTerm}º trimestre
+                            </h4>
+                            <div className="table-responsive">
+                              <table style={{ width: '100%', borderCollapse: 'collapse', background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                                <thead>
+                                  <tr style={{ background: 'var(--surface-alt)', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                                    <th style={{ padding: '0.7rem 0.85rem', textAlign: 'left' }}>ALUMNO</th>
+                                    <th style={{ padding: '0.7rem 0.85rem', textAlign: 'left' }}>MEDIA TAREAS</th>
+                                    <th style={{ padding: '0.7rem 0.85rem', textAlign: 'left' }}>NOTA GLOBAL</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {course.termGrades.map((student) => (
+                                    <tr key={student.studentId} style={{ borderTop: '1px solid var(--border)' }}>
+                                      <td style={{ padding: '0.7rem 0.85rem', color: 'var(--text-main)', fontWeight: 600 }}>{student.fullName}</td>
+                                      <td style={{ padding: '0.7rem 0.85rem', color: 'var(--text-muted)' }}>{typeof student.tasksAverage === 'number' ? `${student.tasksAverage.toFixed(1)} / 10` : '- / 10'}</td>
+                                      <td style={{ padding: '0.7rem 0.85rem', color: 'var(--primary)', fontWeight: 700 }}>{typeof student.overallGrade === 'number' ? `${student.overallGrade.toFixed(1)} / 10` : '- / 10'}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                           <h4 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--text-main)' }}>
                             Entregas de los alumnos de {course.title} ({course.submissions.length})

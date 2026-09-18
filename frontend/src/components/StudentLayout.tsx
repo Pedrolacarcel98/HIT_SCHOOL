@@ -3,6 +3,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Award, BookOpen, CircleDollarSign, GraduationCap, LogOut, MessageCircle, Menu, X, Users, Settings, Home } from 'lucide-react';
 import { useParent } from '../context/ParentContext';
 import SettingsModal from './SettingsModal';
+import { useLearningNotifications } from '../hooks/useLearningNotifications';
 
 const StudentLayout: React.FC = () => {
   const navigate = useNavigate();
@@ -11,6 +12,7 @@ const StudentLayout: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
   const { parentName, childrenList, selectedStudentId, setSelectedStudentId, refreshParentData } = useParent();
+  const { hasNewGrades, hasNewTasks, markGradesSeen, markTasksSeen } = useLearningNotifications(selectedStudentId);
 
   const userRole = localStorage.getItem('userRole');
 
@@ -28,6 +30,11 @@ const StudentLayout: React.FC = () => {
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (location.pathname === '/student/grades') markGradesSeen();
+    if (location.pathname === '/student/courses') markTasksSeen();
+  }, [location.pathname, markGradesSeen, markTasksSeen]);
 
   useEffect(() => {
     const fetchUnreadChatCount = async () => {
@@ -221,6 +228,12 @@ const StudentLayout: React.FC = () => {
                   <span style={{ display: 'inline-flex', color: isActive ? '#ffffff' : item.iconColor, position: 'relative' }}>
                     {React.cloneElement(item.icon, { strokeWidth: 2.5 })}
                     {item.path === '/student/chat' && unreadChatCount > 0 && (
+                      <span style={{ position: 'absolute', top: -3, right: -3, width: 9, height: 9, borderRadius: '50%', background: '#ef4444', border: `2px solid ${isActive ? 'var(--primary)' : '#ffffff'}` }} />
+                    )}
+                    {item.path === '/student/grades' && hasNewGrades && (
+                      <span style={{ position: 'absolute', top: -3, right: -3, width: 9, height: 9, borderRadius: '50%', background: '#ef4444', border: `2px solid ${isActive ? 'var(--primary)' : '#ffffff'}` }} />
+                    )}
+                    {item.path === '/student/courses' && hasNewTasks && (
                       <span style={{ position: 'absolute', top: -3, right: -3, width: 9, height: 9, borderRadius: '50%', background: '#ef4444', border: `2px solid ${isActive ? 'var(--primary)' : '#ffffff'}` }} />
                     )}
                   </span>

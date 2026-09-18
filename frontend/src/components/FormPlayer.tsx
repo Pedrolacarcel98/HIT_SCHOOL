@@ -222,13 +222,13 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                   width: '64px',
                   height: '64px',
                   borderRadius: '50%',
-                  background: hasOpenText ? '#fef3c7' : (percentage >= 60 ? 'var(--primary-light)' : 'rgba(239, 68, 68, 0.12)'),
-                  color: hasOpenText ? '#b45309' : (percentage >= 60 ? 'var(--primary-text)' : '#9e2a2b'),
+                  background: hasOpenText ? '#fef3c7' : (percentage >= 50 ? 'var(--primary-light)' : 'rgba(239, 68, 68, 0.12)'),
+                  color: hasOpenText ? '#b45309' : (percentage >= 50 ? 'var(--primary-text)' : '#9e2a2b'),
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   margin: '0 auto 1.25rem',
-                  border: `1px solid ${hasOpenText ? '#fde68a' : (percentage >= 60 ? 'var(--primary-border)' : '#f7caca')}`
+                  border: `1px solid ${hasOpenText ? '#fde68a' : (percentage >= 50 ? 'var(--primary-border)' : '#f7caca')}`
                 }}>
                   {hasOpenText ? <Clock size={36} /> : <Award size={36} />}
                 </div>
@@ -262,18 +262,20 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                     margin: '1.5rem 0',
                     padding: '1.25rem',
                     borderRadius: '12px',
-                    background: percentage >= 60 ? 'var(--primary-subtle)' : '#fdf0f0',
-                    border: `1px solid ${percentage >= 60 ? 'var(--primary-border)' : '#f7caca'}`
+                    background: percentage >= 50 ? 'var(--primary-subtle)' : '#fdf0f0',
+                    border: `1px solid ${percentage >= 50 ? 'var(--primary-border)' : '#f7caca'}`
                   }}>
-                    <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: percentage >= 60 ? 'var(--primary-text)' : '#9e2a2b' }}>
+                    <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: percentage >= 50 ? 'var(--primary-text)' : '#9e2a2b' }}>
                       {score} <span style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>/ {totalPoints}</span>
                     </div>
                     <div style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--text)', marginTop: '0.25rem' }}>
                       {percentage}% de Acierto
                     </div>
-                    <p style={{ margin: '0.5rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                      {percentage >= 60 ? '🎉 ¡Enhorabuena! Has superado el examen.' : '💪 Puedes reintentarlo para mejorar tu puntuación.'}
-                    </p>
+                    {percentage >= 50 && (
+                      <p style={{ margin: '0.5rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                        🎉 ¡Enhorabuena! Has superado el examen.
+                      </p>
+                    )}
                   </div>
                 )}
 

@@ -99,9 +99,16 @@ router.get('/teacher', authenticateToken, requireTeacher, async (req: AuthReques
   try {
     const teacherId = req.user!.id;
     const assignments = await prisma.assignment.findMany({
-      where: { teacherId },
+      where: {
+        OR: [
+          { teacherId },
+          { course: { modality: 'PRESENCIAL' } },
+          { course: { teacherId } },
+          { course: { assignedTeachers: { some: { teacherId } } } }
+        ]
+      },
       include: {
-        course: { select: { title: true } },
+        course: { select: { id: true, title: true } },
         student: { select: { email: true, profile: { select: { firstName: true, lastName: true } } } },
         material: { select: { id: true, title: true, type: true, url: true, formData: true, description: true } },
         structuredTaskStep: { select: { id: true, order: true, title: true, requiresSubmission: true, task: { select: { id: true, title: true, category: true, dueDate: true } } } },

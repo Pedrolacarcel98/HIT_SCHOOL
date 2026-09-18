@@ -6,6 +6,7 @@ import StudentClassworkTab from '../components/StudentClassworkTab';
 import StudentGradesTab from '../components/StudentGradesTab';
 import StudentPeopleTab from '../components/StudentPeopleTab';
 import { useParent } from '../context/ParentContext';
+import { useLearningNotifications } from '../hooks/useLearningNotifications';
 
 type CourseTab = 'stream' | 'classwork' | 'completed' | 'grades' | 'people';
 
@@ -14,6 +15,7 @@ const StudentCourseView: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { selectedStudentId } = useParent();
+  const { markCourseTasksSeen } = useLearningNotifications(selectedStudentId);
 
   const validTabs: CourseTab[] = ['stream', 'classwork', 'completed', 'grades', 'people'];
   const paramTab = searchParams.get('tab') as CourseTab | null;
@@ -69,6 +71,10 @@ const StudentCourseView: React.FC = () => {
     fetchCourseDetails();
   }, [id, selectedStudentId]);
 
+  useEffect(() => {
+    if (id) markCourseTasksSeen(id);
+  }, [id, markCourseTasksSeen]);
+
   if (!course) {
     return (
       <div className="page-container" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
@@ -78,7 +84,7 @@ const StudentCourseView: React.FC = () => {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
+    <div style={{ minHeight: '100vh', background: '#e0f2fe' }}>
       {/* Navbar Superior */}
       <nav style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, zIndex: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1.5rem', borderBottom: '1px solid var(--border)', gap: '1rem', flexWrap: 'wrap' }}>
