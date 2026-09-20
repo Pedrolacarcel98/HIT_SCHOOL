@@ -301,13 +301,12 @@ const MaterialsManagement: React.FC = () => {
     setStructuredTaskIsTemplate(Boolean(task?.isTemplate));
     setStructuredTaskTitle(task?.title || '');
     setStructuredTaskSteps(task?.steps.map((step, index) => ({ ...step, order: index + 1 })) || [{ id: `step-${Date.now()}`, order: 1, title: '', materialId: null }]);
-    const assignmentType = task?.assignmentType || 'CLASS';
-    const courseId = task?.courseId || (assignmentType === 'CLASS' && !task?.isTemplate ? courses[0]?.id || '' : '');
+    const courseId = task?.courseId || (!task?.isTemplate ? courses[0]?.id || '' : '');
     setStructuredTaskCourseId(courseId);
-    setStructuredTaskAssignmentType(assignmentType);
+    setStructuredTaskAssignmentType('CLASS');
     setStructuredTaskIsSequential(task?.isSequential || false);
     setStructuredTaskPublishAt(toLocalDatetimeInput(task?.publishAt));
-    setAssignedStudentIds(task?.assignedStudentIds?.length ? task.assignedStudentIds : (task?.assignedStudentId ? [task.assignedStudentId] : []));
+    setAssignedStudentIds([]);
     setStudentSearch('');
     setIsStudentPickerOpen(false);
     setIsStructuredTaskModalOpen(true);
@@ -319,8 +318,8 @@ const MaterialsManagement: React.FC = () => {
     setStructuredTaskIsTemplate(false);
     setStructuredTaskTitle(template.title.replace(/^\[Plantilla\]\s*/i, ''));
     setStructuredTaskSteps(template.steps.map((step, index) => ({ ...step, order: index + 1 })));
-    setStructuredTaskCourseId('');
-    setStructuredTaskAssignmentType('INDIVIDUAL');
+    setStructuredTaskCourseId(courses[0]?.id || '');
+    setStructuredTaskAssignmentType('CLASS');
     setStructuredTaskIsSequential(template.isSequential || false);
     setStructuredTaskPublishAt('');
     setAssignedStudentIds([]);
@@ -361,8 +360,7 @@ const MaterialsManagement: React.FC = () => {
       .map((step, index) => ({ ...step, title: step.title.trim(), order: index + 1 }))
       .filter((step) => step.title);
     if (!title || steps.length === 0) return;
-    if (!structuredTaskIsTemplate && structuredTaskAssignmentType === 'CLASS' && !structuredTaskCourseId) return;
-    if (!structuredTaskIsTemplate && structuredTaskAssignmentType === 'INDIVIDUAL' && assignedStudentIds.length === 0) return;
+    if (!structuredTaskIsTemplate && !structuredTaskCourseId) return;
 
     try {
       const token = localStorage.getItem('token');
@@ -370,7 +368,7 @@ const MaterialsManagement: React.FC = () => {
       const res = await fetch(`${apiUrl}/api/structured-tasks${editingStructuredTask ? `/${editingStructuredTask.id}` : ''}`, {
         method: editingStructuredTask ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ title, isTemplate: structuredTaskIsTemplate, courseId: structuredTaskIsTemplate ? null : (structuredTaskAssignmentType === 'CLASS' ? structuredTaskCourseId : null), assignmentType: structuredTaskIsTemplate ? 'CLASS' : structuredTaskAssignmentType, isSequential: structuredTaskIsSequential, publishAt: structuredTaskIsTemplate ? null : (toIsoDateString(structuredTaskPublishAt) || null), assignedStudentIds: structuredTaskIsTemplate || structuredTaskAssignmentType === 'CLASS' ? [] : assignedStudentIds, steps })
+        body: JSON.stringify({ title, isTemplate: structuredTaskIsTemplate, courseId: structuredTaskIsTemplate ? null : structuredTaskCourseId, assignmentType: 'CLASS', isSequential: structuredTaskIsSequential, publishAt: structuredTaskIsTemplate ? null : (toIsoDateString(structuredTaskPublishAt) || null), assignedStudentIds: [], steps })
       });
       if (!res.ok) throw new Error('No se pudo guardar la tarea estructurada.');
       await fetchStructuredTasks();
@@ -953,6 +951,7 @@ const MaterialsManagement: React.FC = () => {
               description={previewingForm.description || undefined}
               questions={previewingForm.formData?.questions || []}
               readOnly
+              audioMode="backend-proxy"
               allowRetry={false}
               initialAnswers={Object.fromEntries((previewingForm.formData?.questions || []).map((question: { id: string; correctAnswer: string | number }) => [question.id, question.correctAnswer]))}
             />
@@ -970,21 +969,12 @@ const MaterialsManagement: React.FC = () => {
             <input required value={structuredTaskTitle} onChange={(event) => setStructuredTaskTitle(event.target.value)} placeholder="Ej. Ensayo B2 Writing" style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', outline: 'none' }} />
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '0.75rem', marginTop: '1rem' }}>
               <div>
-                <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Asignar a</label>
-                <select value={structuredTaskAssignmentType} onChange={(event) => { setStructuredTaskAssignmentType(event.target.value as 'CLASS' | 'INDIVIDUAL'); setAssignedStudentIds([]); setStudentSearch(''); }} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}>
-                  <option value="CLASS">Toda una Clase</option>
-                  <option value="INDIVIDUAL">Alumno(s) Individuales</option>
-                </select>
-              </div>
-              {structuredTaskAssignmentType === 'CLASS' && (
-                <div>
                   <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Clase destinataria</label>
                   <select required value={structuredTaskCourseId} onChange={(event) => { setStructuredTaskCourseId(event.target.value); setAssignedStudentIds([]); }} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}>
                     <option value="">Selecciona una clase</option>
                     {courses.map((course) => <option key={course.id} value={course.id}>{course.title}</option>)}
                   </select>
-                </div>
-              )}
+              </div>
               <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '0.3rem' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>
                   <input type="checkbox" checked={structuredTaskIsSequential} onChange={(e) => setStructuredTaskIsSequential(e.target.checked)} style={{ width: '16px', height: '16px', accentColor: 'var(--primary)' }} />
@@ -997,7 +987,7 @@ const MaterialsManagement: React.FC = () => {
                 <small style={{ display: 'block', marginTop: '0.25rem', color: 'var(--text-muted)', fontSize: '0.72rem' }}>Vacío: visible inmediatamente.</small>
               </div>
             </div>
-            {structuredTaskAssignmentType === 'INDIVIDUAL' && (() => {
+            {false && structuredTaskAssignmentType === 'INDIVIDUAL' && (() => {
               const query = studentSearch.trim().toLowerCase();
               const studentLabel = (student: EnrolledStudent) => student.profile ? `${student.profile.firstName} ${student.profile.lastName}`.trim() : student.email;
               const selectedStudents = allStudents.filter((student) => assignedStudentIds.includes(student.id));
@@ -1212,6 +1202,7 @@ const MaterialsManagement: React.FC = () => {
                   description={viewingMaterial.description}
                   questions={viewingMaterial.formData.questions || []}
                   readOnly
+                  audioMode="backend-proxy"
                   initialAnswers={Object.fromEntries((viewingMaterial.formData.questions || []).map((question: { id: string; correctAnswer: string | number }) => [question.id, question.correctAnswer]))}
                 />
               )}
@@ -1220,7 +1211,7 @@ const MaterialsManagement: React.FC = () => {
         </div>
       )) : null}
 
-      <MaterialViewerModal material={viewingMaterialState} onClose={() => setViewingMaterial(null)} />
+      <MaterialViewerModal material={viewingMaterialState} audioMode="backend-proxy" onClose={() => setViewingMaterial(null)} />
 
       {/* Modal: Añadir Recurso Multimedia / Documento */}
       {showAddResourceModal && (

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken, requireTeacher } from '../middleware/auth';
 import { ensureStudentPaymentScheduleById } from '../services/payments';
-import { sendAccountReactivationEmail } from '../services/email';
+import { sendAccountReactivationEmail, sendStudentWelcomeEmail } from '../services/email';
 import bcrypt from 'bcrypt';
 import { deactivateParentIfNoActiveChildren } from '../services/parentStatus';
 
@@ -20,7 +20,10 @@ router.post('/enroll', authenticateToken, requireTeacher, async (req, res) => {
   if (normalizedBillingPeriod !== 'MONTHLY' && normalizedBillingPeriod !== 'QUARTERLY') return res.status(400).json({ error: 'La periodicidad de pago no es válida.' });
 
   try {
-    const student = await prisma.user.findUnique({ where: { id: studentId, role: 'STUDENT' } });
+    const student = await prisma.user.findUnique({
+      where: { id: studentId, role: 'STUDENT' },
+      include: { academyEnrollments: { select: { id: true } } }
+    });
     if (!student) {
       return res.status(404).json({ error: 'Alumno no encontrado.' });
     }
@@ -29,6 +32,7 @@ router.post('/enroll', authenticateToken, requireTeacher, async (req, res) => {
       return res.status(400).json({ error: 'El alumno ya está dado de alta.' });
     }
 
+    const isFirstEnrollment = student.academyEnrollments.length === 0;
     const temporaryPassword = `hit${Math.floor(1000 + Math.random() * 9000)}`;
     const enrollment = await prisma.academyEnrollment.create({
       data: {
@@ -57,17 +61,30 @@ router.post('/enroll', authenticateToken, requireTeacher, async (req, res) => {
     await ensureStudentPaymentScheduleById(prisma, studentId);
 
     try {
-      await sendAccountReactivationEmail(
-        updatedUser.email,
-        updatedUser.profile?.firstName || 'alumno',
-        temporaryPassword,
-        'alumno'
-      );
+      if (isFirstEnrollment) {
+        await sendStudentWelcomeEmail(
+          updatedUser.email,
+          updatedUser.profile?.firstName || 'alumno',
+          temporaryPassword
+        );
+      } else {
+        await sendAccountReactivationEmail(
+          updatedUser.email,
+          updatedUser.profile?.firstName || 'alumno',
+          temporaryPassword,
+          'alumno'
+        );
+      }
     } catch (mailError) {
-      console.error('El alumno fue reactivado, pero no se pudo enviar el correo SMTP:', mailError);
+      console.error(
+        isFirstEnrollment
+          ? 'El alumno fue dado de alta por primera vez, pero no se pudo enviar el correo de bienvenida SMTP:'
+          : 'El alumno fue reactivado, pero no se pudo enviar el correo de reactivación SMTP:',
+        mailError
+      );
     }
 
-    return res.json({ message: 'Alumno dado de alta exitosamente', enrollment, user: updatedUser });
+    return res.json({ message: 'Alumno dado de alta exitosamente', enrollment, user: updatedUser, isFirstEnrollment });
   } catch (error) {
     console.error('Error dando de alta al alumno:', error);
     return res.status(500).json({ error: 'Error interno del servidor al dar de alta.' });
@@ -115,6 +132,10 @@ router.post('/unenroll', authenticateToken, requireTeacher, async (req, res) => 
         isPaid: false,
         dueDate: { gt: new Date() }
       }
+    });
+
+    await prisma.enrollment.deleteMany({
+      where: { studentId }
     });
 
     // Volver a calcular schedule por si acaso

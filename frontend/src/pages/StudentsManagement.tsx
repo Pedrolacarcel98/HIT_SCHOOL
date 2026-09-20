@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
   UserPlus,
   Search,
@@ -84,6 +86,12 @@ interface Student {
     startDate?: string;
     endDate?: string | null;
   }[];
+  paymentStatuses?: {
+    month: number;
+    year: number;
+    amount: number;
+    isPaid: boolean;
+  }[];
 }
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -92,6 +100,12 @@ const IMAGE_AUTHORIZATION_OPTIONS = [
   'Sí, Para envío personal y familias del grupo de clase',
   'Sí, Para envío personal, familias del grupo de clase y redes sociales'
 ] as const;
+
+const normalizeSearchValue = (value: string) => value
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .trim();
 
 type ImageAuthorizationOption = typeof IMAGE_AUTHORIZATION_OPTIONS[number];
 
@@ -105,13 +119,23 @@ const getImageAuthorizationValue = (profile?: Student['profile']): ImageAuthoriz
 
 const StudentsManagement: React.FC = () => {
   const navigate = useNavigate();
+  const userRole = localStorage.getItem('userRole');
+  const canManageStudents = userRole === 'ADMIN' || userRole === 'TEACHER';
   const [students, setStudents] = useState<Student[]>([]);
   const [parents, setParents] = useState<ParentData[]>([]);
   const [parentSearchTerm, setParentSearchTerm] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [modalityFilter, setModalityFilter] = useState<'ALL' | 'PRESENCIAL' | 'ONLINE'>('ALL');
   const [familyFilter, setFamilyFilter] = useState<'ALL' | 'WITH_PARENT' | 'INDEPENDENT'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   const [loading, setLoading] = useState(true);
+
+  // Modal Dar de Alta
+  const [showAltaModal, setShowAltaModal] = useState(false);
+  const [selectedStudentForAlta, setSelectedStudentForAlta] = useState<Student | null>(null);
+  const [newMonthlyFee, setNewMonthlyFee] = useState('35');
+  const [newBillingPeriod, setNewBillingPeriod] = useState<'MONTHLY' | 'QUARTERLY'>('MONTHLY');
+  const [newStartDate, setNewStartDate] = useState(() => new Date().toISOString().split('T')[0]);
 
   // Modal Ver Ficha
   const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
@@ -178,6 +202,8 @@ const StudentsManagement: React.FC = () => {
       setEditingStudent(null);
       setDeletingStudent(null);
       setShowCreateModal(false);
+      setShowAltaModal(false);
+      setSelectedStudentForAlta(null);
     };
     document.addEventListener('click', closeOnOutsideClick);
     return () => document.removeEventListener('click', closeOnOutsideClick);
@@ -419,6 +445,117 @@ const StudentsManagement: React.FC = () => {
     }
   };
 
+  const handleOpenAlta = (student: Student) => {
+    const lastEnrollment = student.academyEnrollments?.[0];
+    setSelectedStudentForAlta(student);
+    setNewMonthlyFee(lastEnrollment ? String(lastEnrollment.monthlyFee) : '35');
+    setNewBillingPeriod(lastEnrollment?.billingPeriod || 'MONTHLY');
+    setNewStartDate(new Date().toISOString().split('T')[0]);
+    setShowAltaModal(true);
+  };
+
+  const handleAlta = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStudentForAlta) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${apiUrl}/api/enrollments/enroll`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          studentId: selectedStudentForAlta.id,
+          monthlyFee: Number(newMonthlyFee),
+          billingPeriod: newBillingPeriod,
+          startDate: newStartDate
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        showToast(data.error || 'Error al dar de alta', 'error');
+        return;
+      }
+
+      showToast('Alumno dado de alta correctamente.');
+      setShowAltaModal(false);
+      setSelectedStudentForAlta(null);
+      fetchStudents();
+    } catch (err) {
+      showToast('Error de conexión', 'error');
+    }
+  };
+
+  const handleBaja = async (student: Student) => {
+    const studentName = `${student.profile?.firstName || ''} ${student.profile?.lastName || ''}`.trim() || student.email;
+    if (!window.confirm(`¿Estás seguro de que deseas dar de baja a ${studentName}? Se detendrá la generación de sus pagos.`)) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${apiUrl}/api/enrollments/unenroll`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          studentId: student.id
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        showToast(data.error || 'Error al dar de baja', 'error');
+        return;
+      }
+
+      showToast('Alumno dado de baja correctamente.');
+      fetchStudents();
+    } catch (err) {
+      showToast('Error de conexión', 'error');
+    }
+  };
+
+  const downloadUnpaidPDF = (student: Student) => {
+    const unpaid = student.paymentStatuses?.filter(p => !p.isPaid) || [];
+    if (unpaid.length === 0) {
+      showToast('Este alumno no tiene pagos pendientes.', 'error');
+      return;
+    }
+
+    const doc = new jsPDF();
+    doc.setFontSize(18);
+    doc.text('Informe de Impagos', 14, 22);
+
+    doc.setFontSize(12);
+    doc.text(`Alumno: ${student.profile?.firstName || ''} ${student.profile?.lastName || ''}`.trim(), 14, 32);
+    if (student.profile?.dni) {
+      doc.text(`DNI: ${student.profile.dni}`, 14, 40);
+    }
+
+    const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const tableData = unpaid.map(p => [
+      `${monthNames[p.month - 1]} ${p.year}`,
+      `${p.amount} €`
+    ]);
+
+    autoTable(doc, {
+      startY: 50,
+      head: [['Periodo', 'Importe Pendiente']],
+      body: tableData,
+    });
+
+    const studentName = `${student.profile?.firstName || 'Alumno'}_${student.profile?.lastName || ''}`.trim();
+    doc.save(`Impagos_${studentName}.pdf`);
+  };
+
   const filteredStudents = students.filter(s => {
     const fullName = `${s.profile?.firstName || ''} ${s.profile?.lastName || ''}`.toLowerCase();
     const email = s.email.toLowerCase();
@@ -443,15 +580,23 @@ const StudentsManagement: React.FC = () => {
     if (familyFilter === 'WITH_PARENT' && !s.parentId) return false;
     if (familyFilter === 'INDEPENDENT' && s.parentId) return false;
 
+    if (statusFilter !== 'ALL' && s.status !== statusFilter) return false;
+
     return matchesSearch;
   });
 
   const filteredParents = parents.filter((parent) => {
-    const currentParentId = editingStudent ? editParentId : selectedParentId;
-    if (parent.status === 'INACTIVE' && parent.id !== currentParentId) return false;
-    const name = `${parent.profile?.firstName || ''} ${parent.profile?.lastName || ''}`.toLowerCase();
-    const query = parentSearchTerm.trim().toLowerCase();
-    return !query || name.includes(query) || parent.email.toLowerCase().includes(query) || (parent.profile?.dni || '').toLowerCase().includes(query);
+    if (parent.status !== 'ACTIVE') return false;
+    const searchableValues = [
+      parent.profile?.firstName,
+      parent.profile?.lastName,
+      parent.email,
+      parent.profile?.dni,
+      parent.profile?.phone
+    ].filter(Boolean).map((value) => normalizeSearchValue(value || ''));
+    const searchableText = searchableValues.join(' ');
+    const query = normalizeSearchValue(parentSearchTerm);
+    return !query || searchableText.includes(query);
   });
 
   const handleExportExcel = () => {
@@ -521,21 +666,49 @@ const StudentsManagement: React.FC = () => {
           <button onClick={handleExportExcel} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: '#ecfdf5', color: '#047857', border: '1px solid #6ee7b7', padding: '0.65rem 1rem', borderRadius: '12px', fontSize: '0.875rem', fontWeight: 500, cursor: 'pointer', transition: 'background 0.2s ease' }}>
             <FileSpreadsheet size={17} /> Exportar a Excel
           </button>
-          <button
-            onClick={() => { resetCreateForm(); setShowCreateModal(true); }}
-            className="btn-primary"
-            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.25rem' }}
-          >
-            <UserPlus size={18} /> Nuevo Alumno
-          </button>
+          {canManageStudents && (
+            <button
+              onClick={() => { resetCreateForm(); setShowCreateModal(true); }}
+              className="btn-primary"
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.25rem' }}
+            >
+              <UserPlus size={18} /> Nuevo Alumno
+            </button>
+          )}
         </div>
       </div>
 
       {/* Selector de Modalidad & Filtros & Buscador */}
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
           {([
-            ['ALL', 'Todos los alumnos', null],
+            ['ALL', 'Todos los alumnos'],
+            ['ACTIVE', 'Alta'],
+            ['INACTIVE', 'Baja']
+          ] as const).map(([val, label]) => (
+            <button
+              key={val}
+              type="button"
+              onClick={() => setStatusFilter(val)}
+              style={{
+                padding: '0.45rem 0.85rem',
+                borderRadius: '16px',
+                border: statusFilter === val ? '1px solid var(--primary)' : '1px solid var(--border)',
+                background: statusFilter === val ? 'var(--primary-light)' : 'var(--surface)',
+                color: statusFilter === val ? 'var(--primary-text)' : 'var(--text-muted)',
+                fontWeight: statusFilter === val ? 700 : 500,
+                fontSize: '0.84rem',
+                cursor: 'pointer'
+              }}
+            >
+              {label}
+            </button>
+          ))}
+
+          <div style={{ width: '1px', height: '22px', background: 'var(--border)', margin: '0 0.25rem' }} />
+
+          {([
+            ['ALL', 'Todas las modalidades', null],
             ['PRESENCIAL', 'Presencial', <GraduationCap size={15} />],
             ['ONLINE', 'Online / Híbrido', <Laptop size={15} />]
           ] as const).map(([val, label, icon]) => (
@@ -562,7 +735,7 @@ const StudentsManagement: React.FC = () => {
             </button>
           ))}
 
-          <div style={{ width: '1px', background: 'var(--border)', margin: '0 0.25rem' }} />
+          <div style={{ width: '1px', height: '22px', background: 'var(--border)', margin: '0 0.25rem' }} />
 
           {([
             ['ALL', 'Todas las cuentas'],
@@ -620,7 +793,7 @@ const StudentsManagement: React.FC = () => {
                 <th style={{ padding: '1rem 1.25rem', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.84rem' }}>DNI / NIE</th>
                 <th style={{ padding: '1rem 1.25rem', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.84rem' }}>CUENTA / TUTOR</th>
                 <th style={{ padding: '1rem 1.25rem', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.84rem' }}>ESTADO</th>
-                <th style={{ padding: '1rem 1.25rem', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.84rem' }}></th>
+                <th style={{ padding: '1rem 1.25rem', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.84rem' }}>MATRÍCULA ACTIVA</th>
                 <th style={{ padding: '1rem 1.25rem', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.84rem', textAlign: 'right' }}>ACCIONES</th>
               </tr>
             </thead>
@@ -642,6 +815,9 @@ const StudentsManagement: React.FC = () => {
                   const initials = `${s.profile?.firstName?.[0] || ''}${s.profile?.lastName?.[0] || ''}`.toUpperCase() || 'AL';
                   const age = calculateAge(s.profile?.birthDate);
                   const modality = s.modality || 'PRESENCIAL';
+                  const isActive = s.status === 'ACTIVE';
+                  const activeEnrollment = s.academyEnrollments?.find(e => !e.endDate);
+                  const hasUnpaid = s.paymentStatuses?.some(p => !p.isPaid);
 
                   return (
                     <tr key={s.id} style={{ borderBottom: '1px solid var(--border)', transition: 'background 0.2s ease' }}>
@@ -709,20 +885,73 @@ const StudentsManagement: React.FC = () => {
                         )}
                       </td>
 
-                      <td style={{ padding: '1rem 1.25rem', color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: '600' }}>
-                        {s.status === 'ACTIVE' ? (
-                          <span style={{ padding: '0.35rem 0.65rem', background: '#dcfce7', color: '#166534', borderRadius: '16px', fontSize: '0.75rem', fontWeight: 600 }}>Alta</span>
+                      <td style={{ padding: '1rem 1.25rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <span style={{
+                            padding: '0.35rem 0.65rem',
+                            background: isActive ? '#dcfce7' : '#fee2e2',
+                            color: isActive ? '#166534' : '#991b1b',
+                            borderRadius: '16px',
+                            fontSize: '0.75rem',
+                            fontWeight: 600
+                          }}>
+                            {isActive ? 'Alta' : 'Baja'}
+                          </span>
+                          {canManageStudents && (
+                            <button
+                              type="button"
+                              onClick={() => isActive ? handleBaja(s) : handleOpenAlta(s)}
+                              style={{
+                                padding: '0.3rem 0.55rem',
+                                borderRadius: '6px',
+                                border: `1px solid ${isActive ? '#fca5a5' : '#86efac'}`,
+                                background: isActive ? '#fff1f2' : '#f0fdf4',
+                                color: isActive ? '#b91c1c' : '#15803d',
+                                cursor: 'pointer',
+                                fontSize: '0.75rem',
+                                fontWeight: 600
+                              }}
+                            >
+                              {isActive ? 'Dar de baja' : 'Dar de alta'}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+
+                      <td style={{ padding: '1rem 1.25rem', color: 'var(--text-main)' }}>
+                        {activeEnrollment ? (
+                          <span style={{ fontSize: '0.88rem' }}>
+                            Desde {new Date(activeEnrollment.startDate || '').toLocaleDateString('es-ES')} - {activeEnrollment.monthlyFee}€ / {activeEnrollment.billingPeriod === 'QUARTERLY' ? 'trimestre' : 'mes'}
+                          </span>
                         ) : (
-                          <span style={{ padding: '0.35rem 0.65rem', background: '#fee2e2', color: '#991b1b', borderRadius: '16px', fontSize: '0.75rem', fontWeight: 600 }}>Baja</span>
+                          <span style={{ color: 'var(--text-light)', fontStyle: 'italic', fontSize: '0.82rem' }}>Sin matrícula activa</span>
                         )}
                       </td>
 
-                      <td style={{ padding: '1rem 1.25rem', color: 'var(--text-muted)', fontSize: '0.88rem' }}>
-                        {/* Removido temporalmente duracion y tarifa */}
-                      </td>
-
                       <td style={{ padding: '1rem 1.25rem', textAlign: 'right' }}>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.45rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.45rem', alignItems: 'center' }}>
+                          {userRole === 'ADMIN' && hasUnpaid && !isActive && (
+                            <button
+                              type="button"
+                              onClick={() => downloadUnpaidPDF(s)}
+                              title="Descargar PDF de Impagos"
+                              style={{
+                                background: '#fee2e2',
+                                border: '1px solid #f87171',
+                                borderRadius: '6px',
+                                padding: '0.35rem 0.65rem',
+                                cursor: 'pointer',
+                                color: '#991b1b',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.35rem',
+                                fontSize: '0.75rem',
+                                fontWeight: 'bold'
+                              }}
+                            >
+                              <FileText size={13} /> PDF Impagos
+                            </button>
+                          )}
                           <button
                             onClick={() => setViewingStudent(s)}
                             title="Ver ficha completa"
@@ -742,43 +971,47 @@ const StudentsManagement: React.FC = () => {
                             <Eye size={16} />
                           </button>
 
-                          <button
-                            onClick={() => handleStartEdit(s)}
-                            title="Editar ficha de alumno"
-                            style={{
-                              background: 'transparent',
-                              border: '1px solid var(--border)',
-                              borderRadius: '6px',
-                              padding: '0.4rem',
-                              cursor: 'pointer',
-                              color: 'var(--text-muted)',
-                              display: 'flex',
-                              alignItems: 'center'
-                            }}
-                            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--primary)'; e.currentTarget.style.borderColor = 'var(--primary)'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
-                          >
-                            <Edit2 size={16} />
-                          </button>
+                          {canManageStudents && (
+                            <>
+                              <button
+                                onClick={() => handleStartEdit(s)}
+                                title="Editar ficha de alumno"
+                                style={{
+                                  background: 'transparent',
+                                  border: '1px solid var(--border)',
+                                  borderRadius: '6px',
+                                  padding: '0.4rem',
+                                  cursor: 'pointer',
+                                  color: 'var(--text-muted)',
+                                  display: 'flex',
+                                  alignItems: 'center'
+                                }}
+                                onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--primary)'; e.currentTarget.style.borderColor = 'var(--primary)'; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
+                              >
+                                <Edit2 size={16} />
+                              </button>
 
-                          <button
-                            onClick={() => setDeletingStudent(s)}
-                            title="Eliminar alumno"
-                            style={{
-                              background: 'transparent',
-                              border: '1px solid var(--border)',
-                              borderRadius: '6px',
-                              padding: '0.4rem',
-                              cursor: 'pointer',
-                              color: 'var(--text-muted)',
-                              display: 'flex',
-                              alignItems: 'center'
-                            }}
-                            onMouseEnter={(e) => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.borderColor = '#ef4444'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                              <button
+                                onClick={() => setDeletingStudent(s)}
+                                title="Eliminar alumno"
+                                style={{
+                                  background: 'transparent',
+                                  border: '1px solid var(--border)',
+                                  borderRadius: '6px',
+                                  padding: '0.4rem',
+                                  cursor: 'pointer',
+                                  color: 'var(--text-muted)',
+                                  display: 'flex',
+                                  alignItems: 'center'
+                                }}
+                                onMouseEnter={(e) => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.borderColor = '#ef4444'; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -915,26 +1148,30 @@ const StudentsManagement: React.FC = () => {
               >
                 Cerrar
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const query = viewingStudent.profile?.firstName || viewingStudent.email;
-                  setViewingStudent(null);
-                  navigate(`/teacher/payments?student=${encodeURIComponent(query)}`);
-                }}
-                className="btn-secondary"
-                style={{ padding: '0.6rem 1.15rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.88rem' }}
-              >
-                <FileText size={16} /> Facturas y Pagos
-              </button>
-              <button
-                type="button"
-                onClick={() => { const s = viewingStudent; setViewingStudent(null); handleStartEdit(s); }}
-                className="btn-primary"
-                style={{ padding: '0.6rem 1.25rem' }}
-              >
-                Editar Ficha
-              </button>
+              {canManageStudents && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const query = viewingStudent.profile?.firstName || viewingStudent.email;
+                      setViewingStudent(null);
+                      navigate(`/teacher/payments?student=${encodeURIComponent(query)}`);
+                    }}
+                    className="btn-secondary"
+                    style={{ padding: '0.6rem 1.15rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.88rem' }}
+                  >
+                    <FileText size={16} /> Facturas y Pagos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { const s = viewingStudent; setViewingStudent(null); handleStartEdit(s); }}
+                    className="btn-primary"
+                    style={{ padding: '0.6rem 1.25rem' }}
+                  >
+                    Editar Ficha
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -1163,7 +1400,9 @@ const StudentsManagement: React.FC = () => {
                           style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}
                         >
                           <option value="">-- Seleccionar Padre/Tutor --</option>
-                          {filteredParents.map(p => (
+                          {filteredParents.length === 0 ? (
+                            <option value="" disabled>No hay tutores activos que coincidan</option>
+                          ) : filteredParents.map(p => (
                             <option key={p.id} value={p.id}>
                               {p.profile?.firstName} {p.profile?.lastName} ({p.email}) - {p.children?.length || 0} hijos
                             </option>
@@ -1355,7 +1594,9 @@ const StudentsManagement: React.FC = () => {
                   style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
                 >
                   <option value="">-- Sin tutor asignado (Alumno Independiente) --</option>
-                  {filteredParents.map(p => (
+                  {filteredParents.length === 0 ? (
+                    <option value="" disabled>No hay tutores activos que coincidan</option>
+                  ) : filteredParents.map(p => (
                     <option key={p.id} value={p.id}>
                       👨‍👧 {p.profile?.firstName} {p.profile?.lastName} ({p.email})
                     </option>
@@ -1495,6 +1736,75 @@ const StudentsManagement: React.FC = () => {
                 Sí, eliminar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Dar de Alta Matrícula */}
+      {showAltaModal && selectedStudentForAlta && (
+        <div className="modal-backdrop" style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.65)',
+          backdropFilter: 'blur(5px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 80,
+          padding: '1rem'
+        }}>
+          <div className="glass-panel modal-card" style={{ width: '100%', maxWidth: '420px', padding: '2rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h3 style={{ margin: 0, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.3rem' }}>
+                <UserCheck style={{ color: 'var(--primary)' }} /> Nueva Matrícula
+              </h3>
+              <button onClick={() => { setShowAltaModal(false); setSelectedStudentForAlta(null); }} className="modal-close" aria-label="Cerrar modal">
+                <X size={20} />
+              </button>
+            </div>
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-main)', marginBottom: '1.5rem', lineHeight: 1.5 }}>
+              Dando de alta a: <strong>{selectedStudentForAlta.profile?.firstName} {selectedStudentForAlta.profile?.lastName}</strong> ({selectedStudentForAlta.email})
+            </p>
+
+            <form onSubmit={handleAlta} style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 130px', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Periodicidad</label>
+                  <select value={newBillingPeriod} onChange={(e) => setNewBillingPeriod(e.target.value as 'MONTHLY' | 'QUARTERLY')} style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}>
+                    <option value="MONTHLY">Mensual</option>
+                    <option value="QUARTERLY">Trimestral</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Importe (€)</label>
+                  <input type="number" min="1" step="0.01" required value={newMonthlyFee} onChange={(e) => setNewMonthlyFee(e.target.value)} style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }} />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Fecha de Alta</label>
+                <input
+                  type="date"
+                  required
+                  value={newStartDate}
+                  onChange={(e) => setNewStartDate(e.target.value)}
+                  style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.75rem' }}>
+                <button
+                  type="button"
+                  onClick={() => { setShowAltaModal(false); setSelectedStudentForAlta(null); }}
+                  style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--text-main)', padding: '0.7rem 1.25rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  Cancelar
+                </button>
+                <button type="submit" className="btn-primary" style={{ padding: '0.7rem 1.5rem' }}>
+                  Dar de Alta
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

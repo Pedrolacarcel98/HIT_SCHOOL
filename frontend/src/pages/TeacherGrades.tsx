@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import {
   Award,
@@ -22,8 +23,9 @@ import {
 } from 'lucide-react';
 import ExamReviewModal from '../components/ExamReviewModal';
 import type { ReviewQuestion } from '../components/ExamReviewModal';
-import AttachmentViewerModal, { isAttachmentImage } from '../components/AttachmentViewerModal';
+import AttachmentViewerModal, { isAttachmentImage, isAttachmentAudio } from '../components/AttachmentViewerModal';
 import type { AttachmentData } from '../components/AttachmentViewerModal';
+import AudioPlayer from '../components/AudioPlayer';
 
 interface StudentData {
   id: string;
@@ -49,6 +51,16 @@ interface FinalEvaluationData {
   overallGrade?: number | null;
   middleExamGrade?: number | null;
   finalExamGrade?: number | null;
+  middleGrammar?: number | null;
+  middleReading?: number | null;
+  middleWriting?: number | null;
+  middleListening?: number | null;
+  middleSpeaking?: number | null;
+  finalGrammar?: number | null;
+  finalReading?: number | null;
+  finalWriting?: number | null;
+  finalListening?: number | null;
+  finalSpeaking?: number | null;
   tasksAverage?: number | null;
   observations?: string | null;
 }
@@ -63,6 +75,7 @@ interface CourseData {
   id: string;
   title: string;
   teacherId: string;
+  modality?: 'PRESENCIAL' | 'ONLINE' | 'HIBRIDO';
   students?: { id: string; name?: string; email: string }[];
 }
 
@@ -135,9 +148,12 @@ interface AssignmentItem {
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 interface ParsedExamData {
-  answers: Record<string, string | number>;
+  answers: Record<string, string | number | string[]>;
   score: number | null;
   total: number | null;
+  hasOpenText?: boolean;
+  openTextCount?: number;
+  questionScores?: Record<string, number>;
 }
 
 interface SubmissionAttachment {
@@ -198,18 +214,27 @@ const parseSavedExam = (content?: string | null): ParsedExamData | null => {
   if (!content) return null;
   try {
     const parsed = JSON.parse(content);
-    if (parsed.answers || typeof parsed.score === 'number') {
+    if (parsed.answers || typeof parsed.score === 'number' || parsed.hasOpenText) {
       return {
         answers: parsed.answers || {},
         score: typeof parsed.score === 'number' ? parsed.score : null,
-        total: typeof parsed.total === 'number' ? parsed.total : null
+        total: typeof parsed.total === 'number' ? parsed.total : null,
+        hasOpenText: Boolean(parsed.hasOpenText),
+        openTextCount: typeof parsed.openTextCount === 'number' ? parsed.openTextCount : (parsed.hasOpenText ? 1 : 0),
+        questionScores: parsed.questionScores && typeof parsed.questionScores === 'object' ? parsed.questionScores : {}
       };
-
     }
     return null;
   } catch {
     return null;
   }
+};
+
+const isSubmissionPending = (s: { materialType?: string; grade?: number | null; content?: string | null }) => {
+  if (s.grade !== null && s.grade !== undefined) return false;
+  if (s.materialType !== 'FORM') return true;
+  const exam = parseSavedExam(s.content);
+  return Boolean(exam?.hasOpenText || (exam?.openTextCount ?? 0) > 0);
 };
 
 interface StructuredTaskBlockProps {
@@ -307,12 +332,31 @@ const StructuredTaskBlock: React.FC<StructuredTaskBlockProps> = ({ blockKey, sub
                   <strong style={{ color: 'var(--text-main)', fontSize: '0.88rem' }}>Paso {index + 1}: {submission.structuredStepTitle || submission.assignmentTitle}</strong>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                     {submission.grade !== null && submission.grade !== undefined && <span style={{ padding: '0.25rem 0.55rem', borderRadius: '10px', background: submission.grade >= 5 ? '#eaf4ef' : '#fdf0f0', border: `1px solid ${submission.grade >= 5 ? '#bfe0d0' : '#f7caca'}`, color: submission.grade >= 5 ? '#24583e' : '#9e2a2b', fontSize: '0.75rem', fontWeight: 700 }}>Nota: {submission.grade.toFixed(1)} / 10</span>}
-                    {isExam && examData && <button type="button" onClick={(event) => { event.stopPropagation(); onReviewExam(submission, examData); }} className="btn-secondary" style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}><FileText size={13} /> Ver cuestionario</button>}
+                    {isExam && examData && (
+                      <button
+                        type="button"
+                        onClick={(event) => { event.stopPropagation(); onReviewExam(submission, examData); }}
+                        className={isSubmissionPending(submission) ? "btn-primary" : "btn-secondary"}
+                        style={{
+                          padding: '0.3rem 0.6rem',
+                          fontSize: '0.75rem',
+                          background: isSubmissionPending(submission) ? '#d97706' : undefined,
+                          borderColor: isSubmissionPending(submission) ? '#b45309' : undefined,
+                          color: isSubmissionPending(submission) ? '#ffffff' : undefined,
+                        }}
+                      >
+                        <FileText size={13} /> {isSubmissionPending(submission) ? `Corregir (${examData.openTextCount || 1} pend.)` : 'Ver cuestionario'}
+                      </button>
+                    )}
                     {isEvaluable && !isExam && <button type="button" onClick={(event) => { event.stopPropagation(); onEdit(submission); }} className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.35rem 0.65rem', fontSize: '0.75rem' }}><Edit3 size={13} /> Editar nota y feedback</button>}
                   </div>
                 </div>
                 {isExam ? (
-                  <span style={{ display: 'block', marginTop: '0.4rem', color: 'var(--text-muted)', fontSize: '0.78rem' }}>Test automático completado. La nota no se introduce manualmente.</span>
+                  <span style={{ display: 'block', marginTop: '0.4rem', color: isSubmissionPending(submission) ? '#b45309' : 'var(--text-muted)', fontSize: '0.78rem' }}>
+                    {examData?.hasOpenText
+                      ? (isSubmissionPending(submission) ? `⏳ Contiene ${examData.openTextCount} pregunta(s) de texto libre pendiente(s) de corrección por el profesor.` : 'Cuestionario corregido con preguntas abiertas.')
+                      : 'Test automático completado. La nota no se introduce manualmente.'}
+                  </span>
                 ) : (
                   <div style={{ marginTop: '0.4rem', padding: '0.55rem 0.7rem', background: 'var(--surface)', borderRadius: '6px', color: 'var(--text-main)', fontSize: '0.82rem', whiteSpace: 'pre-wrap' }}>
                     {parsed.text && <div>{parsed.text}</div>}
@@ -353,12 +397,16 @@ const TeacherGrades: React.FC = () => {
   const [students, setStudents] = useState<StudentData[]>([]);
   const [courses, setCourses] = useState<CourseData[]>([]);
   const [assignments, setAssignments] = useState<AssignmentItem[]>([]);
+  const [courseTermGrades, setCourseTermGrades] = useState<Record<string, any[]>>({});
   const [loading, setLoading] = useState(true);
 
+  const [searchParams] = useSearchParams();
+  const initialStudentQuery = searchParams.get('student') || '';
+
   // Vistas y Filtros
-  const [viewMode, setViewMode] = useState<'STUDENTS' | 'CLASSES'>('STUDENTS');
+  const [viewMode, setViewMode] = useState<'STUDENTS' | 'CLASSES'>('CLASSES');
   const [modalityFilter, setModalityFilter] = useState<'ALL' | 'PRESENCIAL' | 'ONLINE'>('ALL');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(initialStudentQuery);
   const [selectedStudentForDossier, setSelectedStudentForDossier] = useState<StudentWithMeta | null>(null);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedTerm, setSelectedTerm] = useState(1);
@@ -378,8 +426,19 @@ const TeacherGrades: React.FC = () => {
   const [feedbackInput, setFeedbackInput] = useState<string>('');
   const [isSavingGrade, setIsSavingGrade] = useState(false);
   const [saveError, setSaveError] = useState('');
-  const [reviewingExam, setReviewingExam] = useState<{ subId: string; title: string; questions?: ReviewQuestion[]; answers: Record<string, any>; score: number | null; total?: number | null; feedback: string | null } | null>(null);
   const [viewingAttachment, setViewingAttachment] = useState<AttachmentData | null>(null);
+  const [reviewingExam, setReviewingExam] = useState<{
+    subId: string;
+    title: string;
+    questions?: ReviewQuestion[];
+    answers: Record<string, any>;
+    score: number | null;
+    total?: number | null;
+    feedback: string | null;
+    questionScores?: Record<string, number>;
+    hasOpenText?: boolean;
+    openTextCount?: number;
+  } | null>(null);
   const [expandedSubmissionDetailsId, setExpandedSubmissionDetailsId] = useState<string | null>(null);
   const [expandedStructuredTaskKey, setExpandedStructuredTaskKey] = useState<string | null>(null);
 
@@ -389,6 +448,8 @@ const TeacherGrades: React.FC = () => {
   const [evaluationForm, setEvaluationForm] = useState({
     middleExamGrade: '',
     finalExamGrade: '',
+    middleGrammar: '', middleReading: '', middleWriting: '', middleListening: '', middleSpeaking: '',
+    finalGrammar: '', finalReading: '', finalWriting: '', finalListening: '', finalSpeaking: '',
     grammar: '',
     reading: '',
     writing: '',
@@ -397,11 +458,10 @@ const TeacherGrades: React.FC = () => {
     overallGrade: '',
     observations: ''
   });
+  const [expandedExamSections, setExpandedExamSections] = useState({ middle: false, final: false });
   const [isSavingEvaluation, setIsSavingEvaluation] = useState(false);
 
-  const displayedTermOverall = selectedStudentForDossier && selectedStudentForDossier.modality !== 'ONLINE' && termEvaluation
-    ? Number(((termEvaluation.middleExamGrade || 0) * 0.35 + (termEvaluation.finalExamGrade || 0) * 0.35 + (termEvaluation.tasksAverage || 0) * 0.3).toFixed(2))
-    : termEvaluation?.overallGrade;
+  const displayedTermOverall = termEvaluation?.overallGrade;
 
   useEffect(() => {
     if (selectedStudentForDossier) {
@@ -440,6 +500,8 @@ const TeacherGrades: React.FC = () => {
       setEvaluationForm({
         middleExamGrade: currentEvaluation.middleExamGrade !== null && currentEvaluation.middleExamGrade !== undefined ? String(currentEvaluation.middleExamGrade) : '',
         finalExamGrade: currentEvaluation.finalExamGrade !== null && currentEvaluation.finalExamGrade !== undefined ? String(currentEvaluation.finalExamGrade) : '',
+        middleGrammar: currentEvaluation.middleGrammar !== null && currentEvaluation.middleGrammar !== undefined ? String(currentEvaluation.middleGrammar) : '', middleReading: currentEvaluation.middleReading !== null && currentEvaluation.middleReading !== undefined ? String(currentEvaluation.middleReading) : '', middleWriting: currentEvaluation.middleWriting !== null && currentEvaluation.middleWriting !== undefined ? String(currentEvaluation.middleWriting) : '', middleListening: currentEvaluation.middleListening !== null && currentEvaluation.middleListening !== undefined ? String(currentEvaluation.middleListening) : '', middleSpeaking: currentEvaluation.middleSpeaking !== null && currentEvaluation.middleSpeaking !== undefined ? String(currentEvaluation.middleSpeaking) : '',
+        finalGrammar: currentEvaluation.finalGrammar !== null && currentEvaluation.finalGrammar !== undefined ? String(currentEvaluation.finalGrammar) : '', finalReading: currentEvaluation.finalReading !== null && currentEvaluation.finalReading !== undefined ? String(currentEvaluation.finalReading) : '', finalWriting: currentEvaluation.finalWriting !== null && currentEvaluation.finalWriting !== undefined ? String(currentEvaluation.finalWriting) : '', finalListening: currentEvaluation.finalListening !== null && currentEvaluation.finalListening !== undefined ? String(currentEvaluation.finalListening) : '', finalSpeaking: currentEvaluation.finalSpeaking !== null && currentEvaluation.finalSpeaking !== undefined ? String(currentEvaluation.finalSpeaking) : '',
         grammar: currentEvaluation.grammar !== null && currentEvaluation.grammar !== undefined ? String(currentEvaluation.grammar) : '',
         reading: currentEvaluation.reading !== null && currentEvaluation.reading !== undefined ? String(currentEvaluation.reading) : '',
         writing: currentEvaluation.writing !== null && currentEvaluation.writing !== undefined ? String(currentEvaluation.writing) : '',
@@ -452,6 +514,8 @@ const TeacherGrades: React.FC = () => {
       setEvaluationForm({
         middleExamGrade: '',
         finalExamGrade: '',
+        middleGrammar: '', middleReading: '', middleWriting: '', middleListening: '', middleSpeaking: '',
+        finalGrammar: '', finalReading: '', finalWriting: '', finalListening: '', finalSpeaking: '',
         grammar: '',
         reading: '',
         writing: '',
@@ -461,6 +525,7 @@ const TeacherGrades: React.FC = () => {
         observations: ''
       });
     }
+    setExpandedExamSections({ middle: false, final: false });
     setIsEvaluationModalOpen(true);
   };
 
@@ -541,6 +606,37 @@ const TeacherGrades: React.FC = () => {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    const fetchCourseTermGrades = async () => {
+      if (courses.length === 0) {
+        setCourseTermGrades({});
+        return;
+      }
+
+      const token = localStorage.getItem('token');
+      const entries = await Promise.all(courses.map(async (course) => {
+        try {
+          const response = await fetch(`${apiUrl}/api/term-grades/course/${course.id}?term=${selectedTerm}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (!response.ok) return [course.id, []] as const;
+          const data = await response.json();
+          return [course.id, data.students || []] as const;
+        } catch {
+          return [course.id, []] as const;
+        }
+      }));
+
+      setCourseTermGrades(Object.fromEntries(entries));
+    };
+
+    fetchCourseTermGrades();
+  }, [courses, selectedTerm]);
+
+  useEffect(() => {
+    if (initialStudentQuery) setViewMode('STUDENTS');
+  }, [initialStudentQuery]);
+
   // Extraer todas las entregas aplanadas
   const allSubmissionsFlat = useMemo(() => {
     return assignments.flatMap(assignment =>
@@ -571,7 +667,12 @@ const TeacherGrades: React.FC = () => {
 
   // Asignar cursos a cada alumno
   const studentsWithMeta = useMemo(() => {
-    return students.map(student => {
+    const role = localStorage.getItem('userRole');
+    const visibleStudents = role === 'ADMIN'
+      ? students
+      : students.filter(student => courses.some(course => course.students?.some(courseStudent => courseStudent.id === student.id)));
+
+    return visibleStudents.map(student => {
       const studentName = student.profile ? `${student.profile.firstName} ${student.profile.lastName}`.trim() : student.email;
       
       // Clases donde está matriculado
@@ -580,12 +681,20 @@ const TeacherGrades: React.FC = () => {
       // Entregas de este alumno
       const studentSubs = allSubmissionsFlat.filter(s => s.studentId === student.id);
       const gradedSubs = studentSubs.filter(s => s.grade !== null && s.grade !== undefined);
-      const pendingSubs = studentSubs.filter(s => s.materialType !== 'FORM' && (s.grade === null || s.grade === undefined));
+      const pendingSubs = studentSubs.filter(s => isSubmissionPending(s));
 
       // Media aritmética
       const averageGrade = gradedSubs.length > 0
         ? (gradedSubs.reduce((acc, curr) => acc + (curr.grade || 0), 0) / gradedSubs.length).toFixed(1)
         : null;
+      const courseGradeSummaries = enrolledCourses.map(course => {
+        const courseStudentGrade = (courseTermGrades[course.id] || []).find((entry: any) => entry.studentId === student.id);
+        return {
+          courseId: course.id,
+          courseTitle: course.title,
+          overallGrade: courseStudentGrade?.overallGrade ?? null
+        };
+      });
 
       const modality: 'PRESENCIAL' | 'ONLINE' = student.modality === 'ONLINE' ? 'ONLINE' : 'PRESENCIAL';
 
@@ -598,10 +707,11 @@ const TeacherGrades: React.FC = () => {
         gradedSubmissions: gradedSubs.length,
         pendingSubmissions: pendingSubs.length,
         averageGrade,
+        courseGradeSummaries,
         modality
       };
     });
-  }, [students, courses, assignments, allSubmissionsFlat]);
+  }, [students, courses, assignments, allSubmissionsFlat, courseTermGrades]);
 
   const activeDossierStudent = useMemo(() => {
     if (!selectedStudentForDossier) return null;
@@ -612,6 +722,16 @@ const TeacherGrades: React.FC = () => {
     () => activeDossierStudent ? groupStructuredSubmissions(activeDossierStudent.submissions) : [],
     [activeDossierStudent]
   );
+
+  useEffect(() => {
+    if (initialStudentQuery && studentsWithMeta.length > 0 && !selectedStudentForDossier) {
+      const q = initialStudentQuery.trim().toLowerCase();
+      const match = studentsWithMeta.find(st => st.fullName.toLowerCase().includes(q) || st.email.toLowerCase().includes(q));
+      if (match) {
+        setSelectedStudentForDossier(match);
+      }
+    }
+  }, [initialStudentQuery, studentsWithMeta, selectedStudentForDossier]);
 
   // Filtrado de Alumnos
   const filteredStudents = useMemo(() => {
@@ -626,15 +746,21 @@ const TeacherGrades: React.FC = () => {
   // Clases con métricas
   const coursesWithMeta = useMemo(() => {
     return courses.map(course => {
-      const isOnline = course.title.toLowerCase().includes('online') || course.title.toLowerCase().includes('particular') || course.title.toLowerCase().includes('individual');
-      const modality: 'PRESENCIAL' | 'ONLINE' = isOnline ? 'ONLINE' : 'PRESENCIAL';
+      const modality: 'PRESENCIAL' | 'ONLINE' = course.modality === 'ONLINE' ? 'ONLINE' : 'PRESENCIAL';
 
       const classSubs = allSubmissionsFlat.filter(s => s.courseId === course.id);
       const gradedSubs = classSubs.filter(s => s.grade !== null && s.grade !== undefined);
-      const pendingSubs = classSubs.filter(s => s.materialType !== 'FORM' && (s.grade === null || s.grade === undefined));
+      const pendingSubs = classSubs.filter(s => isSubmissionPending(s));
 
       const averageGrade = gradedSubs.length > 0
         ? (gradedSubs.reduce((acc, curr) => acc + (curr.grade || 0), 0) / gradedSubs.length).toFixed(1)
+        : null;
+      const termGrades = courseTermGrades[course.id] || [];
+      const globalGrades = termGrades
+        .map(student => student.overallGrade)
+        .filter((grade): grade is number => typeof grade === 'number' && !Number.isNaN(grade));
+      const classOverallGrade = globalGrades.length > 0
+        ? (globalGrades.reduce((sum, grade) => sum + grade, 0) / globalGrades.length).toFixed(1)
         : null;
 
       return {
@@ -644,10 +770,12 @@ const TeacherGrades: React.FC = () => {
         submissions: classSubs,
         totalSubmissions: classSubs.length,
         pendingSubmissions: pendingSubs.length,
-        averageGrade
+        averageGrade,
+        termGrades,
+        classOverallGrade
       };
     });
-  }, [courses, allSubmissionsFlat]);
+  }, [courses, allSubmissionsFlat, courseTermGrades]);
 
   // Filtrado de Clases
   const filteredCourses = useMemo(() => {
@@ -789,7 +917,7 @@ const TeacherGrades: React.FC = () => {
           ...prev,
           submissions: updatedSubs,
           gradedSubmissions: gradedSubs.length,
-          pendingSubmissions: updatedSubs.filter(s => s.materialType !== 'FORM' && (s.grade === null || s.grade === undefined)).length,
+          pendingSubmissions: updatedSubs.filter(s => isSubmissionPending(s)).length,
           averageGrade: avg
         };
       });
@@ -802,6 +930,67 @@ const TeacherGrades: React.FC = () => {
     } finally {
       setIsSavingGrade(false);
     }
+  };
+
+  const handleSaveExamGradeAndFeedback = async (data: { grade: number; feedback: string; questionScores: Record<string, number> }) => {
+    if (!reviewingExam) return;
+
+    const token = localStorage.getItem('token');
+    const updatedFeedback = data.feedback ? data.feedback.trim() : null;
+    const res = await fetch(`${apiUrl}/api/assignments/submissions/${reviewingExam.subId}/grade`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        grade: data.grade,
+        feedback: updatedFeedback,
+        questionScores: data.questionScores
+      })
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Error al guardar la calificación del examen.');
+    }
+
+    setAssignments(prev => prev.map(assignment => ({
+      ...assignment,
+      submissions: assignment.submissions.map(sub => sub.id === reviewingExam.subId ? {
+        ...sub,
+        grade: data.grade,
+        feedback: updatedFeedback
+      } : sub)
+    })));
+
+    setSelectedStudentForDossier(prev => {
+      if (!prev) return null;
+      const updatedSubs = prev.submissions.map(s => {
+        if (s.id === reviewingExam.subId) {
+          return {
+            ...s,
+            grade: data.grade,
+            feedback: updatedFeedback
+          };
+        }
+        return s;
+      });
+      const gradedSubs = updatedSubs.filter(s => s.grade !== null && s.grade !== undefined);
+      const avg = gradedSubs.length > 0
+        ? (gradedSubs.reduce((acc, curr) => acc + (curr.grade || 0), 0) / gradedSubs.length).toFixed(1)
+        : null;
+      return {
+        ...prev,
+        submissions: updatedSubs,
+        gradedSubmissions: gradedSubs.length,
+        pendingSubmissions: updatedSubs.filter(s => isSubmissionPending(s)).length,
+        averageGrade: avg
+      };
+    });
+
+    setReviewingExam(null);
+    fetchData();
   };
 
   const handleSaveExamFeedback = async (feedback: string) => {
@@ -850,7 +1039,7 @@ const TeacherGrades: React.FC = () => {
 
   // Métricas globales
   const totalSubmissionsCount = allSubmissionsFlat.length;
-  const totalPendingCount = allSubmissionsFlat.filter(s => s.materialType !== 'FORM' && (s.grade === null || s.grade === undefined)).length;
+  const totalPendingCount = allSubmissionsFlat.filter(s => isSubmissionPending(s)).length;
   const totalGradedCount = allSubmissionsFlat.filter(s => s.grade !== null && s.grade !== undefined).length;
   const gradingExamData = evaluatingSubmission ? parseSavedExam(evaluatingSubmission.content) : null;
   const isAutocorrectedExam = Boolean(gradingExamData?.total && gradingExamData.score !== null && gradingExamData.score !== undefined);
@@ -1094,20 +1283,20 @@ const TeacherGrades: React.FC = () => {
                             )}
                           </span>
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                            <span style={{ color: 'var(--text-muted)' }}>Nota media:</span>
-                            {student.averageGrade ? (
-                              <span style={{
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                            <span style={{ color: 'var(--text-muted)' }}>Notas por clase:</span>
+                            {student.courseGradeSummaries.length > 0 ? student.courseGradeSummaries.map((courseGrade: any) => (
+                              <span key={courseGrade.courseId} title={courseGrade.courseTitle} style={{
                                 fontWeight: 700,
-                                color: parseFloat(student.averageGrade) >= 5 ? '#24583e' : '#9e2a2b',
-                                background: parseFloat(student.averageGrade) >= 5 ? '#eaf4ef' : '#fdf0f0',
+                                color: typeof courseGrade.overallGrade === 'number' && courseGrade.overallGrade >= 5 ? '#24583e' : '#9e2a2b',
+                                background: typeof courseGrade.overallGrade === 'number' && courseGrade.overallGrade >= 5 ? '#eaf4ef' : '#fdf0f0',
                                 padding: '1px 7px',
                                 borderRadius: '12px',
-                                border: `1px solid ${parseFloat(student.averageGrade) >= 5 ? '#bfe0d0' : '#f7caca'}`
+                                border: `1px solid ${typeof courseGrade.overallGrade === 'number' && courseGrade.overallGrade >= 5 ? '#bfe0d0' : '#f7caca'}`
                               }}>
-                                {student.averageGrade} / 10
+                                {courseGrade.courseTitle}: {typeof courseGrade.overallGrade === 'number' ? `${courseGrade.overallGrade.toFixed(1)} / 10` : '- / 10'}
                               </span>
-                            ) : (
+                            )) : (
                               <span style={{ color: 'var(--text-light)', fontStyle: 'italic' }}>- / 10</span>
                             )}
                             <ChevronRight size={16} style={{ color: 'var(--text-muted)' }} />
@@ -1216,14 +1405,13 @@ const TeacherGrades: React.FC = () => {
                       ))}
                     </div>
 
-                    {currentEvaluation ? (
-                      <div>
+                    <div>
                         {activeDossierStudent.modality !== 'ONLINE' && (
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '0.65rem', marginBottom: '0.85rem' }}>
                             {[
-                              ['MIDDLE TERM', currentEvaluation.middleExamGrade, 'Examen parcial (35%)'],
-                              ['FINAL TERM', currentEvaluation.finalExamGrade, 'Examen final (35%)'],
-                              ['MEDIA TAREAS', currentEvaluation.tasksAverage, 'Prácticas (30%)'],
+                              ['MIDDLE TERM', currentEvaluation?.middleExamGrade, 'Examen parcial (35%)'],
+                              ['FINAL TERM', currentEvaluation?.finalExamGrade, 'Examen final (35%)'],
+                              ['MEDIA TAREAS', currentEvaluation?.tasksAverage, 'Prácticas (30%)'],
                               ['CALIFICACIÓN TRIMESTRAL', displayedTermOverall, 'Nota ponderada']
                             ].map(([label, value, subtitle]) => (
                               <div key={label} style={{ padding: '0.65rem', background: label === 'CALIFICACIÓN TRIMESTRAL' ? 'var(--primary-light)' : 'var(--surface)', borderRadius: '8px', border: `1px solid ${label === 'CALIFICACIÓN TRIMESTRAL' ? 'var(--primary-border)' : 'var(--border)'}`, textAlign: 'center' }}>
@@ -1237,7 +1425,7 @@ const TeacherGrades: React.FC = () => {
 
                         {activeDossierStudent.modality === 'ONLINE' && (
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: '0.65rem', marginBottom: '0.85rem' }}>
-                            {[['GRAMMAR', currentEvaluation.grammar], ['READING', currentEvaluation.reading], ['WRITING', currentEvaluation.writing], ['LISTENING', currentEvaluation.listening], ['SPEAKING', currentEvaluation.speaking], ['NOTA GLOBAL', currentEvaluation.overallGrade]].map(([label, value]) => (
+                            {[['GRAMMAR', currentEvaluation?.grammar], ['READING', currentEvaluation?.reading], ['WRITING', currentEvaluation?.writing], ['LISTENING', currentEvaluation?.listening], ['SPEAKING', currentEvaluation?.speaking], ['NOTA GLOBAL', currentEvaluation?.overallGrade]].map(([label, value]) => (
                               <div key={label} style={{ padding: '0.65rem', background: label === 'NOTA GLOBAL' ? 'var(--primary-light)' : 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
                                 <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'block', fontWeight: 700 }}>{label}</span>
                                 <strong style={{ fontSize: '1.05rem', color: 'var(--primary)', display: 'block', marginTop: '0.2rem' }}>{typeof value === 'number' ? `${value.toFixed(1)} / 10` : '- / 10'}</strong>
@@ -1291,17 +1479,17 @@ const TeacherGrades: React.FC = () => {
                           </div>
                         </div>)}
 
-                        {currentEvaluation.observations && (
+                        {currentEvaluation?.observations && (
                           <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--text-main)', fontStyle: 'italic', background: 'var(--surface)', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
                             💬 Observaciones: "{currentEvaluation.observations}"
                           </p>
                         )}
-                      </div>
-                    ) : (
+                      {!currentEvaluation && (
                       <div style={{ padding: '0.75rem 0.9rem', background: '#fef7e8', borderRadius: '8px', border: '1px solid #fae0b0', color: '#8d5b12', fontSize: '0.85rem' }}>
                         ⚠️ Pendiente de evaluación final.
                       </div>
-                    )}
+                      )}
+                    </div>
                   </div>
 
                   {/* Listado de Entregas del Alumno */}
@@ -1330,7 +1518,10 @@ const TeacherGrades: React.FC = () => {
                             answers: examData.answers,
                             score: submission.grade,
                             total: examData.total,
-                            feedback: submission.feedback
+                            feedback: submission.feedback,
+                            questionScores: examData.questionScores,
+                            hasOpenText: examData.hasOpenText,
+                            openTextCount: examData.openTextCount
                           })}
                         />
                       ))}
@@ -1430,35 +1621,55 @@ const TeacherGrades: React.FC = () => {
                                       </div>
                                       <div>
                                         <strong style={{ display: 'block', fontSize: '0.9rem', color: 'var(--text-main)' }}>
-                                          Examen tipo test completado
+                                          {examData.hasOpenText ? 'Cuestionario con preguntas abiertas' : 'Examen tipo test completado'}
                                         </strong>
+                                        {examData.score !== null && examData.score !== undefined && examData.total ? (
+                                          <small style={{ color: 'var(--text-muted)' }}>
+                                            {examData.score} de {examData.total} puntos objetivos
+                                          </small>
+                                        ) : null}
                                       </div>
                                     </div>
 
-                                    <button
-                                      type="button"
-                                      onClick={() => setReviewingExam({
-                                        subId: sub.id,
-                                        title: sub.assignmentTitle,
-                                        questions: sub.materialFormData?.questions || [],
-                                        answers: examData.answers,
-                                        score: sub.grade,
-                                        total: examData.total,
-                                        feedback: sub.feedback
-                                      })}
-                                      className="btn-secondary"
-                                      style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
-                                    >
-                                      <FileText size={14} /> Revisar
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => openGradingModal(sub)}
-                                      className="btn-primary"
-                                      style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
-                                    >
-                                      <Edit3 size={14} /> Editar Nota y Feedback
-                                    </button>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                      {examData.hasOpenText && isSubmissionPending(sub) && (
+                                        <span style={{ fontSize: '0.78rem', background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', padding: '0.2rem 0.5rem', borderRadius: '4px', fontWeight: 600 }}>
+                                          ⏳ {examData.openTextCount} {examData.openTextCount === 1 ? 'pregunta por calificar' : 'preguntas por calificar'}
+                                        </span>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={() => setReviewingExam({
+                                          subId: sub.id,
+                                          title: sub.assignmentTitle,
+                                          questions: sub.materialFormData?.questions || [],
+                                          answers: examData.answers,
+                                          score: sub.grade,
+                                          total: examData.total,
+                                          feedback: sub.feedback,
+                                          questionScores: examData.questionScores,
+                                          hasOpenText: examData.hasOpenText,
+                                          openTextCount: examData.openTextCount
+                                        })}
+                                        className={isSubmissionPending(sub) ? "btn-primary" : "btn-secondary"}
+                                        style={{
+                                          padding: '0.35rem 0.75rem',
+                                          fontSize: '0.8rem',
+                                          background: isSubmissionPending(sub) ? '#d97706' : undefined,
+                                          borderColor: isSubmissionPending(sub) ? '#b45309' : undefined
+                                        }}
+                                      >
+                                        <FileText size={14} /> {isSubmissionPending(sub) ? 'Corregir Examen' : 'Revisar'}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => openGradingModal(sub)}
+                                        className="btn-primary"
+                                        style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+                                      >
+                                        <Edit3 size={14} /> Editar Nota y Feedback
+                                      </button>
+                                    </div>
                                   </div>
                                 );
                               }
@@ -1530,6 +1741,11 @@ const TeacherGrades: React.FC = () => {
                                             }}
                                             title="Clic para ampliar y rotar"
                                           />
+                                        </div>
+                                      )}
+                                      {isAttachmentAudio(submissionDetails.attachment) && (
+                                        <div style={{ marginTop: '0.5rem' }}>
+                                          <AudioPlayer src={submissionDetails.attachment.dataUrl} title={submissionDetails.attachment.name} />
                                         </div>
                                       )}
                                     </div>
@@ -1676,9 +1892,9 @@ const TeacherGrades: React.FC = () => {
                         )}
 
                         <div style={{ textAlign: 'right' }}>
-                          <small style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.75rem' }}>Media de la clase</small>
-                          <strong style={{ fontSize: '1.05rem', color: course.averageGrade && parseFloat(course.averageGrade) >= 5 ? '#24583e' : 'var(--text-main)' }}>
-                            {course.averageGrade ? `${course.averageGrade} / 10` : '- / 10'}
+                          <small style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.75rem' }}>Nota global del {selectedTerm}º trimestre</small>
+                          <strong style={{ fontSize: '1.05rem', color: course.classOverallGrade && parseFloat(course.classOverallGrade) >= 5 ? '#24583e' : 'var(--text-main)' }}>
+                            {course.classOverallGrade ? `${course.classOverallGrade} / 10` : '- / 10'}
                           </strong>
                         </div>
 
@@ -1689,6 +1905,33 @@ const TeacherGrades: React.FC = () => {
                     {/* Desglose de Entregas de los Alumnos de la Clase */}
                     {isExpanded && (
                       <div style={{ padding: '1.5rem 1.75rem', background: 'var(--background)' }}>
+                        {course.termGrades.length > 0 && (
+                          <div style={{ marginBottom: '1.25rem' }}>
+                            <h4 style={{ margin: '0 0 0.75rem', fontSize: '1.05rem', color: 'var(--text-main)' }}>
+                              Calificaciones de los alumnos · {selectedTerm}º trimestre
+                            </h4>
+                            <div className="table-responsive">
+                              <table style={{ width: '100%', borderCollapse: 'collapse', background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                                <thead>
+                                  <tr style={{ background: 'var(--surface-alt)', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                                    <th style={{ padding: '0.7rem 0.85rem', textAlign: 'left' }}>ALUMNO</th>
+                                    <th style={{ padding: '0.7rem 0.85rem', textAlign: 'left' }}>MEDIA TAREAS</th>
+                                    <th style={{ padding: '0.7rem 0.85rem', textAlign: 'left' }}>NOTA GLOBAL</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {course.termGrades.map((student) => (
+                                    <tr key={student.studentId} style={{ borderTop: '1px solid var(--border)' }}>
+                                      <td style={{ padding: '0.7rem 0.85rem', color: 'var(--text-main)', fontWeight: 600 }}>{student.fullName}</td>
+                                      <td style={{ padding: '0.7rem 0.85rem', color: 'var(--text-muted)' }}>{typeof student.tasksAverage === 'number' ? `${student.tasksAverage.toFixed(1)} / 10` : '- / 10'}</td>
+                                      <td style={{ padding: '0.7rem 0.85rem', color: 'var(--primary)', fontWeight: 700 }}>{typeof student.overallGrade === 'number' ? `${student.overallGrade.toFixed(1)} / 10` : '- / 10'}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                           <h4 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--text-main)' }}>
                             Entregas de los alumnos de {course.title} ({course.submissions.length})
@@ -1716,7 +1959,10 @@ const TeacherGrades: React.FC = () => {
                                 answers: examData.answers,
                                 score: submission.grade,
                                 total: examData.total,
-                                feedback: submission.feedback
+                                feedback: submission.feedback,
+                                questionScores: examData.questionScores,
+                                hasOpenText: examData.hasOpenText,
+                                openTextCount: examData.openTextCount
                               })}
                             />
                           ))}
@@ -1802,6 +2048,11 @@ const TeacherGrades: React.FC = () => {
 
                                           {isExam ? (
                                             <>
+                                            {examData?.hasOpenText && isSubmissionPending(sub) && (
+                                              <span style={{ display: 'inline-flex', alignItems: 'center', fontSize: '0.72rem', background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', padding: '0.15rem 0.4rem', borderRadius: '4px', fontWeight: 600 }}>
+                                                ⏳ {examData.openTextCount} por calificar
+                                              </span>
+                                            )}
                                             <button
                                               type="button"
                                               onClick={() => setReviewingExam({
@@ -1811,12 +2062,20 @@ const TeacherGrades: React.FC = () => {
                                                 answers: examData?.answers || {},
                                                 score: sub.grade,
                                                 total: examData?.total,
-                                                feedback: sub.feedback
+                                                feedback: sub.feedback,
+                                                questionScores: examData?.questionScores,
+                                                hasOpenText: examData?.hasOpenText,
+                                                openTextCount: examData?.openTextCount
                                               })}
-                                              className="btn-secondary"
-                                              style={{ padding: '0.3rem 0.6rem', fontSize: '0.78rem' }}
+                                              className={isSubmissionPending(sub) ? "btn-primary" : "btn-secondary"}
+                                              style={{
+                                                padding: '0.3rem 0.6rem',
+                                                fontSize: '0.78rem',
+                                                background: isSubmissionPending(sub) ? '#d97706' : undefined,
+                                                borderColor: isSubmissionPending(sub) ? '#b45309' : undefined
+                                              }}
                                             >
-                                              Ver Test
+                                              {isSubmissionPending(sub) ? 'Corregir' : 'Ver Test'}
                                             </button>
                                             <button
                                               type="button"
@@ -1858,8 +2117,29 @@ const TeacherGrades: React.FC = () => {
                                             </div>
                                             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.4rem' }}>
                                               {isExam && (
-                                                <button type="button" onClick={() => setReviewingExam({ subId: sub.id, title: sub.assignmentTitle, questions: sub.materialFormData?.questions || [], answers: examData?.answers || {}, score: sub.grade, total: examData?.total, feedback: sub.feedback })} className="btn-secondary" style={{ padding: '0.4rem 0.7rem', fontSize: '0.78rem' }}>
-                                                  <FileText size={13} /> Ver Test
+                                                <button
+                                                  type="button"
+                                                  onClick={() => setReviewingExam({
+                                                    subId: sub.id,
+                                                    title: sub.assignmentTitle,
+                                                    questions: sub.materialFormData?.questions || [],
+                                                    answers: examData?.answers || {},
+                                                    score: sub.grade,
+                                                    total: examData?.total,
+                                                    feedback: sub.feedback,
+                                                    questionScores: examData?.questionScores,
+                                                    hasOpenText: examData?.hasOpenText,
+                                                    openTextCount: examData?.openTextCount
+                                                  })}
+                                                  className={isSubmissionPending(sub) ? "btn-primary" : "btn-secondary"}
+                                                  style={{
+                                                    padding: '0.4rem 0.7rem',
+                                                    fontSize: '0.78rem',
+                                                    background: isSubmissionPending(sub) ? '#d97706' : undefined,
+                                                    borderColor: isSubmissionPending(sub) ? '#b45309' : undefined
+                                                  }}
+                                                >
+                                                  <FileText size={13} /> {isSubmissionPending(sub) ? 'Corregir Test' : 'Ver Test'}
                                                 </button>
                                               )}
                                               <button type="button" onClick={() => openGradingModal(sub)} className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.4rem 0.7rem', fontSize: '0.78rem' }}>
@@ -2165,8 +2445,11 @@ const TeacherGrades: React.FC = () => {
           answers={reviewingExam.answers}
           score={reviewingExam.score}
           total={reviewingExam.total}
+          audioMode="backend-proxy"
           feedback={reviewingExam.feedback}
+          questionScores={reviewingExam.questionScores}
           onSaveFeedback={handleSaveExamFeedback}
+          onSaveGradeAndFeedback={handleSaveExamGradeAndFeedback}
           onClose={() => setReviewingExam(null)}
         />
       , document.body
@@ -2177,7 +2460,7 @@ const TeacherGrades: React.FC = () => {
          ========================================================================= */}
       {isEvaluationModalOpen && activeDossierStudent && createPortal(
         <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
-          <div className="glass-panel modal-card" style={{ width: '100%', maxWidth: '520px', padding: '2rem', background: 'var(--surface)', position: 'relative' }}>
+          <div className="glass-panel modal-card" style={{ width: '100%', maxWidth: '760px', maxHeight: '90vh', overflowY: 'auto', padding: '2rem', background: 'var(--surface)', position: 'relative' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
               <div>
                 <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 700, textTransform: 'uppercase' }}>
@@ -2197,13 +2480,44 @@ const TeacherGrades: React.FC = () => {
 
             <form onSubmit={handleSaveEvaluation} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {activeDossierStudent.modality !== 'ONLINE' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  {([['middleExamGrade', 'MIDDLE TERM (35%)'], ['finalExamGrade', 'FINAL TERM (35%)']] as const).map(([field, label]) => (
-                    <label key={field} style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)' }}>
-                      {label}
-                      <input type="number" step="0.1" min="0" max="10" value={evaluationForm[field]} onChange={e => setEvaluationForm({ ...evaluationForm, [field]: e.target.value })} placeholder="0 - 10" style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', outline: 'none' }} />
-                    </label>
-                  ))}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                  {([
+                    ['middle', 'MIDDLE TERM (35%)'],
+                    ['final', 'FINAL TERM (35%)']
+                  ] as const).map(([exam, label]) => {
+                    const skillFields = [
+                      [`${exam}Grammar`, 'Grammar and Vocabulary'],
+                      [`${exam}Reading`, 'Reading'],
+                      [`${exam}Speaking`, 'Speaking'],
+                      [`${exam}Listening`, 'Listening'],
+                      [`${exam}Writing`, 'Writing']
+                    ] as const;
+                    const enteredGrades = skillFields
+                      .map(([field]) => evaluationForm[field].trim())
+                      .filter((value) => value !== '')
+                      .map(Number)
+                      .filter((grade) => Number.isFinite(grade) && grade >= 0 && grade <= 10);
+                    const average = enteredGrades.length > 0 ? (enteredGrades.reduce((sum, grade) => sum + grade, 0) / enteredGrades.length).toFixed(1) : null;
+
+                    return (
+                      <div key={exam} style={{ border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)', overflow: 'hidden' }}>
+                        <button type="button" onClick={() => setExpandedExamSections((current) => ({ ...current, [exam]: !current[exam] }))} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', padding: '0.85rem 1rem', border: 'none', background: 'transparent', color: 'var(--text-main)', cursor: 'pointer', textAlign: 'left' }}>
+                          <span style={{ fontSize: '0.88rem', fontWeight: 700 }}>{label}</span>
+                          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--primary-text)' }}>{average ? `Media: ${average} / 10` : 'Añadir destrezas'}</span>
+                        </button>
+                        {expandedExamSections[exam] && (
+                          <div style={{ padding: '0 1rem 1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '0.75rem' }}>
+                            {skillFields.map(([field, skill]) => (
+                              <label key={field} style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                                {skill}
+                                <input type="number" step="0.1" min="0" max="10" value={evaluationForm[field]} onChange={e => setEvaluationForm({ ...evaluationForm, [field]: e.target.value })} placeholder="Sin calificar" style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', outline: 'none' }} />
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
               {activeDossierStudent.modality === 'ONLINE' && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>

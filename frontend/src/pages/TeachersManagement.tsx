@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, Check, Edit2, Eye, Phone, Search, Trash2, UserPlus, UserRoundCog, X } from 'lucide-react';
+import { AlertTriangle, BookOpen, Check, Edit2, Eye, Phone, Search, Trash2, UserPlus, UserRoundCog, X } from 'lucide-react';
 
 interface Teacher {
   id: string;
@@ -16,6 +16,7 @@ const modalBackdrop: React.CSSProperties = { position: 'fixed', inset: 0, backgr
 const secondaryButton: React.CSSProperties = { padding: '0.6rem 1.2rem', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-main)', cursor: 'pointer', fontWeight: 600 };
 
 const TeachersManagement: React.FC = () => {
+  const userRole = localStorage.getItem('userRole');
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
@@ -26,6 +27,13 @@ const TeachersManagement: React.FC = () => {
   const [deletingTeacher, setDeletingTeacher] = useState<Teacher | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [notification, setNotification] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  // Modal Gestión de Clases Asignadas (Admin)
+  const [managingCoursesTeacher, setManagingCoursesTeacher] = useState<Teacher | null>(null);
+  const [allCourses, setAllCourses] = useState<any[]>([]);
+  const [assignedCourseIds, setAssignedCourseIds] = useState<string[]>([]);
+  const [titularCourseIds, setTitularCourseIds] = useState<string[]>([]);
+  const [savingCourses, setSavingCourses] = useState(false);
 
   useEffect(() => { fetchTeachers(); }, []);
 
@@ -102,6 +110,46 @@ const TeachersManagement: React.FC = () => {
     } catch { showToast('Error de conexión al eliminar', 'error'); }
   };
 
+  const openManageCourses = async (teacher: Teacher) => {
+    setManagingCoursesTeacher(teacher);
+    try {
+      const [coursesRes, assignedRes] = await Promise.all([
+        fetch(`${apiUrl}/api/courses`, { headers: authHeaders() }),
+        fetch(`${apiUrl}/api/teachers/${teacher.id}/assigned-courses`, { headers: authHeaders() })
+      ]);
+      if (coursesRes.ok && assignedRes.ok) {
+        const coursesData = await coursesRes.json();
+        const assignedData = await assignedRes.json();
+        setAllCourses(coursesData);
+        setAssignedCourseIds(assignedData.assignedCourseIds || []);
+        setTitularCourseIds((assignedData.titularCourses || []).map((c: any) => c.id));
+      }
+    } catch {
+      showToast('Error al cargar clases del profesor', 'error');
+    }
+  };
+
+  const handleSaveAssignedCourses = async () => {
+    if (!managingCoursesTeacher) return;
+    try {
+      setSavingCourses(true);
+      const res = await fetch(`${apiUrl}/api/teachers/${managingCoursesTeacher.id}/assigned-courses`, {
+        method: 'PUT',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ courseIds: assignedCourseIds })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al guardar clases');
+      showToast('Clases asignadas actualizadas con éxito');
+      setManagingCoursesTeacher(null);
+      fetchTeachers();
+    } catch (err: any) {
+      showToast(err.message || 'Error de conexión', 'error');
+    } finally {
+      setSavingCourses(false);
+    }
+  };
+
   const filteredTeachers = teachers.filter((teacher) => {
     const name = `${teacher.profile?.firstName || ''} ${teacher.profile?.lastName || ''}`.toLowerCase();
     const query = searchTerm.toLowerCase();
@@ -118,7 +166,9 @@ const TeachersManagement: React.FC = () => {
           <UserRoundCog style={{ color: 'var(--primary)' }} size={24} /> Profesores
         </h1>
       </div>
-      <button onClick={() => { resetForm(); setShowCreateModal(true); }} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.25rem' }}><UserPlus size={18} /> Nuevo Profesor</button>
+      {userRole === 'ADMIN' && (
+        <button onClick={() => { resetForm(); setShowCreateModal(true); }} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.25rem' }}><UserPlus size={18} /> Nuevo Profesor</button>
+      )}
     </div>
 
     <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}><div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>{([['ALL', 'Todos los profesores'], ['ACTIVE', 'Alta'], ['INACTIVE', 'Baja']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setStatusFilter(value)} style={{ padding: '0.45rem 0.85rem', borderRadius: 16, border: statusFilter === value ? '1px solid var(--primary)' : '1px solid var(--border)', background: statusFilter === value ? 'var(--primary-light)' : 'var(--surface)', color: statusFilter === value ? 'var(--primary-text)' : 'var(--text-muted)', fontWeight: statusFilter === value ? 700 : 500, fontSize: '0.84rem', cursor: 'pointer' }}>{label}</button>)}</div><div style={{ position: 'relative', flex: '1 1 240px', maxWidth: 380 }}><Search size={17} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} /><input type="text" placeholder="Buscar por nombre, DNI, teléfono o correo..." value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} style={{ ...inputStyle, paddingLeft: '2.4rem' }} /></div></div>
@@ -127,13 +177,116 @@ const TeachersManagement: React.FC = () => {
       {loading ? <tr><td colSpan={4} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>Cargando profesores...</td></tr> : filteredTeachers.length === 0 ? <tr><td colSpan={4} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>{searchTerm ? 'No se encontraron profesores con ese criterio.' : 'No hay profesores registrados en el sistema.'}</td></tr> : filteredTeachers.map((teacher) => {
         const initials = `${teacher.profile?.firstName?.[0] || ''}${teacher.profile?.lastName?.[0] || ''}`.toUpperCase() || 'PR';
         const isActive = teacher.status === 'ACTIVE';
-        return <tr key={teacher.id} style={{ borderBottom: '1px solid var(--border)' }}><td style={{ padding: '1rem 1.25rem' }}><div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}><div style={{ width: 38, height: 38, borderRadius: '50%', background: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.85rem' }}>{initials}</div><div><div style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.95rem' }}>{teacher.profile?.firstName} {teacher.profile?.lastName}</div><div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{teacher.email}</div>{teacher.profile?.phone && <div style={{ color: 'var(--primary)', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}><Phone size={12} /> {teacher.profile.phone}</div>}</div></div></td><td style={{ padding: '1rem 1.25rem', color: 'var(--text-main)', fontSize: '0.88rem' }}>{teacher.profile?.dni || <span style={{ color: 'var(--text-light)', fontStyle: 'italic' }}>No asignado</span>}</td><td style={{ padding: '1rem 1.25rem' }}><div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}><span style={{ padding: '0.35rem 0.65rem', background: isActive ? '#dcfce7' : '#fee2e2', color: isActive ? '#166534' : '#991b1b', borderRadius: 16, fontSize: '0.75rem', fontWeight: 600 }}>{isActive ? 'Alta' : 'Baja'}</span><button type="button" onClick={() => toggleStatus(teacher)} style={{ padding: '0.3rem 0.55rem', borderRadius: 6, border: `1px solid ${isActive ? '#fca5a5' : '#86efac'}`, background: isActive ? '#fff1f2' : '#f0fdf4', color: isActive ? '#b91c1c' : '#15803d', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}>{isActive ? 'Dar de baja' : 'Dar de alta'}</button></div></td><td style={{ padding: '1rem 1.25rem', textAlign: 'right' }}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.45rem' }}><button type="button" onClick={() => setViewingTeacher(teacher)} title="Ver ficha" style={iconButtonStyle}><Eye size={16} /></button><button type="button" onClick={() => openEdit(teacher)} title="Editar ficha" style={iconButtonStyle}><Edit2 size={16} /></button><button type="button" onClick={() => setDeletingTeacher(teacher)} title="Eliminar profesor" style={iconButtonStyle}><Trash2 size={16} /></button></div></td></tr>;
+        return <tr key={teacher.id} style={{ borderBottom: '1px solid var(--border)' }}><td style={{ padding: '1rem 1.25rem' }}><div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}><div style={{ width: 38, height: 38, borderRadius: '50%', background: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.85rem' }}>{initials}</div><div><div style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.95rem' }}>{teacher.profile?.firstName} {teacher.profile?.lastName}</div><div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{teacher.email}</div>{teacher.profile?.phone && <div style={{ color: 'var(--primary)', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}><Phone size={12} /> {teacher.profile.phone}</div>}</div></div></td><td style={{ padding: '1rem 1.25rem', color: 'var(--text-main)', fontSize: '0.88rem' }}>{teacher.profile?.dni || <span style={{ color: 'var(--text-light)', fontStyle: 'italic' }}>No asignado</span>}</td><td style={{ padding: '1rem 1.25rem' }}><div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}><span style={{ padding: '0.35rem 0.65rem', background: isActive ? '#dcfce7' : '#fee2e2', color: isActive ? '#166534' : '#991b1b', borderRadius: 16, fontSize: '0.75rem', fontWeight: 600 }}>{isActive ? 'Alta' : 'Baja'}</span>{userRole === 'ADMIN' && (<button type="button" onClick={() => toggleStatus(teacher)} style={{ padding: '0.3rem 0.55rem', borderRadius: 6, border: `1px solid ${isActive ? '#fca5a5' : '#86efac'}`, background: isActive ? '#fff1f2' : '#f0fdf4', color: isActive ? '#b91c1c' : '#15803d', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}>{isActive ? 'Dar de baja' : 'Dar de alta'}</button>)}</div></td><td style={{ padding: '1rem 1.25rem', textAlign: 'right' }}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.45rem' }}><button type="button" onClick={() => setViewingTeacher(teacher)} title="Ver ficha" style={iconButtonStyle}><Eye size={16} /></button>{userRole === 'ADMIN' && (<><button type="button" onClick={() => openManageCourses(teacher)} title="Gestionar Clases Asignadas" style={{ ...iconButtonStyle, color: 'var(--primary)' }}><BookOpen size={16} /></button><button type="button" onClick={() => openEdit(teacher)} title="Editar ficha" style={iconButtonStyle}><Edit2 size={16} /></button><button type="button" onClick={() => setDeletingTeacher(teacher)} title="Eliminar profesor" style={iconButtonStyle}><Trash2 size={16} /></button></>)}</div></td></tr>;
       })}
     </tbody></table></div></div>
 
     {viewingTeacher && <div style={modalBackdrop}><div className="glass-panel" style={{ width: '100%', maxWidth: 620, maxHeight: '92vh', overflowY: 'auto', padding: '2rem' }}><ModalHeader title="Ficha del Profesor" onClose={() => setViewingTeacher(null)} /><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>{[['Nombre completo', `${viewingTeacher.profile?.firstName || ''} ${viewingTeacher.profile?.lastName || ''}`], ['Correo electrónico', viewingTeacher.email], ['DNI / NIE', viewingTeacher.profile?.dni || 'No registrado'], ['Teléfono / WhatsApp', viewingTeacher.profile?.phone || 'No registrado'], ['Fecha de nacimiento', viewingTeacher.profile?.birthDate ? new Date(viewingTeacher.profile.birthDate).toLocaleDateString('es-ES') : 'No registrada'], ['Estado', viewingTeacher.status === 'ACTIVE' ? 'Alta' : 'Baja']].map(([label, value]) => <div key={label} style={{ padding: '0.85rem 1rem', background: 'var(--surface-alt)', borderRadius: 8, border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}><span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>{label}</span><strong style={{ color: 'var(--text-main)' }}>{value}</strong></div>)}</div></div></div>}
     {(showCreateModal || editingTeacher) && <div style={modalBackdrop}><div className="glass-panel" style={{ width: '100%', maxWidth: 620, maxHeight: '92vh', overflowY: 'auto', padding: '2rem' }}><ModalHeader title={editingTeacher ? 'Editar Profesor' : 'Nuevo Profesor'} onClose={closeForm} /><form onSubmit={saveTeacher} style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>{([['firstName', 'Nombre *', 'text'], ['lastName', 'Apellidos *', 'text'], ['email', 'Correo Electrónico *', 'email'], ['dni', 'DNI / NIE', 'text'], ['phone', 'Teléfono / WhatsApp', 'text'], ['birthDate', 'Fecha de Nacimiento', 'date']] as const).map(([field, label, type]) => <label key={field} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>{label}<input type={type} required={field === 'firstName' || field === 'lastName' || field === 'email'} value={form[field]} onChange={(event) => updateForm(field, event.target.value)} style={inputStyle} /></label>)}<div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}><button type="button" onClick={closeForm} style={secondaryButton}>Cancelar</button><button type="submit" className="btn-primary">{editingTeacher ? 'Guardar cambios' : 'Crear Profesor'}</button></div></form></div></div>}
     {deletingTeacher && <div style={modalBackdrop}><div className="glass-panel" style={{ width: '100%', maxWidth: 480, padding: '2rem' }}><ModalHeader title="Eliminar profesor" onClose={() => setDeletingTeacher(null)} /><p style={{ color: 'var(--text-main)', lineHeight: 1.5 }}>¿Seguro que quieres eliminar a <strong>{deletingTeacher.profile?.firstName} {deletingTeacher.profile?.lastName}</strong>? Esta acción no se puede deshacer.</p><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}><button onClick={() => setDeletingTeacher(null)} style={secondaryButton}>Cancelar</button><button onClick={handleDelete} style={{ ...secondaryButton, color: '#b91c1c', borderColor: '#fecaca' }}>Eliminar</button></div></div></div>}
+
+    {managingCoursesTeacher && (
+      <div style={modalBackdrop}>
+        <div className="glass-panel" style={{ width: '100%', maxWidth: 620, maxHeight: '92vh', overflowY: 'auto', padding: '2rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+            <h3 style={{ margin: 0, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.3rem' }}>
+              <BookOpen style={{ color: 'var(--primary)' }} /> Clases Asignadas
+            </h3>
+            <button type="button" onClick={() => setManagingCoursesTeacher(null)} className="modal-close" aria-label="Cerrar modal">
+              <X size={20} />
+            </button>
+          </div>
+
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
+            Configura el acceso a las clases para <strong>{managingCoursesTeacher.profile?.firstName} {managingCoursesTeacher.profile?.lastName}</strong> ({managingCoursesTeacher.email}).
+          </p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.5rem', maxHeight: '420px', overflowY: 'auto' }}>
+            {allCourses.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem' }}>No hay clases creadas en la academia.</p>
+            ) : (
+              allCourses.map((c) => {
+                const isTitular = titularCourseIds.includes(c.id);
+                const isAssigned = assignedCourseIds.includes(c.id);
+                const isOnline = c.modality === 'ONLINE' || c.modality === 'HIBRIDO';
+
+                return (
+                  <label
+                    key={c.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '0.85rem 1rem',
+                      borderRadius: '8px',
+                      border: isAssigned || isTitular ? '1px solid var(--primary)' : '1px solid var(--border)',
+                      background: isAssigned || isTitular ? 'var(--primary-light)' : 'var(--surface-alt)',
+                      cursor: isTitular || !isOnline ? 'default' : 'pointer'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <input
+                        type="checkbox"
+                        disabled={isTitular || !isOnline}
+                        checked={isTitular || !isOnline || isAssigned}
+                        onChange={(e) => {
+                          if (isTitular || !isOnline) return;
+                          if (e.target.checked) {
+                            setAssignedCourseIds(prev => [...prev, c.id]);
+                          } else {
+                            setAssignedCourseIds(prev => prev.filter(id => id !== c.id));
+                          }
+                        }}
+                        style={{ width: '18px', height: '18px', accentColor: 'var(--primary)' }}
+                      />
+                      <div>
+                        <div style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.95rem' }}>
+                          {c.title}
+                        </div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                          {!isOnline
+                            ? 'Clase presencial (abierta a todo el claustro)'
+                            : isTitular
+                            ? 'Profesor titular de la clase'
+                            : isAssigned
+                            ? 'Acceso concedido a esta clase online'
+                            : 'Sin acceso concedido'}
+                        </div>
+                      </div>
+                    </div>
+                    <span style={{
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: '10px',
+                      background: isOnline ? '#e0f2fe' : '#f3e8ff',
+                      color: isOnline ? '#0369a1' : '#7e22ce',
+                      border: `1px solid ${isOnline ? '#bae6fd' : '#d8b4fe'}`
+                    }}>
+                      {c.modality || 'PRESENCIAL'}
+                    </span>
+                  </label>
+                );
+              })
+            )}
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+            <button type="button" onClick={() => setManagingCoursesTeacher(null)} style={secondaryButton}>
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveAssignedCourses}
+              disabled={savingCourses}
+              className="btn-primary"
+            >
+              {savingCourses ? 'Guardando...' : 'Guardar Asignaciones'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
   </div>;
 };
 

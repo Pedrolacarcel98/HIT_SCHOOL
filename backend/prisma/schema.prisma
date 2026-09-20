@@ -87,6 +87,7 @@ model User {
   structuredTaskStepProgress StructuredTaskStepProgress[]
   taskDeliveries  TaskDelivery[]
   termGrades      TermGrade[]
+  assignedCourses CourseTeacher[] @relation("TeacherAssignedCourses")
 }
 
 model ChatMessage {
@@ -95,6 +96,7 @@ model ChatMessage {
   recipientId String
   studentId   String?
   content     String
+  readAt      DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   sender      User     @relation("SentChatMessages", fields: [senderId], references: [id], onDelete: Cascade)
@@ -141,7 +143,8 @@ model Course {
   assignments Assignment[]
   posts       Post[]
   structuredTasks StructuredTask[]
-  termGrades  TermGrade[]
+  termGrades      TermGrade[]
+  assignedTeachers CourseTeacher[]
 }
 
 model Post {
@@ -164,6 +167,17 @@ model Enrollment {
   course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
   @@unique([studentId, courseId])
+}
+
+model CourseTeacher {
+  id        String   @id @default(uuid())
+  courseId  String
+  teacherId String
+  createdAt DateTime @default(now())
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  teacher   User     @relation("TeacherAssignedCourses", fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, teacherId])
 }
 
 model AcademyEnrollment {
@@ -393,6 +407,16 @@ model TermGrade {
   // Notas formales para alumnos presenciales (evaluaciones de Laura / profesores)
   middleExamGrade Float?
   finalExamGrade  Float?
+  middleGrammar   Float?
+  middleReading   Float?
+  middleWriting   Float?
+  middleListening Float?
+  middleSpeaking  Float?
+  finalGrammar    Float?
+  finalReading    Float?
+  finalWriting    Float?
+  finalListening  Float?
+  finalSpeaking   Float?
   
   // Medias calculadas
   tasksAverage    Float?    // Media calculada continua de las tareas del trimestre

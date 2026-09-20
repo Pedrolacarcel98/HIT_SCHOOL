@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Plus, Trash2, Eye, Save, Music, HelpCircle, Image, Search } from 'lucide-react';
+import { X, Plus, Trash2, Eye, Save, Music, HelpCircle, Image, Search, FileText } from 'lucide-react';
 import FormPlayer from './FormPlayer';
 import AudioPlayer from './AudioPlayer';
 
@@ -19,7 +19,7 @@ interface Question {
   blankText?: string;
   audioUrl?: string;
   imageUrl?: string;
-  type: 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'SHORT_ANSWER' | 'FILL_IN_THE_BLANKS';
+  type: 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'SHORT_ANSWER' | 'FILL_IN_THE_BLANKS' | 'OPEN_TEXT';
   options: string[];
   correctAnswer: string | number;
   caseSensitive?: boolean;
@@ -443,11 +443,13 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
                               let newOptions = q.options;
                               if (newType === 'TRUE_FALSE') {
                                 newOptions = ['True', 'False'];
+                              } else if (newType === 'OPEN_TEXT') {
+                                newOptions = [];
                               }
                               updateQuestion(qIndex, {
                                 type: newType,
                                 options: newOptions,
-                                correctAnswer: newType === 'FILL_IN_THE_BLANKS' ? '' : 0,
+                                correctAnswer: (newType === 'FILL_IN_THE_BLANKS' || newType === 'OPEN_TEXT') ? '' : 0,
                                 blankText: newType === 'FILL_IN_THE_BLANKS' && !q.blankText ? 'Hola me llamo (Carlos) y tengo (12) años.' : q.blankText
                               });
                             }}
@@ -457,6 +459,7 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
                             <option value="TRUE_FALSE">Verdadero / Falso</option>
                             <option value="SHORT_ANSWER">Respuesta Corta</option>
                             <option value="FILL_IN_THE_BLANKS">Completar espacios (Fill in the Blanks)</option>
+                            <option value="OPEN_TEXT">Texto Libre / Redacción</option>
                           </select>
                         </div>
 
@@ -601,6 +604,35 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
                             />
                             Sensible a mayúsculas
                           </label>
+                        </div>
+                      )}
+
+                      {q.type === 'OPEN_TEXT' && (
+                        <div style={{ padding: '0.85rem 1rem', borderRadius: '8px', background: '#fffbeb', border: '1px solid #fde68a' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: '#b45309', fontWeight: 600, fontSize: '0.86rem', marginBottom: '0.45rem' }}>
+                            <FileText size={16} />
+                            <span>Nota asignada por profesor, no se autocorrige</span>
+                          </div>
+                          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.82rem', lineHeight: '1.4' }}>
+                            El alumno responderá libremente en un área de texto sin límite de palabras ni caracteres.
+                          </p>
+                          <div style={{ marginTop: '0.65rem' }}>
+                            <textarea
+                              rows={3}
+                              disabled
+                              placeholder="Vista previa: El alumno redactará aquí su respuesta libre o redacción..."
+                              style={{
+                                width: '100%',
+                                padding: '0.6rem 0.75rem',
+                                borderRadius: '6px',
+                                border: '1px dashed #d1d5db',
+                                background: '#ffffff',
+                                color: 'var(--text-muted)',
+                                resize: 'none',
+                                fontSize: '0.85rem'
+                              }}
+                            />
+                          </div>
                         </div>
                       )}
                     </div>

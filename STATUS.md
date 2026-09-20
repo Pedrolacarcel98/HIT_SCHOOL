@@ -16,15 +16,15 @@
 ## 2. Fase Actual & Progreso Global
 
 - **Fase Actual:** Fase 2 — Consolidación de Módulos Core, tareas estructuradas y cierre de requisitos pendientes.
-- **Progreso Global Estimado:** **98% de requisitos base implementados**.
+- **Progreso Global Estimado:** **99% de requisitos base implementados**.
   - 🟢 **Gestión de Clases y Aulas (Estilo Google Classroom):** 95% Completado.
   - 🟢 **Biblioteca Multimedia & Exámenes Interactivos:** 100% Implementado.
-  - 🟢 **Gestión de Alumnos, Ficha Extendida y Cuentas Familiares:** 95% Completado.
+  - 🟢 **Gestión de Alumnos, Ficha Extendida y Cuentas Familiares:** 100% Completado para CRUD operativo de admin/profesor, tutores y reactivaciones.
   - 🟢 **Control Visual de Pagos y Mensualidades:** 95% Implementado.
   - 🟢 **Calificaciones y Feedback del Profesor:** 100% Implementado, incluyendo motor trimestral 35/35/30 presencial y medias online por disciplina.
   - 🟢 **Tareas Estructuradas, Recursos y Progreso Individual:** 100% implementado y sincronizado con PostgreSQL.
-  - 🟢 **Ajustes de Cuenta y Cambio de Contraseña:** 100% Completado.
-  - 🟢 **Seguridad Backend en Endpoints:** 100% Completado.
+  - 🟢 **Ajustes de Cuenta y Cambio de Contraseña:** 100% Completado, incluyendo cambio de email y cierre automático de modal tras guardar.
+  - 🟢 **Seguridad Backend en Endpoints:** 100% Completado para los flujos actuales de admin, profesor, alumno y tutor.
   - 🟢 **Exportación de Alumnos a Excel:** exportación `.xlsx` completada; importación masiva pendiente.
   - 🟢 **Portal de Padres / Tutores (Vistas de Acceso Familiar):** 100% (selector de hijos, clases, tablón, tareas, calificaciones, pagos y chat en modo solo lectura).
 
@@ -41,10 +41,8 @@
 
 1. **Navegación y Enrutamiento del Alumno:** *(Solucionado en Paso 1)*.
 2. **Corrección y Calificación Manual del Profesor:** *(Solucionado en Paso 2)*.
-3. **Chat y Comunicación en Directo (Alumno ↔ Profesor):** *(Solucionado: endpoint /contacts, auto-selección de profesor, polling de mensajes y textos contextuales)*.
-4. **Avisos del Tablón y Notificaciones a Padres/Alumnos:**
-   - **Problema:** Crear un anuncio en `StreamTab.tsx` solo guarda el post en base de datos; no dispara webhook de n8n para avisar a alumnos/padres por email.
-   - **Solución:** Integrar disparo de notificación al crear anuncios importantes en el tablón.
+3. **Chat y Comunicación en Directo (Alumno ↔ Profesor/Tutor/Admin):** *(Solucionado: endpoint /contacts, polling de mensajes, hilos por alumno/tutor, indicador de no leídos en sidebar y entrada sin conversación seleccionada por defecto)*.
+4. **Avisos del Tablón y Notificaciones a Padres/Alumnos:** *(Solucionado vía SMTP backend para anuncios y tareas estructuradas; n8n queda como motor opcional para automatizaciones adicionales)*.
 
 ---
 
@@ -79,6 +77,15 @@
   - En modalidad online: calculadas automáticamente las medias de Grammar, Reading, Writing, Listening y Speaking; las disciplinas sin tareas calificadas se muestran como `-` y no afectan a la media global.
   - En historiales trimestrales: excluidos recursos sin contenido evaluable y admitidas entregas reales de texto, enlaces, archivos o notas aunque procedan de vídeo, imagen o documento.
   - En el expediente del profesor: añadido selector trimestral, historial filtrado por trimestre, edición de notas del trimestre activo y selector de alumnos por clase.
+  - En seeds y BBDD local: limpiada la base de prueba y consolidado `seed.ts` con usuarios base (`admin@hitschool.com`, `profesor@hitschool.com`, `profesor2@hitschool.com`, `alumno@hitschool.com`, `marpargut@hitschool.com`) y 7 recursos iniciales de Material de Clase.
+  - En gestión de perfiles: ajustes de cuenta permiten modificar nombre, apellidos, DNI, teléfono, email y contraseña para admin, profesor, alumno y tutor; los datos administrativos solo se muestran al alumno.
+  - En paneles de navegación: añadida sección `Gestión Admin` exclusiva de administradores y refinadas etiquetas visuales de admin/profesor/tutor.
+  - En gestión de alumnos y tutores: profesores y administradores pueden crear, editar, dar de alta/baja y eliminar alumnos/tutores; se oculta a profesores el PDF de impagos.
+  - En gestión de administradores: creada sección completa para listar, crear, editar, dar de alta/baja y eliminar administradores con protección contra autoeliminación o dejar el sistema sin admin activo.
+  - En Material de Clase: restaurados recursos iniciales y convertida la biblioteca en gestionable por admin y profesorado.
+  - En chat: añadido contador de mensajes sin leer en sidebar para todos los roles y eliminada la selección automática del primer chat al entrar.
+  - En login: añadido botón de ojo para mostrar/ocultar contraseña.
+  - En baja/reactivación de alumnos: al dar de baja se eliminan sus matrículas de clase activas; al reactivar no recupera clases antiguas, pero pagos siguen visibles y calificaciones históricas se conservan en BBDD para trazabilidad.
   - Validaciones de esta iteración: TypeScript frontend/backend y `prisma validate` correctos. No se ejecutó `build`.
 
 ---
@@ -89,7 +96,7 @@
 2. [x] **Paso 2 (Completado):** Implementar en `GradesTab.tsx` y en el Centro Maestro `TeacherGrades.tsx` la interfaz interactiva para calificar tareas, feedback cualitativo y doble vista (alumnos/clases) con macro-división Presencial vs Online.
 3. [x] **Paso 3 (Completado):** Implementar modal de entrega interactivo de tareas para el alumno en `StudentClassworkTab.tsx`.
 4. [x] **Paso 4 (Completado):** Eliminar endpoint inseguro `/api/users`, añadir campos de ficha extendida (`dni`, `phone`, `birthDate`, `address`), soporte de tutores/padres y modal de cambio de contraseña `SettingsModal`.
-5. [/] **Paso 5 (En curso):** Consolidar generación y descarga de recibos/facturas en PDF, incluyendo acceso desde la ficha del alumno.
+5. [x] **Paso 5 (Completado funcional):** Consolidar generación y descarga de recibos/facturas en PDF, incluyendo acceso desde la ficha del alumno. Pendiente decidir factura familiar agrupada.
 8. [x] **Paso 8 (Completado):** Sincronizar el motor de calificaciones trimestrales entre panel de alumno y profesor, con medias por modalidad y filtrado de contenido evaluable.
 6. [x] **Paso 6 (Completado):** Consolidar las vistas familiares; selector de hijos, tablón, pagos, calificaciones y tareas estructuradas están integrados en el panel adaptado.
 7. [x] **Paso 7 (Completado):** Sincronizar Prisma y validar el flujo de tareas estructuradas/exámenes con profesor, alumno y tutor.
@@ -101,4 +108,7 @@
 - **Decisión:** Mantener compatibilidad total con Docker Compose y n8n para todas las integraciones de notificación externa.
 - **Decisión:** Centralizar la gestión de estado de pagos y avisos automáticos en el servicio de backend para asegurar coherencia entre profesor y alumno.
 - **Decisión:** Las tareas estructuradas y su progreso se persisten en PostgreSQL. Los exámenes estructurados crean una `Assignment` y una única `Submission` estándar para reutilizar Calificaciones, revisiones y feedback.
-- **Bloqueo / Dependencia:** Definir si los recibos en PDF se generarán directamente en backend (con bibliotecas como `pdfkit` o `puppeteer`) o mediante plantilla HTML cliente descargable.
+- **Decisión:** Al dar de baja un alumno se eliminan solo sus `Enrollment` de clase, manteniendo pagos, entregas y calificaciones en BBDD como histórico trazable.
+- **Decisión:** La biblioteca de Material de Clase es compartida y gestionable por admin/profesorado, aunque conserva `teacherId` como creador original del recurso.
+- **Bloqueo / Dependencia:** Definir si se implementa factura familiar agrupada para hermanos/tutor como documento único.
+- **Bloqueo / Dependencia:** Definir modelo final de visibilidad de calificaciones para profesorado: recomendado filtrar por clases accesibles y no por expediente global del alumno.

@@ -84,7 +84,7 @@ const getTaskInclude = (studentId?: string) => ({
   }
 });
 
-const syncTaskDeliveryOnStepCompletion = async (taskId: string, studentId: string) => {
+export const syncTaskDeliveryOnStepCompletion = async (taskId: string, studentId: string) => {
   try {
     const task = await prisma.structuredTask.findUnique({
       where: { id: taskId },
@@ -192,9 +192,14 @@ const isTextCorrect = (answer: unknown, expected: string, caseSensitive = false)
 const gradeForm = (questions: any[], answers: Record<string, unknown>) => {
   let score = 0;
   let total = 0;
+  let openTextCount = 0;
   questions.forEach((question) => {
     const points = Number(question.points) || 1;
     total += points;
+    if (question.type === 'OPEN_TEXT') {
+      openTextCount += 1;
+      return;
+    }
     const answer = answers[question.id];
     const correct = question.type === 'FILL_IN_THE_BLANKS'
       ? (() => {
@@ -207,7 +212,14 @@ const gradeForm = (questions: any[], answers: Record<string, unknown>) => {
         : answer !== undefined && Number(answer) === Number(question.correctAnswer);
     if (correct) score += points;
   });
-  return { score, total, grade: total ? (score / total) * 10 : 0 };
+  const hasOpenText = openTextCount > 0;
+  return {
+    score,
+    total,
+    grade: hasOpenText ? null : (total ? Number(((score / total) * 10).toFixed(2)) : 0),
+    hasOpenText,
+    openTextCount
+  };
 };
 
 const getTargetStudents = (task: any, courseStudents: StudentRef[] = []): StudentRef[] => {
@@ -310,9 +322,16 @@ const resolveVisibleStudentId = async (req: AuthRequest, requestedStudentId?: st
 router.get('/teacher', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
   try {
     const isTemplateParam = req.query.isTemplate;
-    const whereClause: any = {
-      OR: [{ teacherId: req.user!.id }, { course: { teacherId: req.user!.id } }]
-    };
+    const whereClause: any = req.user!.role === 'ADMIN'
+      ? {}
+      : {
+          OR: [
+            { teacherId: req.user!.id },
+            { course: { teacherId: req.user!.id } },
+            { course: { modality: 'PRESENCIAL' } },
+            { course: { assignedTeachers: { some: { teacherId: req.user!.id } } } }
+          ]
+        };
 
     if (isTemplateParam === 'true') {
       whereClause.isTemplate = true;
@@ -520,7 +539,15 @@ router.post('/steps/:stepId/submit-form', authenticateToken, async (req: AuthReq
           studentId: req.user!.id,
           structuredTaskId: step.taskId,
           formId: step.materialId,
-          content: JSON.stringify({ answers, score: result.score, total: result.total }),
+          content: JSON.stringify({
+            answers,
+            score: result.score,
+            baseScore: result.score,
+            total: result.total,
+            hasOpenText: result.hasOpenText,
+            openTextCount: result.openTextCount,
+            questionScores: {}
+          }),
           grade: result.grade
         }
       });
@@ -532,7 +559,14 @@ router.post('/steps/:stepId/submit-form', authenticateToken, async (req: AuthReq
       return created;
     });
     await syncTaskDeliveryOnStepCompletion(step.taskId, req.user!.id);
-    res.status(201).json({ submission, score: result.score, total: result.total, grade: result.grade });
+    res.status(201).json({
+      submission,
+      score: result.score,
+      total: result.total,
+      grade: result.grade,
+      hasOpenText: result.hasOpenText,
+      openTextCount: result.openTextCount
+    });
   } catch (error) {
     console.error('Error al entregar examen estructurado:', error);
     res.status(500).json({ error: 'Error al entregar el examen.' });
@@ -674,7 +708,20 @@ router.post('/', authenticateToken, requireTeacher, async (req: AuthRequest, res
 
   try {
     if (!isTemplateTask && assignmentType === 'CLASS') {
-      const course = await prisma.course.findFirst({ where: { id: courseId, teacherId: req.user!.id } });
+      const course = await prisma.course.findFirst({
+        where: {
+          id: courseId,
+          ...(req.user!.role === 'ADMIN'
+            ? {}
+            : {
+                OR: [
+                  { modality: 'PRESENCIAL' },
+                  { teacherId: req.user!.id },
+                  { assignedTeachers: { some: { teacherId: req.user!.id } } }
+                ]
+              })
+        }
+      });
       if (!course) return res.status(403).json({ error: 'No puedes asignar tareas a esta clase.' });
     }
 
@@ -830,7 +877,19 @@ router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, r
 
   try {
     const existing = await prisma.structuredTask.findFirst({
-      where: { id: taskId, OR: [{ teacherId: req.user!.id }, { course: { teacherId: req.user!.id } }] },
+      where: {
+        id: taskId,
+        ...(req.user!.role === 'ADMIN'
+          ? {}
+          : {
+              OR: [
+                { teacherId: req.user!.id },
+                { course: { teacherId: req.user!.id } },
+                { course: { modality: 'PRESENCIAL' } },
+                { course: { assignedTeachers: { some: { teacherId: req.user!.id } } } }
+              ]
+            })
+      },
       include: { steps: true }
     });
     if (!existing) return res.status(404).json({ error: 'Tarea no encontrada.' });
@@ -839,7 +898,20 @@ router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, r
     if (parsedPublishAt.error) return res.status(400).json({ error: parsedPublishAt.error });
 
     if (!isTemplateTask && assignmentType === 'CLASS') {
-      const course = await prisma.course.findFirst({ where: { id: courseId, teacherId: req.user!.id } });
+      const course = await prisma.course.findFirst({
+        where: {
+          id: courseId,
+          ...(req.user!.role === 'ADMIN'
+            ? {}
+            : {
+                OR: [
+                  { modality: 'PRESENCIAL' },
+                  { teacherId: req.user!.id },
+                  { assignedTeachers: { some: { teacherId: req.user!.id } } }
+                ]
+              })
+        }
+      });
       if (!course) return res.status(404).json({ error: 'Clase no encontrada.' });
     }
 
@@ -978,7 +1050,19 @@ router.post('/:id/grade-delivery', authenticateToken, requireTeacher, async (req
 
   try {
     const task = await prisma.structuredTask.findFirst({
-      where: { id: taskId, OR: [{ teacherId: req.user!.id }, { course: { teacherId: req.user!.id } }] },
+      where: {
+        id: taskId,
+        ...(req.user!.role === 'ADMIN'
+          ? {}
+          : {
+              OR: [
+                { teacherId: req.user!.id },
+                { course: { teacherId: req.user!.id } },
+                { course: { modality: 'PRESENCIAL' } },
+                { course: { assignedTeachers: { some: { teacherId: req.user!.id } } } }
+              ]
+            })
+      },
       include: {
         course: true,
         steps: {
@@ -1070,7 +1154,19 @@ router.delete('/:id', authenticateToken, requireTeacher, async (req: AuthRequest
   const taskId = req.params.id as string;
   try {
     const existing = await prisma.structuredTask.findFirst({
-      where: { id: taskId, OR: [{ teacherId: req.user!.id }, { course: { teacherId: req.user!.id } }] }
+      where: {
+        id: taskId,
+        ...(req.user!.role === 'ADMIN'
+          ? {}
+          : {
+              OR: [
+                { teacherId: req.user!.id },
+                { course: { teacherId: req.user!.id } },
+                { course: { modality: 'PRESENCIAL' } },
+                { course: { assignedTeachers: { some: { teacherId: req.user!.id } } } }
+              ]
+            })
+      }
     });
     if (!existing) return res.status(404).json({ error: 'Tarea no encontrada.' });
 

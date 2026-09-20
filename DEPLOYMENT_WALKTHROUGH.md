@@ -83,7 +83,9 @@ docker exec hit_school_backend npx prisma db seed
 ```
 
 > **Datos de Acceso Precargados:**
+> - 💼 **Profesor:** `admin@hitschool.com` | Contraseña: `1234`
 > - 💼 **Profesor:** `profesor@hitschool.com` | Contraseña: `1234`
+> - 💼 **Profesor2:** `profesor2@hitschool.com` | Contraseña: `1234`
 > - 🎓 **Alumno:** `alumno@hitschool.com` | Contraseña: `1234`
 > - 🎓 **Tutor:** `marpargut@hitschool.com` | Contraseña: `123456`
 
@@ -91,7 +93,7 @@ docker exec hit_school_backend npx prisma db seed
 
 ## 🤖 6. Configurar n8n para el Envío Automático de Correos
 
-Cuando el profesor da de alta a un nuevo alumno, el backend dispara un Webhook a n8n para que este envíe automáticamente un email con sus credenciales.
+Cuando el profesor crea la ficha de un alumno, la cuenta queda pendiente de alta. El email de cuenta activada se envía directamente por SMTP desde el backend cuando se formaliza su primera matrícula. Si el alumno ya estuvo matriculado, se dio de baja y vuelve a matricularse, se envía el email de cuenta reactivada.
 
 La recuperación de contraseña se realiza directamente desde el backend mediante SMTP, por lo que no necesita un webhook de n8n. Cuando el usuario está activo, el backend genera una contraseña temporal, la envía al correo indicado y solo después actualiza la contraseña almacenada.
 
@@ -101,21 +103,22 @@ Las tareas estructuradas/multistep también generan notificaciones directamente 
 
 Cuando se reactiva un alumno o un profesor dado de baja, el backend genera una nueva contraseña temporal, la guarda cifrada y la envía directamente por SMTP al correo de la cuenta reactivada. La reactivación se completa aunque el correo falle; el error queda registrado en los logs y la contraseña nueva deberá comunicarse manualmente si fuera necesario.
 
-Los tutores creados desde Gestión de Alumnos reciben también sus credenciales directamente por SMTP. Los alumnos nuevos continúan usando el webhook de n8n para el correo de alta; el tutor nuevo no se envía a n8n para evitar duplicar su notificación. Cuando un alumno se da de baja, el backend oculta ese alumno del portal del tutor y, si el tutor ya no tiene ningún alumno activo, desactiva automáticamente su cuenta. La gestión de tutores está disponible en `/teacher/parents` para listar, buscar, editar, crear, dar de baja/reactivar y eliminar tutores sin alumnos asociados.
+Los tutores creados desde Gestión de Alumnos reciben también sus credenciales directamente por SMTP. El tutor nuevo no se envía a n8n para evitar duplicar su notificación. Cuando un alumno se da de baja, el backend oculta ese alumno del portal del tutor y, si el tutor ya no tiene ningún alumno activo, desactiva automáticamente su cuenta. La gestión de tutores está disponible en `/teacher/parents` para listar, buscar, editar, crear, dar de baja/reactivar y eliminar tutores sin alumnos asociados.
 
 ### Paso a Paso en n8n:
 1. Accede a **[http://localhost:5678](http://localhost:5678)** y crea tu cuenta de administrador local.
-2. Crea un nuevo flujo (**"Add workflow"**) y añade un nodo de tipo **Webhook**:
+2. Los correos de alta inicial y reactivación de alumnos ya no necesitan un flujo de n8n: los envía directamente el backend mediante SMTP.
+3. Si necesitas mantener automatizaciones adicionales, crea un nuevo flujo (**"Add workflow"**) y añade un nodo de tipo **Webhook**:
    - **HTTP Method:** `POST`
    - **Path:** `nuevo-alumno`
    - **Webhook URLs:** Verás que la URL de test es `http://localhost:5678/webhook-test/nuevo-alumno`.
-3. Haz clic en **"Listen for test event"** en el nodo.
-4. Conecta el Webhook a un nodo de **Gmail** (o SMTP):
+4. Haz clic en **"Listen for test event"** en el nodo.
+5. Conecta el Webhook a un nodo de **Gmail** (o SMTP):
    - **Acción:** `Send Email`.
    - **To:** `{{ $json.body.email }}`.
    - **Subject:** `¡Bienvenido a HitSchool, {{ $json.body.firstName }}! 🎓`.
    - **Message (HTML):** Usa la plantilla prediseñada con los estilos corporativos de HitSchool.
-5. Guarda el flujo y actívalo (**Active: ON**).
+6. Guarda el flujo y actívalo (**Active: ON**).
 
 ---
 
@@ -168,7 +171,9 @@ Sigue esta lista de verificación para comprobar que todo funciona al 100%:
 
 ### 4. Gestión Completa de Alumnos (CRUD)
 - Entra a **Gestión de Alumnos** (`/teacher/students`):
-  - Pulsa **`+ Nuevo Alumno`** y rellena el formulario. Comprueba que n8n recibe los datos y se dispara el webhook.
+  - Pulsa **`+ Nuevo Alumno`** y rellena el formulario. Comprueba que la cuenta queda pendiente de matrícula.
+  - Matricula por primera vez al alumno y comprueba que recibe por SMTP el correo de cuenta activada con sus credenciales.
+  - Da de baja al alumno y vuelve a matricularlo; comprueba que recibe el correo de cuenta reactivada.
   - Utiliza el **buscador en tiempo real** para filtrar por nombre o correo.
   - Pulsa el botón de **Editar** (icono de lápiz) para modificar los datos de un alumno.
   - Pulsa el botón de **Eliminar** (icono de papelera) y confirma el borrado seguro en cascada.

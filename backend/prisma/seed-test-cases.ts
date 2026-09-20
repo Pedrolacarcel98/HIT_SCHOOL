@@ -19,6 +19,32 @@ async function main() {
   const passwordHash = await bcrypt.hash('1234', 10);
 
   // ==========================================
+  // 0. ADMINISTRADORA (DIRECTORA LAURA)
+  // ==========================================
+  console.log('--- Creando Administradora ---');
+  const adminUser = await prisma.user.upsert({
+    where: { email: 'admin@hitschool.com' },
+    update: { passwordHash, role: Role.ADMIN, status: UserStatus.ACTIVE },
+    create: {
+      email: 'admin@hitschool.com',
+      passwordHash,
+      role: Role.ADMIN,
+      status: UserStatus.ACTIVE,
+      profile: {
+        create: {
+          firstName: 'Laura (Directora)',
+          lastName: 'Gómez Ruiz',
+          dni: '00000001A',
+          phone: '600111222',
+          address: 'Plaza Mayor 1, Madrid'
+        }
+      }
+    },
+    include: { profile: true }
+  });
+  console.log('✔ Administradora:', adminUser.email, adminUser.profile?.firstName);
+
+  // ==========================================
   // 1. PROFESORES (2 TEACHERS)
   // ==========================================
   console.log('--- Creando Profesores ---');

@@ -15,6 +15,8 @@ interface ContactUser {
   studentName?: string;
   studentId?: string;
   subtitle?: string;
+  unreadCount?: number;
+  lastMessageAt?: string | null;
 }
 
 interface ChatMessage {
@@ -74,49 +76,63 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesViewportRef = useRef<HTMLDivElement>(null);
+  const shouldScrollAfterMessagesRef = useRef(false);
   const { selectedStudent, selectedStudentId } = useParent();
+
+  const sortContacts = (items: ContactUser[]) => [...items].sort((a, b) => {
+    const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+    const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+    return bTime - aTime;
+  });
+
+  const isAtBottom = () => {
+    const viewport = messagesViewportRef.current;
+    if (!viewport) return true;
+    return viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 80;
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   // 1. Cargar lista de contactos (Alumnos para Profesor, Profesores para Alumno/Tutor)
-  useEffect(() => {
-    const loadContacts = async () => {
-      try {
-        setLoading(true);
-        setError('');
-        const token = localStorage.getItem('token');
-        const studentParam = (userRole === 'PARENT' && selectedStudentId) ? `?studentId=${selectedStudentId}` : '';
-        const res = await fetch(`${apiUrl}/api/chat/contacts${studentParam}`, {
-          headers: { Authorization: `Bearer ${token}` }
+  const loadContacts = async (silent = false) => {
+    try {
+      if (!silent) setLoading(true);
+      if (!silent) setError('');
+      const token = localStorage.getItem('token');
+      const studentParam = (userRole === 'PARENT' && selectedStudentId) ? `?studentId=${selectedStudentId}` : '';
+      const res = await fetch(`${apiUrl}/api/chat/contacts${studentParam}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('No se pudieron cargar los contactos de chat.');
+
+      const data = await res.json() as ContactUser[];
+      setContacts(sortContacts(data));
+      if (data.length > 0) {
+        setSelectedContactId(prev => {
+          if (!prev) return '';
+          const exists = data.some(c => (c.contactKey || c.id) === prev || c.id === prev);
+          return exists ? prev : '';
         });
-
-        if (!res.ok) {
-          throw new Error('No se pudieron cargar los contactos de chat.');
-        }
-
-        const data = await res.json() as ContactUser[];
-        setContacts(data);
-
-        // Seleccionar automáticamente el primer contacto disponible si no hay ninguno seleccionado
-        if (data.length > 0) {
-          setSelectedContactId(prev => {
-            const exists = data.some(c => (c.contactKey || c.id) === prev || c.id === prev);
-            return exists ? prev : (data[0].contactKey || data[0].id);
-          });
-        } else {
-          setSelectedContactId('');
-        }
-      } catch (err) {
+      } else {
+        setSelectedContactId('');
+      }
+    } catch (err) {
+      if (!silent) {
         console.error(err);
         setError(err instanceof Error ? err.message : 'Error al cargar contactos de chat.');
-      } finally {
-        setLoading(false);
       }
-    };
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     loadContacts();
+    const interval = setInterval(() => loadContacts(true), 3500);
+    return () => clearInterval(interval);
   }, [role, selectedStudentId, userRole]);
 
   const selectedContact = useMemo(() => {
@@ -168,6 +184,7 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
 
       if (res.ok) {
         const data = await res.json() as ChatMessage[];
+        shouldScrollAfterMessagesRef.current = !silent || isAtBottom();
         setMessages(data);
       } else if (!silent) {
         throw new Error('No se pudo cargar la conversación.');
@@ -187,6 +204,7 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
 
     // Carga inicial
     loadMessages();
+    markConversationRead(selectedContact.id, targetStudentIdForChat);
 
     // Polling en segundo plano cada 3.5 segundos para mensajes nuevos en vivo
     const interval = setInterval(() => {
@@ -197,8 +215,35 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
   }, [selectedContact?.id, selectedContact?.contactKey, targetStudentIdForChat]);
 
   useEffect(() => {
-    scrollToBottom();
+    if (shouldScrollAfterMessagesRef.current) {
+      scrollToBottom();
+      shouldScrollAfterMessagesRef.current = false;
+    }
   }, [messages]);
+
+  const markConversationRead = async (partnerId: string, studentId: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      await fetch(`${apiUrl}/api/chat/read`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ partnerId, studentId: studentId || null })
+      });
+      setContacts(current => current.map(contact => {
+        const contactKey = contact.contactKey || contact.id;
+        return contactKey === selectedContactId || contact.id === partnerId
+          ? { ...contact, unreadCount: 0 }
+          : contact;
+      }));
+    } catch (err) {
+      console.error('No se pudieron marcar los mensajes como leídos:', err);
+    }
+  };
+
+  const selectContact = (contactKey: string, contact: ContactUser) => {
+    setSelectedContactId(contactKey);
+    markConversationRead(contact.id, contact.studentId || (contact.role === 'STUDENT' ? contact.id : (userRole === 'PARENT' ? selectedStudentId : currentUserId)) || '');
+  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -233,7 +278,13 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
         setEditingMessageId(null);
       } else {
         const savedMessage = await res.json() as ChatMessage;
+        shouldScrollAfterMessagesRef.current = isAtBottom();
         setMessages(current => [...current, savedMessage]);
+        setContacts(current => sortContacts(current.map(contact => {
+          const contactMatches = contact.id === selectedContact.id &&
+            (contact.studentId || (contact.role === 'STUDENT' ? contact.id : '')) === targetStudentIdForChat;
+          return contactMatches ? { ...contact, lastMessageAt: savedMessage.createdAt } : contact;
+        })));
       }
       setDraft('');
     } catch (err) {
@@ -346,7 +397,7 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
                 return (
                   <button
                     key={contactKey}
-                    onClick={() => setSelectedContactId(contactKey)}
+                    onClick={() => selectContact(contactKey, contact)}
                     style={{
                       width: '100%',
                       display: 'flex',
@@ -379,6 +430,11 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
                             Alumno
                           </span>
                         )}
+                        {(contact.unreadCount || 0) > 0 && (
+                          <span style={{ minWidth: '22px', height: '22px', padding: '0 6px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '999px', background: 'var(--primary)', color: '#ffffff', fontSize: '0.7rem', fontWeight: 700 }}>
+                            {contact.unreadCount}
+                          </span>
+                        )}
                       </div>
                       <small style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: '2px' }}>
                         {contact.subtitle || contact.courseTitle || contact.email}
@@ -394,7 +450,7 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
         {/* Área Principal de Conversación */}
         <section style={{ display: 'flex', flexDirection: 'column', minWidth: 0, height: '100%', minHeight: 0, overflow: 'hidden' }}>
           {/* Header del Contacto Activo */}
-          <div style={{
+          <div ref={messagesViewportRef} style={{
             display: 'flex',
             alignItems: 'center',
             gap: '0.85rem',

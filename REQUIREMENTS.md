@@ -18,8 +18,8 @@ A continuación se detallan los 11 requerimientos acordados en la última reuni�
 | **5** | **Previsualización de audio en creador de exámenes** | Reproductor visual inmediato al asociar una pista de audio opcional a una pregunta interactiva. | `[x] Completado` |
 | **6** | **Acceso directo Web desde móvil y ordenador (PWA)** | Configuración de Web App Manifest, meta tags e iconos para instalación directa en pantalla de inicio. | `[ ] Pendiente` |
 | **7** | **Fotos y vídeos locales en Tablón de Anuncios** | Subida y reproducción directa de imágenes y vídeos almacenados localmente en las publicaciones de clase. | `[x] Completado` |
-| **8** | **Chat con visibilidad global para docentes** | Todos los profesores/administradores ven todos los chats de la academia; el alumno solo ve a quien se dirige. | `[x] Completado` |
-| **9** | **Paleta de fondos visuales y mayor contraste** | Rediseño visual con fondos diferenciados por sección y badges cromáticos para aumentar el engagement. | `[ ] Pendiente` |
+| **8** | **Chat con visibilidad global para docentes** | Profesores/administradores pueden participar en conversaciones con alumnos/tutores; incluye indicador de no leídos y entrada sin chat preseleccionado. | `[x] Completado` |
+| **9** | **Paleta de fondos visuales y mayor contraste** | Fondos diferenciados por sección y badges cromáticos aplicados parcialmente; queda auditoría visual final. | `[/] Parcial` |
 | **10** | **Vuelco masivo de alumnos (Exportar / Importar Excel)** | Descarga de expedientes a Excel/CSV e importador masivo con vista previa y creación transaccional. | `[/] Parcial` |
 
 ---
@@ -79,10 +79,12 @@ A continuación se detallan los 11 requerimientos acordados en la última reuni�
 ### 0.8 Visibilidad de Chat Multi-Profesor / Supervisión Centralizada `[x]`
 - [x] **Acceso Docente / Administrativo:** Cualquier profesor o administrador puede consultar y participar en las conversaciones abiertas con los alumnos o padres de la academia (supervisión colegiada del equipo docente).
 - [x] **Aislamiento del Alumno / Padre:** El alumno y el tutor solo ven la conversación con su profesor asignado y a quien se están dirigiendo específicamente, sin visibilidad sobre hilos de otros compañeros.
+- [x] Indicador visual de mensajes sin leer en la barra lateral para admin, profesor, alumno y tutor.
+- [x] Al entrar al chat no se abre ninguna conversación por defecto; el usuario elige manualmente el hilo.
 
 ### 0.9 Diseño Visual Enriquecido con Fondos y Acentos de Color `[ ]`
-- [ ] Introducción de gradientes y tonalidades suaves de fondo que rompan la monotonía de pantallas planas.
-- [ ] Asignación de códigos de color por tipo de actividad y estado:
+- [x] Fondos diferenciados por sección principal en los paneles de profesor/admin y alumno/tutor.
+- [/] Asignación de códigos de color por tipo de actividad y estado:
   - Tareas pendientes: acentos ámbar / cálidos suaves.
   - Tareas completadas: verdes menta corporativos.
   - Exámenes y evaluaciones: azules/violetas pastel.
@@ -118,6 +120,8 @@ A continuación se detallan los 11 requerimientos acordados en la última reuni�
   - **Imágenes / Infografías:** Visor responsivo de imágenes de estudio.
 - [x] Organización del repositorio por tipo de recurso, nivel (*A1, A2, B1, B2, C1, C2, General*) y destreza lingüística.
 - [x] Asignación directa de materiales de la biblioteca a alumnos específicos o a clases completas con fecha de entrega.
+- [x] Biblioteca compartida: admin y profesores pueden ver, crear, editar, duplicar, asignar y eliminar recursos de Material de Clase.
+- [x] Seed local con recursos iniciales de prueba para vídeo, documento, audio y formularios interactivos.
 
 ### 1.3 Motor de Exámenes y Cuestionarios
 - [x] Creación de cuestionarios interactivos desde modal (*Form Builder*) con autocorrección.
@@ -135,7 +139,7 @@ A continuación se detallan los 11 requerimientos acordados en la última reuni�
 
 ### 1.4 Gestión de Alumnos y Ficha de Usuario
 - [x] Alta y registro de estudiantes desde panel de administración con generación automática de credenciales (`hitXXXX`).
-- [x] Disparo automático de Webhook a **n8n** para envío de credenciales por email al crear alumno.
+- [x] Envío directo desde el backend por SMTP del email de cuenta activada al formalizar la primera matrícula del alumno.
 - [x] Matriculación de alumnos en una o varias clases mediante modal selector interactivo.
 - [x] Edición y actualización de datos de alumnos (nombre, apellidos, email, cuota mensual, duración).
 - [x] Eliminación segura de alumnos con borrado en cascada.
@@ -148,6 +152,20 @@ A continuación se detallan los 11 requerimientos acordados en la última reuni�
   - [x] Vinculación a Padre/Tutor pagador (para menores o hermanos con cuenta familiar).
 - [x] Asignación de cuota mensual y duración de curso en meses.
 - [x] Acceso directo al control de pagos y facturas desde la ficha del alumno en `StudentsManagement.tsx`.
+- [x] Profesores y administradores comparten acciones operativas de Gestión de Alumnos: crear, editar, eliminar, alta/baja y matriculación.
+- [x] Al dar de baja un alumno se cierran sus datos administrativos de matrícula activa y se eliminan sus matrículas de clase, manteniendo pagos y calificaciones en BBDD como histórico trazable.
+- [x] Al reactivar un alumno no recupera clases antiguas automáticamente; debe ser matriculado de nuevo por admin/profesor.
+- [x] El PDF de impagos se reserva al rol admin.
+
+### 1.4.1 Gestión de Administradores
+- [x] Sección `Gestión Admin` visible solo para `ADMIN`.
+- [x] Listado, búsqueda, creación, edición, baja/reactivación y eliminación de cuentas administradoras.
+- [x] Protección para impedir autoeliminación/autobaja y evitar dejar el sistema sin administradores activos.
+
+### 1.4.2 Gestión de Profesores y Tutores
+- [x] Gestión de profesores con CRUD, baja/reactivación y asignación de clases online/híbridas.
+- [x] Gestión de tutores con CRUD, baja/reactivación y vista de alumnos asociados.
+- [x] Profesores y administradores pueden operar la gestión de tutores.
 
 ### 1.5 Repositorio Central y Catálogo de Plantillas
 - [x] Catálogo centralizado de recursos didácticos (`/teacher/materials`).
@@ -166,16 +184,19 @@ A continuación se detallan los 11 requerimientos acordados en la última reuni�
 - [x] Generación de facturas individuales en PDF con numeración oficial.
 - [x] **Generación de extractos de cuenta anuales o históricos consolidados con desglose de totales (Punto 1).**
 - [ ] Pagos agrupados por familia/tutor (factura única consolidada para hermanos).
-- [/] Soporte de planes tarifarios flexibles (35€ y 65€/mes validados; pendiente tarifas trimestrales y personalizadas).
+- [/] Soporte de planes tarifarios flexibles (35€, 60€ y 65€/mes validados; mensual/trimestral disponible en flujos de alta/edición; pendiente cierre de UX final para tarifas personalizadas).
 
 ### 1.7 Comunicación y Notificaciones
 - [x] Chat privado directo Profesor ↔ Alumno con historial persistente.
 - [x] Canal de comunicación privado Profesor ↔ Padres/Tutores (hilos independientes por hijo).
 - [x] Tablón de anuncios (*Stream*) por clase para publicaciones grupales.
 - [/] Notificaciones automáticas:
-  - [x] Webhook a n8n al crear nuevo alumno.
-  - [x] Webhook a n8n para enviar credenciales al Padre/Tutor asignado.
-  - [ ] Aviso por email a alumnos/padres al publicar anuncios en el tablón de la clase.
+  - [x] Email de cuenta activada enviado directamente por el backend mediante SMTP al formalizar la primera matrícula.
+  - [x] Email de cuenta reactivada enviado directamente por el backend mediante SMTP al volver a matricular a un alumno dado de baja.
+  - [x] Email de bienvenida/reactivación de profesores y tutores enviado por SMTP desde backend.
+  - [x] Aviso por email a alumnos/padres al publicar anuncios en el tablón de la clase.
+  - [x] Aviso por email para tareas estructuradas inmediatas o programadas.
+  - [/] n8n queda documentado como motor opcional para automatizaciones adicionales, no como dependencia crítica de altas.
   - [ ] Notificaciones push en la app.
 
 ---
@@ -202,10 +223,14 @@ A continuación se detallan los 11 requerimientos acordados en la última reuni�
 - [x] Panel global de calificaciones con notas numéricas sobre 10 y desglose CEFR.
 - [x] Modal interactivo de revisión pedagógica de exámenes con diseño Glassmorphism y desenfoque de fondo.
 - [x] Pestaña «Compañeros» para consultar la lista de clase (retirada posteriormente de la vista del alumno por decisión funcional).
+- [x] Tras reactivación, el alumno no ve calificaciones antiguas como activas si ya no está matriculado en esas clases; los datos permanecen en BBDD para trazabilidad.
 
 ### 2.4 Ajustes y Perfil
 - [x] Modal de ajustes de cuenta disponible tanto para alumnos (`STUDENT`) como para tutores (`PARENT`).
-- [x] Cambio de contraseña y visualización de cuota mensual real asignada.
+- [x] Modal de ajustes de cuenta disponible también para `TEACHER` y `ADMIN`.
+- [x] Cambio de email, nombre, apellidos, DNI, teléfono y contraseña desde ajustes de cuenta.
+- [x] Cierre automático del modal tras guardar perfil o cambiar contraseña correctamente.
+- [x] Visualización de datos administrativos solo para alumnos; no se muestra en tutores, profesores ni administradores.
 
 ---
 
@@ -217,3 +242,4 @@ A continuación se detallan los 11 requerimientos acordados en la última reuni�
 - [x] Supervisión en modo solo lectura de notas, clases, tareas y recibos del hijo seleccionado.
 - [x] Descarga de facturas y extractos anuales de cada hijo.
 - [x] Canal de chat exclusivo con los profesores de sus hijos con conversaciones aisladas por cada hijo.
+- [x] Al dar de baja/reactivar un alumno, el tutor deja de ver clases antiguas de ese alumno hasta nueva matriculación.

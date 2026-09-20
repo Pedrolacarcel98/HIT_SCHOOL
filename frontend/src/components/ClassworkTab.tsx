@@ -925,7 +925,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
       )}
 
       {/* Modal de Previsualización de Examen */}
-      <MaterialViewerModal material={viewingMaterial} onClose={() => setViewingMaterial(null)} />
+      <MaterialViewerModal material={viewingMaterial} audioMode="backend-proxy" onClose={() => setViewingMaterial(null)} />
     </div>
   );
 };

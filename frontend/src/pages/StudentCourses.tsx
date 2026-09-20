@@ -8,6 +8,7 @@ import AttachmentViewerModal, { isAttachmentImage } from '../components/Attachme
 import type { AttachmentData } from '../components/AttachmentViewerModal';
 import { useParent } from '../context/ParentContext';
 import type { ReviewQuestion } from '../components/ExamReviewModal';
+import { useLearningNotifications } from '../hooks/useLearningNotifications';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -15,6 +16,9 @@ interface ParsedExamData {
   answers: Record<string, string | number>;
   score?: number | null;
   total?: number | null;
+  hasOpenText?: boolean;
+  openTextCount?: number;
+  questionScores?: Record<string, number>;
 }
 
 interface SubmissionAttachment {
@@ -58,11 +62,14 @@ const parseSavedExam = (content?: string | null): ParsedExamData | null => {
   if (!content) return null;
   try {
     const parsed = JSON.parse(content);
-    if (parsed.answers || typeof parsed.score === 'number') {
+    if (parsed.answers || typeof parsed.score === 'number' || parsed.hasOpenText) {
       return {
         answers: parsed.answers || {},
         score: typeof parsed.score === 'number' ? parsed.score : null,
-        total: typeof parsed.total === 'number' ? parsed.total : null
+        total: typeof parsed.total === 'number' ? parsed.total : null,
+        hasOpenText: Boolean(parsed.hasOpenText),
+        openTextCount: typeof parsed.openTextCount === 'number' ? parsed.openTextCount : 0,
+        questionScores: parsed.questionScores || {}
       };
     }
     return null;
@@ -103,7 +110,7 @@ interface IndividualContent {
   category?: string;
   dueDate?: string;
   material?: { id?: string; title: string; type: string; level?: string; description?: string; url?: string; formData?: { questions?: unknown[] } } | null;
-  submissions?: { grade?: number | null; content?: string | null; submittedAt?: string | null }[];
+  submissions?: { grade?: number | null; content?: string | null; feedback?: string | null; submittedAt?: string | null }[];
 }
 
 interface AssignedMaterial {
@@ -168,6 +175,7 @@ const StudentCourses: React.FC = () => {
   const [isSavingStructuredDelivery, setIsSavingStructuredDelivery] = useState(false);
   const [viewingAttachment, setViewingAttachment] = useState<AttachmentData | null>(null);
   const { selectedStudent, selectedStudentId } = useParent();
+  const { newTaskCourseIds, markCourseTasksSeen } = useLearningNotifications(selectedStudentId);
   const userRole = localStorage.getItem('userRole');
 
   const activeStudentName = selectedStudent?.profile?.firstName || 'Alumno';
@@ -448,7 +456,10 @@ const StudentCourses: React.FC = () => {
               key={course.id} 
               className="glass-panel" 
               style={{ cursor: 'pointer', transition: 'all 0.2s ease', padding: '1.5rem', border: '1px solid var(--border)' }}
-              onClick={() => navigate(`/student/course/${course.id}`)}
+              onClick={() => {
+                markCourseTasksSeen(course.id);
+                navigate(`/student/course/${course.id}`);
+              }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-4px)';
                 e.currentTarget.style.borderColor = 'var(--primary)';
@@ -459,8 +470,9 @@ const StudentCourses: React.FC = () => {
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-                <div style={{ background: 'var(--primary)', padding: '0.75rem', borderRadius: '12px', color: 'white' }}>
+                <div style={{ position: 'relative', background: 'var(--primary)', padding: '0.75rem', borderRadius: '12px', color: 'white' }}>
                   <BookOpen size={24} />
+                  {newTaskCourseIds.includes(course.id) && <span style={{ position: 'absolute', top: -4, right: -4, width: 9, height: 9, borderRadius: '50%', background: '#ef4444', border: '2px solid var(--surface)' }} />}
                 </div>
                 <h3 style={{ margin: 0, color: 'var(--text)', fontSize: '1.2rem' }}>{course.title}</h3>
               </div>
@@ -805,6 +817,8 @@ const StudentCourses: React.FC = () => {
           answers={parseSavedAnswers(reviewingContent.submissions?.[0]?.content)}
           score={reviewingContent.submissions?.[0]?.grade}
           total={parseSavedExam(reviewingContent.submissions?.[0]?.content)?.total}
+          feedback={reviewingContent.submissions?.[0]?.feedback}
+          questionScores={parseSavedExam(reviewingContent.submissions?.[0]?.content)?.questionScores}
           onClose={() => setReviewingContent(null)}
         />
       )}
@@ -845,6 +859,8 @@ const StudentCourses: React.FC = () => {
           answers={parseSavedAnswers(reviewingStructuredForm.submission.content)}
           score={reviewingStructuredForm.submission.grade}
           total={parseSavedExam(reviewingStructuredForm.submission.content)?.total}
+          feedback={reviewingStructuredForm.submission.feedback}
+          questionScores={parseSavedExam(reviewingStructuredForm.submission.content)?.questionScores}
           onClose={() => setReviewingStructuredForm(null)}
         />
       )}

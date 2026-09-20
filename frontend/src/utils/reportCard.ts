@@ -5,8 +5,8 @@ export interface ReportCardTaskItem {
   title: string;
   category?: string;
   grade?: number | null;
-  stepsSummary?: string; // e.g. "✓ Video, 8.5 Quiz, ✓ Guía"
   completedAt?: string;
+  stepsSummary?: string;
 }
 
 export interface ReportCardData {
@@ -106,7 +106,7 @@ export const generateReportCardPDF = (data: ReportCardData) => {
 
   doc.setTextColor(darkText[0], darkText[1], darkText[2]);
   doc.setFont('helvetica', 'bold');
-  doc.text(data.modality === 'PRESENCIAL' ? 'Presencial (Exámenes + Tareas)' : 'Online (Evaluación Continua)', 135, currentY + 14);
+  doc.text(data.modality === 'PRESENCIAL' ? 'Presencial (35% + 35% + 30%)' : 'Online (Evaluación Continua)', 135, currentY + 14);
   doc.text(data.teacherName || 'Claustro Docente HitSchool', 135, currentY + 20);
 
   // 3. Resumen Global de Calificación (Tarjeta Destacada)
@@ -150,9 +150,9 @@ export const generateReportCardPDF = (data: ReportCardData) => {
   doc.setTextColor(mutedText[0], mutedText[1], mutedText[2]);
 
   if (data.modality === 'PRESENCIAL') {
-    doc.text('Evaluación Continua (50%):', 115, currentY + 9);
-    doc.text('Middle Term Exam:', 115, currentY + 15);
-    doc.text('Final Term Exam:', 115, currentY + 21);
+    doc.text('Media de tareas (30%):', 115, currentY + 9);
+    doc.text('Middle Term (35%):', 115, currentY + 15);
+    doc.text('Final Term (35%):', 115, currentY + 21);
 
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(darkText[0], darkText[1], darkText[2]);
@@ -169,37 +169,34 @@ export const generateReportCardPDF = (data: ReportCardData) => {
     doc.text(data.tasksAverage !== null && data.tasksAverage !== undefined ? `${Number(data.tasksAverage).toFixed(1)} / 10` : '-', 150, currentY + 18);
   }
 
-  // 4. Competencias Lingüísticas (CEFR Skills)
+  // Las competencias se muestran solo en evaluación online continua.
   currentY += 34;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10.5);
-  doc.setTextColor(greenCorporate[0], greenCorporate[1], greenCorporate[2]);
-  doc.text('DESGLOSE POR COMPETENCIAS CLAVE (CEFR)', 15, currentY);
+  if (data.modality === 'ONLINE') {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10.5);
+    doc.setTextColor(greenCorporate[0], greenCorporate[1], greenCorporate[2]);
+    doc.text('DESGLOSE POR COMPETENCIAS CLAVE (CEFR)', 15, currentY);
 
-  const skillsData = [
-    ['Grammar & Vocabulary', data.grammar !== null && data.grammar !== undefined ? `${Number(data.grammar).toFixed(1)} / 10` : '-', getQualitativeGrade(data.grammar)],
-    ['Reading Comprehension', data.reading !== null && data.reading !== undefined ? `${Number(data.reading).toFixed(1)} / 10` : '-', getQualitativeGrade(data.reading)],
-    ['Writing Expression', data.writing !== null && data.writing !== undefined ? `${Number(data.writing).toFixed(1)} / 10` : '-', getQualitativeGrade(data.writing)],
-    ['Listening Comprehension', data.listening !== null && data.listening !== undefined ? `${Number(data.listening).toFixed(1)} / 10` : '-', getQualitativeGrade(data.listening)],
-    ['Speaking & Fluency', data.speaking !== null && data.speaking !== undefined ? `${Number(data.speaking).toFixed(1)} / 10` : '-', getQualitativeGrade(data.speaking)],
-  ];
+    const skillsData = [
+      ['Grammar & Vocabulary', data.grammar !== null && data.grammar !== undefined ? `${Number(data.grammar).toFixed(1)} / 10` : '-', getQualitativeGrade(data.grammar)],
+      ['Reading Comprehension', data.reading !== null && data.reading !== undefined ? `${Number(data.reading).toFixed(1)} / 10` : '-', getQualitativeGrade(data.reading)],
+      ['Writing Expression', data.writing !== null && data.writing !== undefined ? `${Number(data.writing).toFixed(1)} / 10` : '-', getQualitativeGrade(data.writing)],
+      ['Listening Comprehension', data.listening !== null && data.listening !== undefined ? `${Number(data.listening).toFixed(1)} / 10` : '-', getQualitativeGrade(data.listening)],
+      ['Speaking & Fluency', data.speaking !== null && data.speaking !== undefined ? `${Number(data.speaking).toFixed(1)} / 10` : '-', getQualitativeGrade(data.speaking)],
+    ];
 
-  autoTable(doc, {
-    startY: currentY + 3,
-    head: [['Competencia', 'Calificación', 'Nivel Alcanzado']],
-    body: skillsData,
-    theme: 'grid',
-    headStyles: { fillColor: greenCorporate as [number, number, number], textColor: 255, fontSize: 8.5, fontStyle: 'bold' },
-    bodyStyles: { fontSize: 8.5, textColor: darkText as [number, number, number] },
-    columnStyles: {
-      0: { cellWidth: 80, fontStyle: 'bold' },
-      1: { cellWidth: 40, halign: 'center' },
-      2: { cellWidth: 60, halign: 'center' }
-    },
-    margin: { left: 15, right: 15 }
-  });
-
-  currentY = (doc as any).lastAutoTable.finalY + 8;
+    autoTable(doc, {
+      startY: currentY + 3,
+      head: [['Competencia', 'Calificación', 'Nivel Alcanzado']],
+      body: skillsData,
+      theme: 'grid',
+      headStyles: { fillColor: greenCorporate as [number, number, number], textColor: 255, fontSize: 8.5, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 8.5, textColor: darkText as [number, number, number] },
+      columnStyles: { 0: { cellWidth: 80, fontStyle: 'bold' }, 1: { cellWidth: 40, halign: 'center' }, 2: { cellWidth: 60, halign: 'center' } },
+      margin: { left: 15, right: 15 }
+    });
+    currentY = (doc as any).lastAutoTable.finalY + 8;
+  }
 
   // 5. Tareas y Bloques de Ejercicios del Trimestre
   if (data.tasks && data.tasks.length > 0) {
@@ -210,20 +207,20 @@ export const generateReportCardPDF = (data: ReportCardData) => {
 
     const taskRows = data.tasks.map((t) => [
       t.title,
-      t.stepsSummary || 'Completado',
+      t.category || 'General',
       t.grade !== null && t.grade !== undefined ? `${Number(t.grade).toFixed(1)} / 10` : 'Apto'
     ]);
 
     autoTable(doc, {
       startY: currentY + 3,
-      head: [['Bloque / Tarea', 'Pasos Realizados', 'Nota Tarea']],
+      head: [['Bloque / Tarea', 'Categoría', 'Nota Tarea']],
       body: taskRows,
       theme: 'striped',
       headStyles: { fillColor: [78, 155, 117], textColor: 255, fontSize: 8, fontStyle: 'bold' },
       bodyStyles: { fontSize: 8, textColor: darkText as [number, number, number] },
       columnStyles: {
-        0: { cellWidth: 85, fontStyle: 'bold' },
-        1: { cellWidth: 65 },
+        0: { cellWidth: 95, fontStyle: 'bold' },
+        1: { cellWidth: 55 },
         2: { cellWidth: 30, halign: 'center', fontStyle: 'bold' }
       },
       margin: { left: 15, right: 15 }

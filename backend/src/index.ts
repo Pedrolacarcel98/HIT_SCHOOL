@@ -8,6 +8,7 @@ const prisma = new PrismaClient();
 const port = process.env.PORT || 3000;
 
 import authRoutes from './routes/auth';
+import adminRoutes from './routes/admins';
 import studentRoutes from './routes/students';
 import teacherRoutes from './routes/teachers';
 import parentRoutes from './routes/parents';
@@ -27,6 +28,7 @@ app.use(express.json());
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 app.use('/api/auth', authRoutes);
+app.use('/api/admins', adminRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/teachers', teacherRoutes);
 app.use('/api/parents', parentRoutes);

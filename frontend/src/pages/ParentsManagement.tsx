@@ -68,7 +68,16 @@ const modalBackdrop: React.CSSProperties = {
   padding: "1rem",
 };
 
+const getParentInitials = (parent: Parent) => {
+  const firstName = parent.profile?.firstName?.trim() || "";
+  const lastName = parent.profile?.lastName?.trim() || "";
+  const initials = `${firstName[0] || ""}${lastName[0] || ""}`.toUpperCase();
+  return initials || parent.email.slice(0, 2).toUpperCase();
+};
+
 const ParentsManagement: React.FC = () => {
+  const userRole = localStorage.getItem("userRole");
+  const canManageParents = userRole === "ADMIN" || userRole === "TEACHER";
   const [parents, setParents] = useState<Parent[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<
@@ -275,13 +284,15 @@ const ParentsManagement: React.FC = () => {
             <Users style={{ color: "var(--primary)" }} size={24} /> Tutores
           </h1>
         </div>
-        <button
-          className="btn-primary"
-          onClick={openCreate}
-          style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
-        >
-          <UserPlus size={18} /> Nuevo Tutor
-        </button>
+        {canManageParents && (
+          <button
+            className="btn-primary"
+            onClick={openCreate}
+            style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
+          >
+            <UserPlus size={18} /> Nuevo Tutor
+          </button>
+        )}
       </div>
       <div
         className="parents-management__filters"
@@ -415,31 +426,52 @@ const ParentsManagement: React.FC = () => {
                       style={{ borderTop: "1px solid var(--border)" }}
                     >
                       <td style={{ padding: "1rem 1.25rem" }}>
-                        <strong>
-                          {parent.profile?.firstName} {parent.profile?.lastName}
-                        </strong>
-                        <div
-                          style={{
-                            color: "var(--text-muted)",
-                            fontSize: "0.82rem",
-                          }}
-                        >
-                          {parent.email}
-                        </div>
-                        {parent.profile?.phone && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
                           <div
                             style={{
-                              color: "var(--primary)",
-                              fontSize: "0.78rem",
+                              width: 38,
+                              height: 38,
+                              borderRadius: "50%",
+                              background: "var(--primary)",
+                              color: "#ffffff",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: "0.85rem",
+                              fontWeight: 700,
+                              flexShrink: 0,
                             }}
                           >
-                            <Phone
-                              size={12}
-                              style={{ verticalAlign: "middle" }}
-                            />{" "}
-                            {parent.profile.phone}
+                            {getParentInitials(parent)}
                           </div>
-                        )}
+                          <div style={{ minWidth: 0 }}>
+                            <strong>
+                              {parent.profile?.firstName} {parent.profile?.lastName}
+                            </strong>
+                            <div
+                              style={{
+                                color: "var(--text-muted)",
+                                fontSize: "0.82rem",
+                              }}
+                            >
+                              {parent.email}
+                            </div>
+                            {parent.profile?.phone && (
+                              <div
+                                style={{
+                                  color: "var(--primary)",
+                                  fontSize: "0.78rem",
+                                }}
+                              >
+                                <Phone
+                                  size={12}
+                                  style={{ verticalAlign: "middle" }}
+                                />{" "}
+                                {parent.profile.phone}
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </td>
                       <td
                         style={{
@@ -462,20 +494,22 @@ const ParentsManagement: React.FC = () => {
                         >
                           {isActive ? "Alta" : "Baja"}
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => toggleStatus(parent)}
-                          style={{
-                            marginLeft: 8,
-                            padding: "0.3rem 0.55rem",
-                            borderRadius: 6,
-                            border: "1px solid var(--border)",
-                            background: "var(--surface)",
-                            cursor: "pointer",
-                          }}
-                        >
-                          {isActive ? "Dar de baja" : "Dar de alta"}
-                        </button>
+                        {canManageParents && (
+                          <button
+                            type="button"
+                            onClick={() => toggleStatus(parent)}
+                            style={{
+                              marginLeft: 8,
+                              padding: "0.3rem 0.55rem",
+                              borderRadius: 6,
+                              border: "1px solid var(--border)",
+                              background: "var(--surface)",
+                              cursor: "pointer",
+                            }}
+                          >
+                            {isActive ? "Dar de baja" : "Dar de alta"}
+                          </button>
+                        )}
                       </td>
                       <td
                         style={{ padding: "1rem 1.25rem", textAlign: "right" }}
@@ -494,20 +528,24 @@ const ParentsManagement: React.FC = () => {
                           >
                             <Eye size={16} />
                           </button>
-                          <button
-                            type="button"
-                            title="Editar"
-                            onClick={() => openEdit(parent)}
-                          >
-                            <Edit2 size={16} />
-                          </button>
-                          <button
-                            type="button"
-                            title="Eliminar"
-                            onClick={() => setDeleting(parent)}
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          {canManageParents && (
+                            <>
+                              <button
+                                type="button"
+                                title="Editar"
+                                onClick={() => openEdit(parent)}
+                              >
+                                <Edit2 size={16} />
+                              </button>
+                              <button
+                                type="button"
+                                title="Eliminar"
+                                onClick={() => setDeleting(parent)}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

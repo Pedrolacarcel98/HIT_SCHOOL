@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken, requireTeacher } from '../middleware/auth';
+import { syncTaskDeliveryOnStepCompletion } from './structuredTasks';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -98,9 +99,16 @@ router.get('/teacher', authenticateToken, requireTeacher, async (req: AuthReques
   try {
     const teacherId = req.user!.id;
     const assignments = await prisma.assignment.findMany({
-      where: { teacherId },
+      where: {
+        OR: [
+          { teacherId },
+          { course: { modality: 'PRESENCIAL' } },
+          { course: { teacherId } },
+          { course: { assignedTeachers: { some: { teacherId } } } }
+        ]
+      },
       include: {
-        course: { select: { title: true } },
+        course: { select: { id: true, title: true } },
         student: { select: { email: true, profile: { select: { firstName: true, lastName: true } } } },
         material: { select: { id: true, title: true, type: true, url: true, formData: true, description: true } },
         structuredTaskStep: { select: { id: true, order: true, title: true, requiresSubmission: true, task: { select: { id: true, title: true, category: true, dueDate: true } } } },
@@ -247,7 +255,7 @@ router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, r
 // 5. Calificar / Comentar tarea (Profesor)
 router.post('/submissions/:subId/grade', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
   const subId = req.params.subId as string;
-  const { grade, feedback } = req.body;
+  const { grade, feedback, questionScores } = req.body;
   
   try {
     const parsedGrade = grade !== undefined && grade !== null && grade !== '' ? parseFloat(grade) : null;
@@ -255,16 +263,57 @@ router.post('/submissions/:subId/grade', authenticateToken, requireTeacher, asyn
       return res.status(400).json({ error: 'La calificación debe ser un número entre 0 y 10.' });
     }
 
+    const currentSubmission = await prisma.submission.findUnique({
+      where: { id: subId }
+    });
+
+    if (!currentSubmission) {
+      return res.status(404).json({ error: 'Entrega no encontrada.' });
+    }
+
+    let updatedContent = currentSubmission.content;
+    if (questionScores && typeof questionScores === 'object') {
+      try {
+        const parsed = currentSubmission.content ? JSON.parse(currentSubmission.content) : {};
+        const previousQuestionScores = parsed.questionScores || {};
+        const mergedScores = { ...previousQuestionScores, ...questionScores };
+
+        const baseScore = typeof parsed.baseScore === 'number'
+          ? parsed.baseScore
+          : (typeof parsed.score === 'number' && (!parsed.questionScores || Object.keys(parsed.questionScores).length === 0)
+              ? parsed.score
+              : 0);
+
+        const openTextTotal = Object.values(mergedScores).reduce((acc: number, val: any) => acc + (Number(val) || 0), 0);
+        const newTotalEarned = Number((baseScore + openTextTotal).toFixed(2));
+
+        parsed.questionScores = mergedScores;
+        parsed.score = newTotalEarned;
+        if (parsed.baseScore === undefined) {
+          parsed.baseScore = baseScore;
+        }
+        updatedContent = JSON.stringify(parsed);
+      } catch (parseErr) {
+        console.error('Error al actualizar questionScores en submission.content:', parseErr);
+      }
+    }
+
     const submission = await prisma.submission.update({
       where: { id: subId },
       data: {
         grade: parsedGrade,
-        feedback: feedback !== undefined ? (feedback ? String(feedback).trim() : null) : undefined
+        feedback: feedback !== undefined ? (feedback ? String(feedback).trim() : null) : undefined,
+        content: updatedContent
       },
       include: {
         student: { select: { email: true, profile: { select: { firstName: true, lastName: true } } } }
       }
     });
+
+    if (submission.structuredTaskId) {
+      await syncTaskDeliveryOnStepCompletion(submission.structuredTaskId, submission.studentId);
+    }
+
     res.json(submission);
   } catch (error) {
     console.error('Error al calificar la tarea:', error);

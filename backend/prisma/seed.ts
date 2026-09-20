@@ -1,304 +1,261 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Level, MaterialType, SkillCategory } from '@prisma/client';
 import bcrypt from 'bcrypt';
-import { ensureStudentPaymentScheduleById, getVisibleMonthTargets } from '../src/services/payments';
-
-const COURSE_START = new Date('2026-06-01T12:00:00.000Z');
-
-async function ensureAcademyEnrollment(
-  prisma: PrismaClient,
-  studentId: string,
-  startDate: Date,
-  monthlyFee: number
-) {
-  const existing = await prisma.academyEnrollment.findFirst({ where: { studentId } });
-  if (existing) return existing;
-  return prisma.academyEnrollment.create({
-    data: { studentId, startDate, monthlyFee }
-  });
-}
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('Iniciando seed...');
-  
+  console.log('Limpiando base de datos...');
+
+  await prisma.$transaction([
+    prisma.structuredTaskStepProgress.deleteMany(),
+    prisma.taskDelivery.deleteMany(),
+    prisma.structuredTaskStudent.deleteMany(),
+    prisma.submission.deleteMany(),
+    prisma.assignment.deleteMany(),
+    prisma.structuredTaskStep.deleteMany(),
+    prisma.structuredTask.deleteMany(),
+    prisma.termGrade.deleteMany(),
+    prisma.materialAssignment.deleteMany(),
+    prisma.paymentStatus.deleteMany(),
+    prisma.academyEnrollment.deleteMany(),
+    prisma.enrollment.deleteMany(),
+    prisma.courseTeacher.deleteMany(),
+    prisma.post.deleteMany(),
+    prisma.material.deleteMany(),
+    prisma.course.deleteMany(),
+    prisma.finalEvaluation.deleteMany(),
+    prisma.chatMessage.deleteMany(),
+    prisma.profile.deleteMany(),
+    prisma.user.deleteMany()
+  ]);
+
+  console.log('Creando usuarios de acceso...');
+
   const hashedPassword = await bcrypt.hash('1234', 10);
-  
-  const teacher = await prisma.user.upsert({
-    where: { email: 'profesor@hitschool.com' },
-    update: { status: 'ACTIVE' },
-    create: {
+  const tutorPasswordHash = await bcrypt.hash('123456', 10);
+
+  const admin = await prisma.user.create({
+    data: {
+      email: 'admin@hitschool.com',
+      passwordHash: hashedPassword,
+      role: 'ADMIN',
+      status: 'ACTIVE',
+      profile: {
+        create: {
+          firstName: 'Admin',
+          lastName: 'HitSchool'
+        }
+      }
+    }
+  });
+
+  const teacher = await prisma.user.create({
+    data: {
       email: 'profesor@hitschool.com',
       passwordHash: hashedPassword,
       role: 'TEACHER',
       status: 'ACTIVE',
       profile: {
         create: {
-          firstName: 'Carlos',
-          lastName: 'Profesor',
-        }
-      }
-    },
-  });
-
-  const secondTeacher = await prisma.user.upsert({
-    where: { email: 'profesor1@hitschool.com' },
-    update: {},
-    create: {
-      email: 'profesor1@hitschool.com',
-      passwordHash: hashedPassword,
-      role: 'TEACHER',
-      profile: {
-        create: {
-          firstName: 'Inma',
-          lastName: 'Profesora'
+          firstName: 'Laura',
+          lastName: 'Profesor'
         }
       }
     }
   });
 
-  const student = await prisma.user.upsert({
-    where: { email: 'alumno@hitschool.com' },
-    update: {},
-    create: {
+  const secondaryTeacher = await prisma.user.create({
+    data: {
+      email: 'profesor2@hitschool.com',
+      passwordHash: hashedPassword,
+      role: 'TEACHER',
+      status: 'ACTIVE',
+      profile: {
+        create: {
+          firstName: 'Profesor',
+          lastName: 'Secundario'
+        }
+      }
+    }
+  });
+
+  const parent = await prisma.user.create({
+    data: {
+      email: 'marpargut@hitschool.com',
+      passwordHash: tutorPasswordHash,
+      role: 'PARENT',
+      status: 'ACTIVE',
+      profile: {
+        create: {
+          firstName: 'Marta',
+          lastName: 'Madre'
+        }
+      }
+    }
+  });
+
+  const student = await prisma.user.create({
+    data: {
       email: 'alumno@hitschool.com',
-      passwordHash: hashedPassword, // 1234
+      passwordHash: hashedPassword,
       role: 'STUDENT',
+      status: 'ACTIVE',
+      parentId: parent.id,
       profile: {
         create: {
           firstName: 'Laura',
-          lastName: 'Alumno',
+          lastName: 'Alumna'
         }
+      }
+    }
+  });
+
+  const materials = [
+    {
+      title: 'Grammar Masterclass: Present Perfect vs Past Simple',
+      description: 'Video explicativo sobre las diferencias de uso entre el Present Perfect y el Past Simple con situaciones de la vida real.',
+      type: MaterialType.VIDEO,
+      level: Level.B2,
+      category: SkillCategory.GRAMMAR_VOCABULARY,
+      url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      teacherId: teacher.id
+    },
+    {
+      title: 'Pronunciation Guide: Connected Speech & Intonation',
+      description: 'Pildora en video con ejercicios de ritmo y enlace de palabras para el examen oral de Speaking.',
+      type: MaterialType.VIDEO,
+      level: Level.B1,
+      category: SkillCategory.SPEAKING,
+      url: 'https://www.youtube.com/watch?v=kJQP7kiw5Fk',
+      teacherId: secondaryTeacher.id
+    },
+    {
+      title: 'Guia de Conectores y Estructura de Redaccion (Essay B2)',
+      description: 'PDF de referencia rapida con conectores formales y plantilla para essays.',
+      type: MaterialType.DOCUMENT,
+      level: Level.B2,
+      category: SkillCategory.WRITING,
+      url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
+      teacherId: teacher.id
+    },
+    {
+      title: 'Ficha de Vocabulario y Phrasal Verbs con Ejemplos',
+      description: 'Documento con lista de 50 phrasal verbs indispensables en contexto con ejercicios practicos.',
+      type: MaterialType.DOCUMENT,
+      level: Level.A2,
+      category: SkillCategory.GRAMMAR_VOCABULARY,
+      url: 'https://www.adobe.com/support/products/enterprise/knowledgecenter/media/c461_sample_explanation.pdf',
+      teacherId: secondaryTeacher.id
+    },
+    {
+      title: 'Listening Comprehension: Short Conversations (Track 01)',
+      description: 'Audio en formato MP3 para practica auditiva de conversaciones breves en un aeropuerto.',
+      type: MaterialType.AUDIO,
+      level: Level.B2,
+      category: SkillCategory.LISTENING,
+      url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+      teacherId: teacher.id
+    },
+    {
+      title: 'Test Interactivo: Diagnostico B2 Use of English',
+      description: 'Examen interactivo con correccion automatica inmediata de 4 preguntas.',
+      type: MaterialType.FORM,
+      level: Level.B2,
+      category: SkillCategory.GRAMMAR_VOCABULARY,
+      teacherId: teacher.id,
+      formData: {
+        title: 'Test Diagnostico B2 Use of English',
+        description: 'Demuestra tu dominio gramatical respondiendo a las siguientes preguntas.',
+        questions: [
+          {
+            id: 'q1',
+            questionText: 'By the time we arrived at the cinema, the film ______ already started.',
+            type: 'MULTIPLE_CHOICE',
+            options: ['has', 'had', 'was', 'would'],
+            correctAnswer: 1,
+            points: 2.5
+          },
+          {
+            id: 'q2',
+            questionText: 'The phrasal verb "give up" means to abandon or surrender.',
+            type: 'TRUE_FALSE',
+            options: ['Verdadero', 'Falso'],
+            correctAnswer: 0,
+            points: 2.5
+          },
+          {
+            id: 'q3',
+            questionText: 'Complete with the correct preposition: She is very good ______ playing tennis.',
+            type: 'SHORT_ANSWER',
+            correctAnswer: 'at',
+            points: 2.5
+          },
+          {
+            id: 'q4',
+            questionText: 'Which modal verb indicates past deduction? "He ______ have forgotten his keys."',
+            type: 'MULTIPLE_CHOICE',
+            options: ['must', 'should', 'can', 'ought'],
+            correctAnswer: 0,
+            points: 2.5
+          }
+        ]
       }
     },
-  });
-
-  console.log('Profesor de prueba creado:', teacher.email);
-  console.log('Segundo profesor de prueba creado:', secondTeacher.email);
-  console.log('Alumno de prueba creado:', student.email);
-
-  // Crear Tutor/Padre Marta Madre
-  const parentUser = await prisma.user.upsert({
-    where: { email: 'marpargut@gmail.com' },
-    update: {
-      role: 'PARENT'
-    },
-    create: {
-      email: 'marpargut@gmail.com',
-      passwordHash: hashedPassword, // 1234
-      role: 'PARENT',
-      profile: {
-        create: {
-          firstName: 'Marta',
-          lastName: 'Madre',
-          phone: '640788122'
-        }
+    {
+      title: 'Quiz Rapido: Vocabulario de Viajes & Turismo A2/B1',
+      description: 'Test interactivo de 3 preguntas para consolidar vocabulario de viajes y transportes.',
+      type: MaterialType.FORM,
+      level: Level.A2,
+      category: SkillCategory.GRAMMAR_VOCABULARY,
+      teacherId: secondaryTeacher.id,
+      formData: {
+        title: 'Quiz de Vocabulario: Travel & Transport',
+        description: 'Comprueba tus conocimientos sobre vocabulario de transportes y viajes.',
+        questions: [
+          {
+            id: 'q1',
+            questionText: 'Where do you go to catch an airplane?',
+            type: 'MULTIPLE_CHOICE',
+            options: ['Train station', 'Airport', 'Harbour', 'Bus stop'],
+            correctAnswer: 1,
+            points: 3.33
+          },
+          {
+            id: 'q2',
+            questionText: 'A "boarding pass" is needed to get onto an airplane.',
+            type: 'TRUE_FALSE',
+            options: ['Verdadero', 'Falso'],
+            correctAnswer: 0,
+            points: 3.33
+          },
+          {
+            id: 'q3',
+            questionText: 'Write the word: The person who drives a taxi is a taxi ______',
+            type: 'SHORT_ANSWER',
+            correctAnswer: 'driver',
+            points: 3.34
+          }
+        ]
       }
     }
-  });
+  ];
 
-  // Vincular Laura Alumno a Marta Madre
-  await prisma.user.update({
-    where: { email: 'alumno@hitschool.com' },
-    data: { parentId: parentUser.id }
-  });
+  await prisma.material.createMany({ data: materials });
 
-  // Crear segundo alumno Marta Pardo Gutierrez vinculado a Marta Madre
-  const secondStudent = await prisma.user.upsert({
-    where: { email: 'marta02.pardo@gmail.com' },
-    update: {
-      parentId: parentUser.id
-    },
-    create: {
-      email: 'marta02.pardo@gmail.com',
-      passwordHash: hashedPassword, // 1234
-      role: 'STUDENT',
-      parentId: parentUser.id,
-      profile: {
-        create: {
-          firstName: 'Marta',
-          lastName: 'Pardo Gutierrez',
-          dni: '29563108N',
-          phone: '640788122'
-        }
-      }
-    }
-  });
-
-  await ensureAcademyEnrollment(prisma, student.id, COURSE_START, 35);
-  await ensureAcademyEnrollment(prisma, secondStudent.id, COURSE_START, 35);
-
-  await ensureStudentPaymentScheduleById(prisma, secondStudent.id);
-  await ensureStudentPaymentScheduleById(prisma, student.id);
-
-  const visibleMonths = getVisibleMonthTargets(3, new Date('2026-08-21T12:00:00.000Z'));
-
-  for (const target of visibleMonths) {
-    await prisma.paymentStatus.updateMany({
-      where: {
-        studentId: student.id,
-        month: target.month,
-        year: target.year
-      },
-      data: {
-        amount: 35,
-        markedById: target.month === 8 ? teacher.id : null,
-        isPaid: target.month === 8,
-        status: target.month === 8 ? 'PAID' : 'PENDING',
-        paidAt: target.month === 8 ? new Date('2026-08-03T12:00:00.000Z') : null
-      }
-    });
-  }
-
-  // --- NUEVA SECCIÓN: CREAR CLASE Y VINCULAR ALUMNO ---
-  let demoCourse = await prisma.course.findFirst({ where: { teacherId: teacher.id } });
-  if (!demoCourse) {
-    demoCourse = await prisma.course.create({
-      data: {
-        title: 'Inglés B2 - Grupo Mañana',
-        teacherId: teacher.id
-      }
-    });
-    console.log('Clase de demostración creada:', demoCourse.title);
-  }
-
-  // Matricular al alumno en la clase
-  const existingEnrollment = await prisma.enrollment.findUnique({
-    where: {
-      studentId_courseId: {
-        studentId: student.id,
-        courseId: demoCourse.id
-      }
-    }
-  });
-
-  if (!existingEnrollment) {
-    await prisma.enrollment.create({
-      data: {
-        studentId: student.id,
-        courseId: demoCourse.id
-      }
-    });
-    console.log('Alumno matriculado en la clase de demostración.');
-  }
-
-  // Crear materiales de ejemplo para la biblioteca
-  const existingMaterial = await prisma.material.findFirst({ where: { teacherId: teacher.id } });
-  if (!existingMaterial) {
-    // 1. Examen interactivo de Listening (Form)
-    await prisma.material.create({
-      data: {
-        title: 'B2 First: Listening Practice Mock Test - Part 1',
-        description: 'Simulacro oficial de Listening con pistas de audio por pregunta y corrección automática.',
-        type: 'FORM',
-        level: 'B2',
-        category: 'MOCK_EXAM',
-        teacherId: teacher.id,
-        formData: {
-          questions: [
-            {
-              id: 'q-1',
-              questionText: '1. You hear a young woman talking about her career. What does she enjoy most about her job?',
-              audioUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-              type: 'MULTIPLE_CHOICE',
-              options: [
-                'Traveling to international conferences',
-                'Working in a collaborative and creative team',
-                'The flexible schedule and autonomy'
-              ],
-              correctAnswer: 1,
-              points: 2
-            },
-            {
-              id: 'q-2',
-              questionText: '2. True or False: The speaker worked in London for more than five years before moving.',
-              audioUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
-              type: 'TRUE_FALSE',
-              options: ['True', 'False'],
-              correctAnswer: 1,
-              points: 1
-            },
-            {
-              id: 'q-3',
-              questionText: '3. Fill in the blank with the exact word mentioned: "Her manager congratulated her on the recent ________."',
-              type: 'SHORT_ANSWER',
-              correctAnswer: 'promotion',
-              points: 2
-            }
-          ]
-        }
-      }
-    });
-
-    // 2. Audio de Listening suelto
-    await prisma.material.create({
-      data: {
-        title: 'C1 Advanced: Academic Lecture on Renewable Energy',
-        description: 'Audio completo para práctica de toma de notas y comprensión auditiva.',
-        type: 'AUDIO',
-        level: 'C1',
-        category: 'LISTENING',
-        url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
-        teacherId: teacher.id
-      }
-    });
-
-    // 3. Vídeo explicativo
-    await prisma.material.create({
-      data: {
-        title: 'Mastering Conditionals (Zero, 1st, 2nd, 3rd & Mixed)',
-        description: 'Clase en vídeo con ejemplos prácticos para dominar todas las estructuras condicionales.',
-        type: 'VIDEO',
-        level: 'B2',
-        category: 'GRAMMAR_VOCABULARY',
-        url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-        teacherId: teacher.id
-      }
-    });
-
-    // 4. Documento PDF
-    await prisma.material.create({
-      data: {
-        title: 'Cambridge B2 First - Writing Guide & Connectors Cheat Sheet',
-        description: 'Guía de conectores, estructuras formales y plantillas de Essays, Reviews y Reports.',
-        type: 'DOCUMENT',
-        level: 'B2',
-        category: 'WRITING',
-        url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
-        teacherId: teacher.id
-      }
-    });
-
-    console.log('Materiales de demostración creados con éxito.');
-
-    // Asignar una tarea de ejemplo para que el dashboard del alumno no esté vacío
-    const materialForTask = await prisma.material.findFirst({ where: { teacherId: teacher.id } });
-    if (materialForTask && demoCourse) {
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      
-      await prisma.assignment.create({
-        data: {
-          title: 'Simulacro B2 Listening - Obligatorio',
-          description: 'Por favor, completad este simulacro antes de la clase de mañana.',
-          category: 'MOCK_EXAM',
-          dueDate: tomorrow,
-          teacherId: teacher.id,
-          courseId: demoCourse.id,
-          materialId: materialForTask.id
-        }
-      });
-      console.log('Tarea de demostración asignada a la clase.');
-    }
-  }
+  console.log('Admin creado:', admin.email);
+  console.log('Profesor creado:', teacher.email);
+  console.log('Profesor secundario creado:', secondaryTeacher.email);
+  console.log('Tutor creado:', parent.email);
+  console.log('Alumno creado:', student.email);
+  console.log('Materiales creados:', materials.length);
 }
 
 main()
   .then(async () => {
     await prisma.$disconnect();
   })
-  .catch(async (e) => {
-    console.error(e);
+  .catch(async (error) => {
+    console.error(error);
     await prisma.$disconnect();
     process.exit(1);
   });

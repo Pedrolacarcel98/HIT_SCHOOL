@@ -59,6 +59,7 @@ const StudentGradesTab: React.FC<{ courseId: string; courseTitle?: string }> = (
 
   const currentTermInfo = termGradesData?.[selectedTerm];
   const isOnline = studentInfo?.modality === 'ONLINE';
+  const hasBothExamGrades = typeof currentTermInfo?.middleExamGrade === 'number' && typeof currentTermInfo?.finalExamGrade === 'number';
 
   // Descargar Boletín Trimestral PDF
   const handleDownloadReportCard = () => {
@@ -84,14 +85,7 @@ const StudentGradesTab: React.FC<{ courseId: string; courseTitle?: string }> = (
       tasks: (currentTermInfo.tasks || []).map((t: any): ReportCardTaskItem => ({
         title: t.title,
         category: t.category,
-        grade: t.taskGrade,
-        stepsSummary: (t.steps || [])
-          .map((s: any) =>
-            !s.isEvaluable
-              ? (s.isCompleted ? `✓ ${s.title}` : `○ ${s.title}`)
-              : (s.grade !== null && s.grade !== undefined ? `${s.grade.toFixed(1)}/10 ${s.title}` : `⏳ ${s.title}`)
-          )
-          .join(', ')
+        grade: t.taskGrade
       }))
     };
 
@@ -183,14 +177,31 @@ const StudentGradesTab: React.FC<{ courseId: string; courseTitle?: string }> = (
           )}
         </div>
 
-        <StudentCompetencyGrades
+        {isOnline && <StudentCompetencyGrades
           grammar={currentTermInfo?.grammar}
           reading={currentTermInfo?.reading}
           writing={currentTermInfo?.writing}
           listening={currentTermInfo?.listening}
           speaking={currentTermInfo?.speaking}
           overallGrade={currentTermInfo?.overallGrade}
-        />
+        />}
+
+        {!isOnline && currentTermInfo && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '0.65rem', marginTop: '1rem' }}>
+            {[
+              ['MIDDLE TERM', currentTermInfo.middleExamGrade, 'Examen parcial (35%)'],
+              ['FINAL TERM', currentTermInfo.finalExamGrade, 'Examen final (35%)'],
+              ['MEDIA TAREAS', currentTermInfo.tasksAverage, 'Prácticas (30%)'],
+              ['NOTA GLOBAL', hasBothExamGrades ? currentTermInfo.overallGrade : null, 'Nota ponderada']
+            ].map(([label, value, subtitle]) => (
+              <div key={label} style={{ padding: '0.75rem', background: label === 'NOTA GLOBAL' ? 'var(--primary-light)' : 'var(--surface)', borderRadius: '8px', border: `1px solid ${label === 'NOTA GLOBAL' ? 'var(--primary-border)' : 'var(--border)'}`, textAlign: 'center' }}>
+                <span style={{ fontSize: '0.7rem', color: label === 'NOTA GLOBAL' ? 'var(--primary-text)' : 'var(--text-muted)', display: 'block', fontWeight: 700 }}>{label}</span>
+                <strong style={{ fontSize: '1.1rem', color: label === 'NOTA GLOBAL' ? 'var(--primary-text)' : 'var(--text-main)', display: 'block', marginTop: '0.2rem' }}>{typeof value === 'number' ? `${value.toFixed(1)} / 10` : '- / 10'}</strong>
+                <small style={{ display: 'block', marginTop: '0.15rem', color: 'var(--text-muted)', fontSize: '0.68rem' }}>{subtitle}</small>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Observaciones del profesor */}
         {currentTermInfo?.observations && (

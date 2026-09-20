@@ -207,20 +207,43 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res) => {
   }
 });
 
-// Actualizar perfil del alumno
+// Actualizar perfil del usuario actual
 router.put('/me/profile', authenticateToken, async (req: AuthRequest, res) => {
   const userId = req.user?.id;
   if (!userId) return res.status(401).json({ error: 'No autenticado' });
 
-  const { firstName, lastName, dni, phone } = req.body;
+  const { firstName, lastName, email, dni, phone } = req.body;
+  const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+
   if (!firstName || !lastName) {
     return res.status(400).json({ error: 'Nombre y apellidos son obligatorios' });
   }
+  if (!normalizedEmail) {
+    return res.status(400).json({ error: 'El email es obligatorio' });
+  }
 
   try {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return res.status(404).json({ error: 'La sesión ya no es válida. Vuelve a iniciar sesión.' });
+    }
+
+    const duplicateEmail = await prisma.user.findFirst({
+      where: {
+        email: normalizedEmail,
+        NOT: { id: userId }
+      },
+      select: { id: true }
+    });
+
+    if (duplicateEmail) {
+      return res.status(400).json({ error: 'Este email ya está asociado a otra cuenta.' });
+    }
+
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: {
+        email: normalizedEmail,
         profile: {
           upsert: {
             create: {
@@ -243,7 +266,7 @@ router.put('/me/profile', authenticateToken, async (req: AuthRequest, res) => {
       }
     });
 
-    res.json({ success: true, profile: updatedUser.profile });
+    res.json({ success: true, email: updatedUser.email, profile: updatedUser.profile });
   } catch (error) {
     console.error('Error al actualizar perfil:', error);
     res.status(500).json({ error: 'Error del servidor al actualizar perfil' });

@@ -6,13 +6,14 @@ import {
   CheckSquare, 
   Clock, 
   ArrowRight, 
-  PlusCircle, 
   FolderPlus, 
   GraduationCap, 
   MessageSquare,
   CheckCircle2,
   FileText,
-  Calendar
+  Calendar,
+  FolderArchive,
+  CircleDollarSign
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -21,6 +22,7 @@ interface DashboardTeacherData {
   activeCourses: number;
   unscoredSubmissions: number;
   overduePayments: number;
+  activeMaterials?: number;
   latestSubmissions: {
     id: string;
     taskId: string;
@@ -30,6 +32,19 @@ interface DashboardTeacherData {
     submittedAt: string;
   }[];
 }
+
+interface CurrentUser {
+  profile?: {
+    firstName?: string | null;
+  } | null;
+}
+
+const getTimeGreeting = (name: string) => {
+  const hour = new Date().getHours();
+  if (hour < 13) return { text: `¡Buenos días, ${name}!`, icon: '☕' };
+  if (hour < 20) return { text: `¡Buenas tardes, ${name}!`, icon: '🌤️' };
+  return { text: `¡Buenas noches, ${name}!`, icon: '🌙' };
+};
 
 const getInitials = (name: string) => {
   if (!name) return 'HS';
@@ -57,6 +72,7 @@ const getAvatarStyle = (name: string) => {
 
 const DashboardTeacher: React.FC = () => {
   const [data, setData] = useState<DashboardTeacherData | null>(null);
+  const [accountName, setAccountName] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -66,15 +82,21 @@ const DashboardTeacher: React.FC = () => {
       try {
         const token = localStorage.getItem('token');
         const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-        const res = await fetch(`${apiUrl}/api/dashboard/teacher`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const headers = { Authorization: `Bearer ${token}` };
+        const [res, profileRes] = await Promise.all([
+          fetch(`${apiUrl}/api/dashboard/teacher`, { headers }),
+          fetch(`${apiUrl}/api/auth/me`, { headers })
+        ]);
         
         if (!res.ok) {
           throw new Error('Error al obtener el dashboard');
         }
         const json = await res.json();
         setData(json);
+        if (profileRes.ok) {
+          const currentUser = await profileRes.json() as CurrentUser;
+          setAccountName(currentUser.profile?.firstName?.trim() || '');
+        }
       } catch (err) {
         setError('No se pudo cargar el dashboard.');
       } finally {
@@ -84,12 +106,8 @@ const DashboardTeacher: React.FC = () => {
     fetchData();
   }, []);
 
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 13) return { text: '¡Buenos días, Profesor!', icon: '☕' };
-    if (hour < 20) return { text: '¡Buenas tardes, Profesor!', icon: '🌤️' };
-    return { text: '¡Buenas noches, Profesor!', icon: '🌙' };
-  };
+  const userRole = localStorage.getItem('userRole');
+  const isAdmin = userRole === 'ADMIN';
 
   const currentDateLabel = new Date().toLocaleDateString('es-ES', {
     weekday: 'long',
@@ -115,7 +133,7 @@ const DashboardTeacher: React.FC = () => {
     );
   }
 
-  const greeting = getGreeting();
+  const greeting = getTimeGreeting(accountName);
 
   return (
     <div className="page-container animate-fade-in">
@@ -129,13 +147,33 @@ const DashboardTeacher: React.FC = () => {
             </h1>
           </div>
           <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.92rem' }}>
-            {data.unscoredSubmissions > 0
-              ? `Tienes ${data.unscoredSubmissions} ${data.unscoredSubmissions === 1 ? 'tarea esperando corrección' : 'tareas esperando corrección'} hoy.`
-              : 'Todo el trabajo de tus alumnos está al día. ¡Excelente labor docente!'}
+            {isAdmin
+              ? (data.unscoredSubmissions > 0
+                  ? `Hay ${data.unscoredSubmissions} ${data.unscoredSubmissions === 1 ? 'entrega pendiente de revisión en la academia.' : 'entregas pendientes de revisión en la academia.'}`
+                  : 'Todas las entregas y tareas de la academia están al día.')
+              : (data.unscoredSubmissions > 0
+                  ? `Tienes ${data.unscoredSubmissions} ${data.unscoredSubmissions === 1 ? 'tarea esperando tu corrección y feedback.' : 'tareas esperando tu corrección y feedback.'}`
+                  : 'Todo el trabajo de tus alumnos está al día. ¡Excelente labor docente!')
+            }
           </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <span style={{ 
+            display: 'inline-flex', 
+            alignItems: 'center', 
+            gap: '0.35rem', 
+            padding: '0.35rem 0.85rem', 
+            borderRadius: '999px', 
+            fontSize: '0.82rem', 
+            fontWeight: 700,
+            background: isAdmin ? '#fef3c7' : 'var(--primary-light)',
+            color: isAdmin ? '#b45309' : 'var(--primary-text)',
+            border: `1px solid ${isAdmin ? '#fde68a' : 'var(--primary-border)'}`
+          }}>
+            {isAdmin ? 'Admin' : 'Profesor'}
+          </span>
+
           <div style={{ 
             display: 'inline-flex', 
             alignItems: 'center', 
@@ -155,14 +193,24 @@ const DashboardTeacher: React.FC = () => {
       </section>
 
       {/* Atajos Rápidos */}
-      <section className="dashboard-quick-actions" aria-label="Accesos directos de profesor">
+      <section className="dashboard-quick-actions" aria-label="Accesos directos">
         <button 
-          onClick={() => navigate('/teacher/tasks')} 
+          onClick={() => navigate('/teacher/courses')} 
           className="quick-action-pill"
           type="button"
         >
-          <PlusCircle size={15} color="var(--primary)" /> Nueva Tarea
+          <BookOpen size={15} color="var(--primary)" /> Mis Clases
         </button>
+
+        {!isAdmin && (
+          <button 
+            onClick={() => navigate('/teacher/grades')} 
+            className="quick-action-pill"
+            type="button"
+          >
+            <CheckSquare size={15} color="#7c3aed" /> Calificaciones
+          </button>
+        )}
 
         <button 
           onClick={() => navigate('/teacher/materials')} 
@@ -177,15 +225,25 @@ const DashboardTeacher: React.FC = () => {
           className="quick-action-pill"
           type="button"
         >
-          <GraduationCap size={15} color="#7c3aed" /> Fichas Alumnos
+          <GraduationCap size={15} color="var(--primary)" /> Fichas Alumnos
         </button>
+
+        {isAdmin && (
+          <button 
+            onClick={() => navigate('/teacher/payments')} 
+            className="quick-action-pill"
+            type="button"
+          >
+            <CircleDollarSign size={15} color="#e11d48" /> Control Pagos
+          </button>
+        )}
 
         <button 
           onClick={() => navigate('/teacher/chat')} 
           className="quick-action-pill"
           type="button"
         >
-          <MessageSquare size={15} color="var(--primary)" /> Mensajes
+          <MessageSquare size={15} color={isAdmin ? 'var(--primary)' : '#0f766e'} /> Mensajes
         </button>
       </section>
 
@@ -216,7 +274,7 @@ const DashboardTeacher: React.FC = () => {
             </div>
 
             <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-              Entregas por Calificar
+              {isAdmin ? 'Entregas por Calificar (Academia)' : 'Entregas por Calificar'}
             </p>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.6rem', marginTop: '0.2rem' }}>
               <span style={{ fontSize: '2.4rem', fontWeight: 800, color: 'var(--text-main)', fontFamily: 'Quicksand, sans-serif' }}>
@@ -237,7 +295,9 @@ const DashboardTeacher: React.FC = () => {
             marginTop: '1rem' 
           }}>
             <span style={{ fontSize: '0.85rem', color: 'var(--primary-text)', fontWeight: 600 }}>
-              {data.unscoredSubmissions > 0 ? 'Revisar y enviar feedback a los alumnos' : 'Bandeja de corrección al día'}
+              {data.unscoredSubmissions > 0
+                ? (isAdmin ? 'Supervisar revisiones y notas docentes' : 'Revisar y enviar feedback a los alumnos')
+                : (isAdmin ? 'Bandeja de corrección de la academia al día' : 'Bandeja de corrección al día')}
             </span>
             <span style={{ 
               display: 'inline-flex', 
@@ -252,13 +312,13 @@ const DashboardTeacher: React.FC = () => {
           </div>
         </div>
 
-        {/* Sub-grid de 3 métricas compactas (Columna 6) */}
+        {/* Sub-grid de métricas compactas (Columna 6) */}
         <div className="bento-col-6" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1.25rem' }}>
             {/* Alumnos Activos */}
             <div 
               className="dashboard-card dashboard-card--sky dashboard-card--interactive"
-              onClick={() => navigate('/teacher/enrollments')}
+              onClick={() => navigate('/teacher/students')}
               style={{ padding: '1.25rem' }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
@@ -271,7 +331,7 @@ const DashboardTeacher: React.FC = () => {
                 {data.activeStudents}
               </span>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
-                Matriculados activos
+                {isAdmin ? 'Matriculados en academia' : 'Alumnos en tus aulas'}
               </span>
             </div>
 
@@ -291,53 +351,99 @@ const DashboardTeacher: React.FC = () => {
                 {data.activeCourses}
               </span>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
-                Cursos impartidos
+                {isAdmin ? 'Cursos en la academia' : 'Tus cursos impartidos'}
               </span>
             </div>
           </div>
 
-          {/* Control de Pagos e Impagos */}
-          <div 
-            className={`dashboard-card ${data.overduePayments > 0 ? 'dashboard-card--rose' : 'dashboard-card--primary'} dashboard-card--interactive`}
-            onClick={() => navigate('/teacher/payments')}
-            style={{ padding: '1.15rem 1.35rem', display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
-              <div style={{ 
-                width: '40px', 
-                height: '40px', 
-                borderRadius: '10px', 
-                background: '#ffffff', 
-                color: data.overduePayments > 0 ? '#e11d48' : 'var(--primary)', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center',
-                border: `1px solid ${data.overduePayments > 0 ? '#fecdd3' : 'var(--primary-border)'}`,
-                flexShrink: 0
-              }}>
-                {data.overduePayments > 0 ? <AlertTriangle size={20} /> : <CheckCircle2 size={20} />}
+          {/* Card Condicional: Control de Pagos para ADMIN vs Biblioteca de Material Didáctico para TEACHER */}
+          {isAdmin ? (
+            <div 
+              className={`dashboard-card ${data.overduePayments > 0 ? 'dashboard-card--rose' : 'dashboard-card--primary'} dashboard-card--interactive`}
+              onClick={() => navigate('/teacher/payments')}
+              style={{ padding: '1.15rem 1.35rem', display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
+                <div style={{ 
+                  width: '40px', 
+                  height: '40px', 
+                  borderRadius: '10px', 
+                  background: '#ffffff', 
+                  color: data.overduePayments > 0 ? '#e11d48' : 'var(--primary)', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  border: `1px solid ${data.overduePayments > 0 ? '#fecdd3' : 'var(--primary-border)'}`,
+                  flexShrink: 0
+                }}>
+                  {data.overduePayments > 0 ? <AlertTriangle size={20} /> : <CheckCircle2 size={20} />}
+                </div>
+                <div>
+                  <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                    {data.overduePayments > 0 ? `${data.overduePayments} avisos de impago` : 'Mensualidades al día'}
+                  </p>
+                  <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    {data.overduePayments > 0 ? 'Recibos pendientes de regularizar' : 'Sin incidencias de cobro registradas'}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-main)' }}>
-                  {data.overduePayments > 0 ? `${data.overduePayments} avisos de impago` : 'Mensualidades al día'}
-                </p>
-                <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  {data.overduePayments > 0 ? 'Recibos pendientes de regularizar' : 'Sin incidencias de cobro registradas'}
-                </p>
-              </div>
-            </div>
 
-            <span style={{ 
-              fontSize: '0.82rem', 
-              fontWeight: 700, 
-              color: data.overduePayments > 0 ? '#be123c' : 'var(--primary-text)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.2rem'
-            }}>
-              Ver pagos <ArrowRight size={14} />
-            </span>
-          </div>
+              <span style={{ 
+                fontSize: '0.82rem', 
+                fontWeight: 700, 
+                color: data.overduePayments > 0 ? '#be123c' : 'var(--primary-text)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.2rem'
+              }}>
+                Ver pagos <ArrowRight size={14} />
+              </span>
+            </div>
+          ) : (
+            <div 
+              className="dashboard-card dashboard-card--amber dashboard-card--interactive"
+              onClick={() => navigate('/teacher/materials')}
+              style={{ padding: '1.15rem 1.35rem', display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
+                <div style={{ 
+                  width: '40px', 
+                  height: '40px', 
+                  borderRadius: '10px', 
+                  background: '#ffffff', 
+                  color: '#d97706', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  border: '1px solid #fde68a',
+                  flexShrink: 0
+                }}>
+                  <FolderArchive size={20} />
+                </div>
+                <div>
+                  <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                    Biblioteca de Material Didáctico
+                  </p>
+                  <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    {typeof data.activeMaterials === 'number' && data.activeMaterials > 0
+                      ? `${data.activeMaterials} recursos y cuestionarios disponibles`
+                      : 'Gestionar recursos didácticos y exámenes'}
+                  </p>
+                </div>
+              </div>
+
+              <span style={{ 
+                fontSize: '0.82rem', 
+                fontWeight: 700, 
+                color: '#b45309',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.2rem'
+              }}>
+                Ver materiales <ArrowRight size={14} />
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -359,10 +465,12 @@ const DashboardTeacher: React.FC = () => {
             </div>
             <div>
               <h2 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--text-main)' }}>
-                Últimas Entregas de Alumnos
+                {isAdmin ? 'Últimas Entregas de Alumnos (Academia)' : 'Últimas Entregas de Alumnos'}
               </h2>
               <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                Trabajos y respuestas pendientes de revisión y nota
+                {isAdmin
+                  ? 'Trabajos y respuestas de la academia pendientes de revisión y nota'
+                  : 'Trabajos y respuestas de tus clases pendientes de revisión y nota'}
               </p>
             </div>
           </div>
@@ -408,7 +516,9 @@ const DashboardTeacher: React.FC = () => {
               ¡Todo corregido! No hay tareas pendientes
             </strong>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', margin: 0, maxWidth: '420px' }}>
-              Los alumnos no tienen trabajos sin calificar. Cuando entreguen un examen o redacción, aparecerá aquí al instante.
+              {isAdmin
+                ? 'No hay tareas pendientes de calificar en la academia. Todo el claustro docente está al día.'
+                : 'Los alumnos de tus clases no tienen trabajos sin calificar. Cuando entreguen un examen o redacción, aparecerá aquí al instante.'}
             </p>
           </div>
         ) : (

@@ -1,9 +1,99 @@
 import { Router, Response } from 'express';
 import { PrismaClient, MaterialType, Level, SkillCategory } from '@prisma/client';
+import { Readable } from 'stream';
 import { authenticateToken, requireTeacher, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+// Proxy de streaming para pistas de audio (evita bloqueos de cookies, CORS y CORP: same-site de Google Drive)
+const streamDriveAudio = async (fileId: string, req: any, res: Response) => {
+  const cleanId = fileId.trim();
+  if (!/^[a-zA-Z0-9_-]+$/.test(cleanId)) {
+    return res.status(400).json({ error: 'ID de archivo no válido' });
+  }
+  const targetUrl = `https://drive.usercontent.google.com/download?id=${cleanId}&export=download`;
+  const headers: Record<string, string> = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+  };
+  if (req.headers.range) {
+    headers['Range'] = req.headers.range;
+  }
+
+  let response = await fetch(targetUrl, { headers });
+
+  if (!response.ok && response.status !== 206) {
+    const fallbackUrl = `https://drive.google.com/uc?export=download&id=${cleanId}`;
+    response = await fetch(fallbackUrl, { headers });
+  }
+
+  if (!response.ok && response.status !== 206) {
+    return res.status(response.status).json({ error: 'No se pudo obtener el stream de audio' });
+  }
+
+  res.status(response.status);
+  const upstreamType = response.headers.get('content-type') || 'audio/mpeg';
+  const isHtmlOrText = upstreamType.includes('text') || upstreamType.includes('html');
+  res.setHeader('Content-Type', isHtmlOrText ? 'audio/mpeg' : upstreamType);
+  res.setHeader('Accept-Ranges', 'bytes');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+
+  const contentLength = response.headers.get('content-length');
+  if (contentLength) res.setHeader('Content-Length', contentLength);
+  const contentRange = response.headers.get('content-range');
+  if (contentRange) res.setHeader('Content-Range', contentRange);
+
+  if (response.body) {
+    // @ts-ignore
+    Readable.fromWeb(response.body).pipe(res);
+  } else {
+    res.end();
+  }
+};
+
+router.get('/drive-audio/:fileId', async (req: any, res: Response) => {
+  const fileId = Array.isArray(req.params.fileId) ? req.params.fileId[0] : req.params.fileId;
+  try {
+    await streamDriveAudio(fileId, req, res);
+  } catch (error) {
+    console.error('Error al cargar audio de Google Drive:', error);
+    res.status(502).json({ error: 'No se pudo cargar el audio.' });
+  }
+});
+
+router.get('/proxy-audio', async (req: any, res: Response) => {
+  try {
+    const { id, url: customUrl } = req.query;
+    if (id && typeof id === 'string') {
+      await streamDriveAudio(id, req, res);
+    } else if (customUrl && typeof customUrl === 'string') {
+      const headers: Record<string, string> = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      };
+      if (req.headers.range) headers['Range'] = req.headers.range;
+      const response = await fetch(customUrl.trim(), { headers });
+      if (!response.ok && response.status !== 206) {
+        return res.status(response.status).json({ error: 'No se pudo obtener el stream de audio' });
+      }
+      res.status(response.status);
+      res.setHeader('Content-Type', response.headers.get('content-type') || 'audio/mpeg');
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      if (response.body) {
+        // @ts-ignore
+        Readable.fromWeb(response.body).pipe(res);
+      } else {
+        res.end();
+      }
+    } else {
+      return res.status(400).json({ error: 'Se requiere id o url' });
+    }
+  } catch (error) {
+    console.error('Error en proxy de audio:', error);
+    res.status(500).json({ error: 'Error interno en streaming de audio' });
+  }
+});
 
 const parsePublishAt = (value: unknown) => {
   if (!value) return { value: null as Date | null };
@@ -182,7 +272,7 @@ router.post('/assignments/:id/submit', authenticateToken, async (req: AuthReques
 
 router.get('/:id/assignments', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
   const materialId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const material = await prisma.material.findFirst({ where: { id: materialId, teacherId: req.user!.id }, select: { id: true } });
+  const material = await prisma.material.findUnique({ where: { id: materialId }, select: { id: true } });
   if (!material) return res.status(404).json({ error: 'Material no encontrado' });
   const assignments = await prisma.materialAssignment.findMany({
     where: { materialId },
@@ -196,7 +286,7 @@ router.delete('/:id/assignments/:studentId', authenticateToken, requireTeacher, 
   const materialId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const studentId = Array.isArray(req.params.studentId) ? req.params.studentId[0] : req.params.studentId;
   const deleted = await prisma.materialAssignment.deleteMany({
-    where: { materialId, studentId, material: { teacherId: req.user!.id } }
+    where: { materialId, studentId }
   });
   if (deleted.count === 0) return res.status(404).json({ error: 'Acceso no encontrado' });
   res.json({ message: 'Acceso revocado' });
@@ -252,7 +342,7 @@ router.post('/:id/assignments', authenticateToken, requireTeacher, async (req: A
   if (parsedPublishAt.error) return res.status(400).json({ error: parsedPublishAt.error });
 
   try {
-    const material = await prisma.material.findFirst({ where: { id: materialId, teacherId: req.user!.id } });
+    const material = await prisma.material.findUnique({ where: { id: materialId } });
     if (!material) return res.status(404).json({ error: 'Material no encontrado' });
 
     const uniqueStudentIds = [...new Set(studentIds as string[])];
@@ -333,7 +423,7 @@ router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, r
     const { title, description, type, level, category, url, formData } = req.body;
 
     const updated = await prisma.material.updateMany({
-      where: { id, teacherId: req.user!.id },
+      where: { id },
       data: {
         title,
         description,
@@ -358,7 +448,7 @@ router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, r
 router.post('/:id/duplicate', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
   try {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const source = await prisma.material.findFirst({ where: { id, teacherId: req.user!.id } });
+    const source = await prisma.material.findUnique({ where: { id } });
     if (!source) return res.status(404).json({ error: 'Material no encontrado' });
 
     const duplicated = await prisma.material.create({
@@ -384,8 +474,8 @@ router.post('/:id/duplicate', authenticateToken, requireTeacher, async (req: Aut
 router.delete('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
   try {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const material = await prisma.material.findFirst({
-      where: { id, teacherId: req.user!.id },
+    const material = await prisma.material.findUnique({
+      where: { id },
       select: { id: true }
     });
     if (!material) return res.status(404).json({ error: 'Material no encontrado' });

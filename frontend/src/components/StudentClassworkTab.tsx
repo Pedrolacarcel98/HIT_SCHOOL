@@ -69,6 +69,9 @@ interface ParsedExamData {
   answers: Record<string, string | number>;
   score?: number | null;
   total?: number | null;
+  hasOpenText?: boolean;
+  openTextCount?: number;
+  questionScores?: Record<string, number>;
 }
 
 interface SubmissionAttachment {
@@ -122,11 +125,14 @@ const parseSavedExam = (content?: string | null): ParsedExamData | null => {
   if (!content) return null;
   try {
     const parsed = JSON.parse(content);
-    if (parsed.answers || typeof parsed.score === 'number') {
+    if (parsed.answers || typeof parsed.score === 'number' || parsed.hasOpenText) {
       return {
         answers: parsed.answers || {},
         score: typeof parsed.score === 'number' ? parsed.score : null,
-        total: typeof parsed.total === 'number' ? parsed.total : null
+        total: typeof parsed.total === 'number' ? parsed.total : null,
+        hasOpenText: Boolean(parsed.hasOpenText),
+        openTextCount: typeof parsed.openTextCount === 'number' ? parsed.openTextCount : 0,
+        questionScores: parsed.questionScores || {}
       };
     }
     return null;
@@ -1575,6 +1581,8 @@ const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, vie
           answers={parseSavedExam(reviewingMaterial.submissionContent)?.answers || {}}
           score={reviewingMaterial.submissionGrade}
           total={parseSavedExam(reviewingMaterial.submissionContent)?.total}
+          feedback={reviewingMaterial.submissionFeedback}
+          questionScores={parseSavedExam(reviewingMaterial.submissionContent)?.questionScores}
           onClose={() => setReviewingMaterial(null)}
         />
       )}

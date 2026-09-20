@@ -87,6 +87,52 @@ export const sendParentWelcomeEmail = async (email: string, firstName: string, t
   });
 };
 
+export const sendStudentWelcomeEmail = async (
+  email: string,
+  firstName: string,
+  temporaryPassword: string
+) => {
+  if (!transporter) {
+    console.warn('SMTP no configurado; no se envió el correo de bienvenida del alumno.');
+    return false;
+  }
+
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    to: email,
+    subject: 'Bienvenido a HitSchool',
+    text: [
+      `Hola ${firstName || 'alumno'},`,
+      '',
+      '¡Bienvenido a HitSchool! Tu cuenta de alumno ya está disponible.',
+      `Acceso: ${frontendUrl}`,
+      `Usuario: ${email}`,
+      `Contraseña temporal: ${temporaryPassword}`,
+      '',
+      'Te recomendamos cambiar la contraseña después del primer inicio de sesión.'
+    ].join('\n'),
+    html: emailShell(`
+      <h1 style="margin:0 0 12px;color:#26352e;font-size:24px;line-height:32px;">Bienvenido a HitSchool</h1>
+      <p style="margin:0 0 18px;font-size:15px;line-height:24px;">Hola ${escapeHtml(firstName || 'alumno')},</p>
+      <p style="margin:0 0 20px;font-size:15px;line-height:24px;">¡Te damos la bienvenida a la plataforma educativa HitSchool! Tu cuenta de alumno ya ha sido dada de alta y está lista para acceder.</p>
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f0f7f4;border:1px solid #4e9b75;border-radius:8px;margin-bottom:16px;">
+        <tr>
+          <td style="padding:20px;text-align:center;">
+            <div style="margin-bottom:6px;color:#527064;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;">Usuario de acceso</div>
+            <div style="color:#26352e;font-size:15px;font-weight:700;margin-bottom:14px;">${escapeHtml(email)}</div>
+            <div style="margin-bottom:6px;color:#527064;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;">Contraseña temporal</div>
+            <div style="color:#26352e;font-family:Consolas,'Courier New',monospace;font-size:24px;line-height:32px;font-weight:700;word-break:break-word;">${escapeHtml(temporaryPassword)}</div>
+          </td>
+        </tr>
+      </table>
+      ${emailButton('Iniciar Sesión en HitSchool', frontendUrl)}
+      <p style="margin:18px 0 0;color:#748078;font-size:13px;line-height:20px;">Por seguridad, te recomendamos cambiar la contraseña después de tu primer inicio de sesión.</p>
+    `)
+  });
+
+  return true;
+};
+
 export const sendPasswordResetEmail = async (
   email: string,
   firstName: string,

@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ParentProvider } from './context/ParentContext';
 import Login from './pages/Login';
 import TeacherLayout from './components/TeacherLayout';
@@ -11,8 +11,8 @@ import TeacherGrades from './pages/TeacherGrades';
 import StudentGrades from './pages/StudentGrades';
 import StudentsManagement from './pages/StudentsManagement';
 import TeachersManagement from './pages/TeachersManagement';
+import AdminsManagement from './pages/AdminsManagement';
 import ParentsManagement from './pages/ParentsManagement';
-import EnrollmentsManagement from './pages/EnrollmentsManagement';
 import MaterialsManagement from './pages/MaterialsManagement';
 import CourseView from './pages/CourseView';
 import StudentCourseView from './pages/StudentCourseView';
@@ -36,8 +36,9 @@ function App() {
             <Route path="materials" element={<MaterialsManagement />} />
             <Route path="students" element={<StudentsManagement />} />
             <Route path="teachers" element={<TeachersManagement />} />
+            <Route path="admins" element={<AdminsManagement />} />
             <Route path="parents" element={<ParentsManagement />} />
-            <Route path="enrollments" element={<EnrollmentsManagement />} />
+            <Route path="enrollments" element={<Navigate to="/teacher/students" replace />} />
             <Route path="payments" element={<TeacherPayments />} />
             <Route path="chat" element={<Chat role="TEACHER" />} />
             <Route path="course/:id" element={<CourseView />} />

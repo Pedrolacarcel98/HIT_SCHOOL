@@ -24,9 +24,9 @@ export const calculateTermOverallGrade = (
     };
   }
 
-  // Presencial: 35% Mid Term + 35% Final Term + 30% tareas prácticas.
-  if (cleanMiddle !== null || cleanFinal !== null || cleanTasksAvg !== null) {
-    const overall = (cleanMiddle ?? 0) * 0.35 + (cleanFinal ?? 0) * 0.35 + (cleanTasksAvg ?? 0) * 0.30;
+  // Presencial: la nota global solo está disponible tras registrar ambos exámenes.
+  if (cleanMiddle !== null && cleanFinal !== null) {
+    const overall = cleanMiddle * 0.35 + cleanFinal * 0.35 + (cleanTasksAvg ?? 0) * 0.30;
     return {
       tasksAverage: cleanTasksAvg,
       overallGrade: Number(overall.toFixed(2))
@@ -38,6 +38,17 @@ export const calculateTermOverallGrade = (
     overallGrade: null
   };
 };
+
+const examSkillKeys = ['Grammar', 'Reading', 'Writing', 'Listening', 'Speaking'] as const;
+type ExamSkillKey = typeof examSkillKeys[number];
+
+const getGradeValue = (value: unknown) => {
+  if (value === undefined || value === null || value === '') return null;
+  const grade = Number(value);
+  return Number.isFinite(grade) && grade >= 0 && grade <= 10 ? grade : null;
+};
+
+const getExamAverage = (grades: Array<number | null>) => averageScores(grades.filter((grade): grade is number => grade !== null));
 
 const skillKeys = ['grammar', 'reading', 'writing', 'listening', 'speaking'] as const;
 type SkillKey = typeof skillKeys[number];
@@ -99,11 +110,19 @@ router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: A
     const term = parseInt(req.query.term as string) || 1;
     const academicYear = (req.query.academicYear as string) || '2025-2026';
 
-    // Verificar que el curso existe y pertenece al profesor o admin
+    // Verificar que el curso pertenece al profesor titular o está asignado al profesor.
     const course = await prisma.course.findFirst({
       where: {
         id: courseId,
-        ...(req.user!.role === 'TEACHER' ? { teacherId: req.user!.id } : {})
+        ...(req.user!.role === 'TEACHER'
+          ? {
+              OR: [
+                { modality: 'PRESENCIAL' },
+                { teacherId: req.user!.id },
+                { assignedTeachers: { some: { teacherId: req.user!.id } } }
+              ]
+            }
+          : {})
       },
       include: {
         enrollments: {
@@ -257,6 +276,7 @@ router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: A
         listening: onlineSkills?.listening ?? existingRecord?.listening ?? null,
         speaking: onlineSkills?.speaking ?? existingRecord?.speaking ?? null,
         observations: existingRecord?.observations ?? '',
+        updatedAt: existingRecord?.updatedAt ?? null,
         tasksCount: evaluableTasks.length,
         completedTasksCount: studentTasksBreakdown.filter((t) => t.isCompleted).length,
         tasks: studentTasksBreakdown
@@ -286,6 +306,8 @@ router.put('/course/:courseId', authenticateToken, requireTeacher, async (req: A
       academicYear = '2025-2026',
       middleExamGrade,
       finalExamGrade,
+      middleGrammar, middleReading, middleWriting, middleListening, middleSpeaking,
+      finalGrammar, finalReading, finalWriting, finalListening, finalSpeaking,
       observations,
       grammar,
       reading,
@@ -298,6 +320,25 @@ router.put('/course/:courseId', authenticateToken, requireTeacher, async (req: A
       return res.status(400).json({ error: 'studentId y term son obligatorios.' });
     }
 
+    const courseAccess = await prisma.course.findFirst({
+      where: {
+        id: courseId,
+        ...(req.user!.role === 'TEACHER'
+          ? {
+              OR: [
+                { modality: 'PRESENCIAL' },
+                { teacherId: req.user!.id },
+                { assignedTeachers: { some: { teacherId: req.user!.id } } }
+              ]
+            }
+          : {})
+      },
+      select: { id: true }
+    });
+    if (!courseAccess) {
+      return res.status(403).json({ error: 'No tienes acceso a las calificaciones de esta clase.' });
+    }
+
     // Verificar estudiante y modalidad
     const student = await prisma.user.findUnique({
       where: { id: studentId },
@@ -307,6 +348,33 @@ router.put('/course/:courseId', authenticateToken, requireTeacher, async (req: A
     if (!student) {
       return res.status(404).json({ error: 'Estudiante no encontrado.' });
     }
+
+    const enrollment = await prisma.enrollment.findUnique({
+      where: { studentId_courseId: { studentId, courseId } },
+      select: { id: true }
+    });
+    if (!enrollment) {
+      return res.status(400).json({ error: 'El estudiante no está matriculado en esta clase.' });
+    }
+
+    const existingTermGrade = await prisma.termGrade.findUnique({
+      where: { studentId_courseId_term_academicYear: { studentId, courseId, term: Number(term), academicYear } }
+    });
+
+    const resolveExamSkill = (prefix: 'middle' | 'final', skill: ExamSkillKey) => {
+      const field = `${prefix}${skill}` as const;
+      const value = req.body[field];
+      return value === undefined ? existingTermGrade?.[field] ?? null : getGradeValue(value);
+    };
+
+    const middleSkills = examSkillKeys.map((skill) => resolveExamSkill('middle', skill));
+    const finalSkills = examSkillKeys.map((skill) => resolveExamSkill('final', skill));
+    const resolvedMiddleExamGrade = student.modality === 'ONLINE'
+      ? getGradeValue(middleExamGrade)
+      : (middleSkills.some((grade) => grade !== null) ? getExamAverage(middleSkills) : existingTermGrade?.middleExamGrade ?? null);
+    const resolvedFinalExamGrade = student.modality === 'ONLINE'
+      ? getGradeValue(finalExamGrade)
+      : (finalSkills.some((grade) => grade !== null) ? getExamAverage(finalSkills) : existingTermGrade?.finalExamGrade ?? null);
 
     // Calcular tareas y promedio continuo en este trimestre
     const tasks = await prisma.structuredTask.findMany({
@@ -332,7 +400,7 @@ router.put('/course/:courseId', authenticateToken, requireTeacher, async (req: A
 
     const taskGrades: number[] = [];
     tasks.forEach((t) => {
-      const evaluableSteps = t.steps.filter((s) => s.requiresSubmission);
+      const evaluableSteps = t.steps.filter((s) => s.requiresSubmission || s.material?.type === 'FORM');
       const gradedSubmissions = evaluableSteps
         .map((s) => s.assignment?.submissions[0]?.grade)
         .filter((g): g is number => typeof g === 'number' && !isNaN(g));
@@ -348,8 +416,8 @@ router.put('/course/:courseId', authenticateToken, requireTeacher, async (req: A
 
     const { overallGrade } = calculateTermOverallGrade(
       student.modality,
-      middleExamGrade,
-      finalExamGrade,
+      resolvedMiddleExamGrade,
+      resolvedFinalExamGrade,
       tasksAverage
     );
 
@@ -367,8 +435,10 @@ router.put('/course/:courseId', authenticateToken, requireTeacher, async (req: A
         courseId,
         term: Number(term),
         academicYear,
-        middleExamGrade: middleExamGrade !== undefined && middleExamGrade !== null ? Number(middleExamGrade) : null,
-        finalExamGrade: finalExamGrade !== undefined && finalExamGrade !== null ? Number(finalExamGrade) : null,
+        middleExamGrade: resolvedMiddleExamGrade,
+        finalExamGrade: resolvedFinalExamGrade,
+        middleGrammar: middleSkills[0], middleReading: middleSkills[1], middleWriting: middleSkills[2], middleListening: middleSkills[3], middleSpeaking: middleSkills[4],
+        finalGrammar: finalSkills[0], finalReading: finalSkills[1], finalWriting: finalSkills[2], finalListening: finalSkills[3], finalSpeaking: finalSkills[4],
         tasksAverage,
         overallGrade,
         grammar: grammar !== undefined && grammar !== null ? Number(grammar) : null,
@@ -379,8 +449,10 @@ router.put('/course/:courseId', authenticateToken, requireTeacher, async (req: A
         observations: typeof observations === 'string' ? observations.trim() : null
       },
       update: {
-        middleExamGrade: middleExamGrade !== undefined ? (middleExamGrade !== null ? Number(middleExamGrade) : null) : undefined,
-        finalExamGrade: finalExamGrade !== undefined ? (finalExamGrade !== null ? Number(finalExamGrade) : null) : undefined,
+        middleExamGrade: resolvedMiddleExamGrade,
+        finalExamGrade: resolvedFinalExamGrade,
+        middleGrammar: middleSkills[0], middleReading: middleSkills[1], middleWriting: middleSkills[2], middleListening: middleSkills[3], middleSpeaking: middleSkills[4],
+        finalGrammar: finalSkills[0], finalReading: finalSkills[1], finalWriting: finalSkills[2], finalListening: finalSkills[3], finalSpeaking: finalSkills[4],
         tasksAverage,
         overallGrade,
         grammar: grammar !== undefined ? (grammar !== null ? Number(grammar) : null) : undefined,
@@ -445,9 +517,27 @@ router.get('/student/:studentId', authenticateToken, async (req: AuthRequest, re
     }
 
     // Determinar cursos a consultar
-    const targetCourseIds = courseId
+    let targetCourseIds = courseId
       ? [courseId]
       : student.enrollments.map((e) => e.courseId);
+
+    if (req.user!.role === 'TEACHER') {
+      const accessibleCourses = await prisma.course.findMany({
+        where: {
+          id: { in: targetCourseIds },
+          OR: [
+            { modality: 'PRESENCIAL' },
+            { teacherId: req.user!.id },
+            { assignedTeachers: { some: { teacherId: req.user!.id } } }
+          ]
+        },
+        select: { id: true }
+      });
+      targetCourseIds = accessibleCourses.map((course) => course.id);
+      if (targetCourseIds.length === 0) {
+        return res.status(403).json({ error: 'No tienes acceso a las calificaciones de las clases de este alumno.' });
+      }
+    }
 
     // Obtener todas las tareas de esos cursos
     const tasks = await prisma.structuredTask.findMany({
@@ -574,6 +664,7 @@ router.get('/student/:studentId', authenticateToken, async (req: AuthRequest, re
         listening: onlineSkills?.listening ?? existingTermGrade?.listening ?? null,
         speaking: onlineSkills?.speaking ?? existingTermGrade?.speaking ?? null,
         observations: existingTermGrade?.observations ?? null,
+        updatedAt: existingTermGrade?.updatedAt ?? null,
         tasks: tasksFormatted
       };
     }

@@ -1,11 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { UserPlus, UserMinus, Users, X, CheckSquare, Square, AlertCircle } from 'lucide-react';
+import { UserPlus, UserMinus, Users, X, CheckSquare, Square, AlertCircle, GraduationCap, Info } from 'lucide-react';
 
 const PeopleTab: React.FC<{ courseId: string }> = ({ courseId }) => {
+  const userRole = localStorage.getItem('userRole');
   const [courseStudents, setCourseStudents] = useState<any[]>([]);
   const [allStudents, setAllStudents] = useState<any[]>([]);
   
+  // Teachers state
+  const [courseDetails, setCourseDetails] = useState<any>(null);
+  const [teachersData, setTeachersData] = useState<{ titular: any; assigned: any[] }>({ titular: null, assigned: [] });
+  const [allTeachersList, setAllTeachersList] = useState<any[]>([]);
+  const [isAssignTeacherOpen, setIsAssignTeacherOpen] = useState(false);
+  const [selectedTeacherToAssign, setSelectedTeacherToAssign] = useState('');
+  const [assigningTeacherLoading, setAssigningTeacherLoading] = useState(false);
+  const [teacherActionMsg, setTeacherActionMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  const canAssignTeacher = userRole === 'ADMIN'
+    || courseDetails?.teacherId === localStorage.getItem('userId')
+    || teachersData.assigned.some((teacher: any) => teacher.id === localStorage.getItem('userId'));
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
   const [studentSearch, setStudentSearch] = useState('');
@@ -20,7 +34,83 @@ const PeopleTab: React.FC<{ courseId: string }> = ({ courseId }) => {
 
   useEffect(() => {
     fetchCourseStudents();
+    fetchCourseTeachers();
   }, [courseId]);
+
+  const fetchCourseTeachers = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+      const [resCourse, resTeachers] = await Promise.all([
+        fetch(`${apiUrl}/api/courses/${courseId}`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`${apiUrl}/api/courses/${courseId}/teachers`, { headers: { 'Authorization': `Bearer ${token}` } })
+      ]);
+      if (resCourse.ok) setCourseDetails(await resCourse.json());
+      if (resTeachers.ok) setTeachersData(await resTeachers.json());
+    } catch (err) {
+      console.error('Error fetching course teachers:', err);
+    }
+  };
+
+  const handleOpenAssignTeacher = async () => {
+    setIsAssignTeacherOpen(true);
+    try {
+      const token = localStorage.getItem('token');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+      const res = await fetch(`${apiUrl}/api/teachers`, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (res.ok) {
+        const teachers = await res.json();
+        setAllTeachersList(teachers.filter((t: any) => t.status === 'ACTIVE'));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleAssignTeacher = async () => {
+    if (!selectedTeacherToAssign) return;
+    setAssigningTeacherLoading(true);
+    setTeacherActionMsg(null);
+    try {
+      const token = localStorage.getItem('token');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+      const res = await fetch(`${apiUrl}/api/courses/${courseId}/teachers`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ teacherId: selectedTeacherToAssign })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al asignar profesor');
+      setTeacherActionMsg({ text: 'Profesor asignado a la clase con éxito', type: 'success' });
+      setIsAssignTeacherOpen(false);
+      setSelectedTeacherToAssign('');
+      fetchCourseTeachers();
+    } catch (err: any) {
+      setTeacherActionMsg({ text: err.message || 'Error al asignar profesor', type: 'error' });
+    } finally {
+      setAssigningTeacherLoading(false);
+    }
+  };
+
+  const handleUnassignTeacher = async (teacherId: string) => {
+    setTeacherActionMsg(null);
+    try {
+      const token = localStorage.getItem('token');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+      const res = await fetch(`${apiUrl}/api/courses/${courseId}/teachers/${teacherId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Error al desasignar profesor');
+      setTeacherActionMsg({ text: 'Profesor desasignado de la clase', type: 'success' });
+      fetchCourseTeachers();
+    } catch (err: any) {
+      setTeacherActionMsg({ text: err.message || 'Error al desasignar profesor', type: 'error' });
+    }
+  };
 
   const fetchCourseStudents = async () => {
     try {
@@ -144,7 +234,7 @@ const PeopleTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   };
 
   // Filtrar los alumnos para no mostrar los que ya están en esta clase
-  const availableStudents = allStudents.filter(student => !courseStudents.some(cs => cs.id === student.id));
+  const availableStudents = allStudents.filter(student => student.status === 'ACTIVE' && !courseStudents.some(cs => cs.id === student.id));
   const filteredAvailableStudents = availableStudents.filter(student => {
     const searchValue = `${student.profile?.firstName || ''} ${student.profile?.lastName || ''} ${student.email}`.toLowerCase();
     return searchValue.includes(studentSearch.trim().toLowerCase());
@@ -152,43 +242,222 @@ const PeopleTab: React.FC<{ courseId: string }> = ({ courseId }) => {
 
   return (
     <div className="animate-fade-in">
+      {/* SECCIÓN PROFESORES */}
       <div className="glass-panel" style={{ marginBottom: '2rem' }}>
-        <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', color: 'var(--primary)' }}>
-          <UserPlus size={20} /> Crear Nuevo Alumno (Desde cero)
-        </h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0, color: 'var(--primary)' }}>
+            <GraduationCap size={22} /> Profesores de la Clase
+          </h3>
+          {canAssignTeacher && !isAssignTeacherOpen && (
+            <button
+              onClick={handleOpenAssignTeacher}
+              className="btn-primary"
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.9rem', fontSize: '0.85rem' }}
+            >
+              <UserPlus size={16} /> Asignar Profesor
+            </button>
+          )}
+        </div>
 
-        {message && (
-          <div style={{ backgroundColor: '#dcfce7', color: '#166534', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
-            {message}
+        {courseDetails?.modality === 'PRESENCIAL' && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.65rem',
+            padding: '0.75rem 1rem',
+            borderRadius: '8px',
+            background: '#e0f2fe',
+            border: '1px solid #bae6fd',
+            color: '#0369a1',
+            fontSize: '0.88rem',
+            marginBottom: '1rem'
+          }}>
+            <Info size={18} style={{ flexShrink: 0 }} />
+            <span>Esta es una clase <strong>Presencial</strong>: todos los profesores del centro pueden acceder y trabajar con las acciones de profesor asignado.</span>
           </div>
         )}
-        {error && (
-          <div style={{ backgroundColor: '#fee2e2', color: '#ef4444', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
-            {error}
+
+        {teacherActionMsg && (
+          <div style={{
+            padding: '0.75rem 1rem',
+            borderRadius: '8px',
+            background: teacherActionMsg.type === 'success' ? '#dcfce7' : '#fee2e2',
+            color: teacherActionMsg.type === 'success' ? '#166534' : '#ef4444',
+            marginBottom: '1rem',
+            fontSize: '0.88rem'
+          }}>
+            {teacherActionMsg.text}
           </div>
         )}
 
-        <form onSubmit={handleAddStudent} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Nombre</label>
-              <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} required style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }} />
+        {/* Formulario para asignar profesor a clase online */}
+        {isAssignTeacherOpen && (
+          <div style={{
+            padding: '1rem',
+            borderRadius: '8px',
+            background: 'var(--surface-alt)',
+            border: '1px solid var(--border)',
+            marginBottom: '1rem',
+            display: 'flex',
+            gap: '0.75rem',
+            alignItems: 'center',
+            flexWrap: 'wrap'
+          }}>
+            <div style={{ flex: 1, minWidth: '240px' }}>
+              <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, marginBottom: '0.3rem', color: 'var(--text-main)' }}>
+                Seleccionar profesor para conceder acceso a esta clase online:
+              </label>
+              <select
+                value={selectedTeacherToAssign}
+                onChange={(e) => setSelectedTeacherToAssign(e.target.value)}
+                style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}
+              >
+                <option value="">-- Elige un profesor --</option>
+                {allTeachersList
+                  .filter(t => t.id !== teachersData.titular?.id && !teachersData.assigned?.some(at => at.id === t.id))
+                  .map(t => (
+                    <option key={t.id} value={t.id}>
+                      {t.profile?.firstName} {t.profile?.lastName} ({t.email})
+                    </option>
+                  ))}
+              </select>
             </div>
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Apellidos</label>
-              <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} required style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }} />
-            </div>
-            <div style={{ flex: 2, minWidth: '250px' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Correo Electrónico</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }} />
+            <div style={{ display: 'flex', gap: '0.5rem', alignSelf: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={handleAssignTeacher}
+                disabled={!selectedTeacherToAssign || assigningTeacherLoading}
+                className="btn-primary"
+                style={{ padding: '0.55rem 1rem', fontSize: '0.85rem' }}
+              >
+                {assigningTeacherLoading ? 'Asignando...' : 'Confirmar'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setIsAssignTeacherOpen(false); setSelectedTeacherToAssign(''); }}
+                style={{ padding: '0.55rem 0.9rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', fontSize: '0.85rem' }}
+              >
+                Cancelar
+              </button>
             </div>
           </div>
+        )}
 
-          <button type="submit" className="btn-primary" style={{ marginTop: '0.5rem', alignSelf: 'flex-start' }}>
-            Crear Alumno
-          </button>
-        </form>
+        {/* Lista de profesores */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+          {/* Titular */}
+          {teachersData.titular && (
+            <div style={{ padding: '0.85rem 1rem', borderRadius: '8px', background: 'var(--surface-alt)', border: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{ width: '38px', height: '38px', borderRadius: '50%', backgroundColor: 'var(--primary)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                  {teachersData.titular.profile?.firstName?.[0] || 'P'}{teachersData.titular.profile?.lastName?.[0] || 'T'}
+                </div>
+                <div>
+                  <p style={{ margin: 0, fontWeight: 600, color: 'var(--text-main)' }}>
+                    {teachersData.titular.profile?.firstName} {teachersData.titular.profile?.lastName}
+                  </p>
+                  <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)' }}>{teachersData.titular.email}</p>
+                </div>
+              </div>
+              <span style={{
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                padding: '3px 9px',
+                borderRadius: '12px',
+                background: '#fef3c7',
+                color: '#92400e',
+                border: '1px solid #fde68a'
+              }}>
+                Profesor Titular
+              </span>
+            </div>
+          )}
+
+          {/* Asignados */}
+          {teachersData.assigned?.map((teacher: any) => (
+            <div key={teacher.id} style={{ padding: '0.85rem 1rem', borderRadius: '8px', background: 'var(--surface-alt)', border: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{ width: '38px', height: '38px', borderRadius: '50%', backgroundColor: '#6366f1', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                  {teacher.profile?.firstName?.[0] || 'P'}{teacher.profile?.lastName?.[0] || 'A'}
+                </div>
+                <div>
+                  <p style={{ margin: 0, fontWeight: 600, color: 'var(--text-main)' }}>
+                    {teacher.profile?.firstName} {teacher.profile?.lastName}
+                  </p>
+                  <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)' }}>{teacher.email}</p>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <span style={{
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  padding: '3px 9px',
+                  borderRadius: '12px',
+                  background: '#e0e7ff',
+                  color: '#4338ca',
+                  border: '1px solid #c7d2fe'
+                }}>
+                  Profesor Asignado
+                </span>
+                {userRole === 'ADMIN' && (
+                  <button
+                    type="button"
+                    onClick={() => handleUnassignTeacher(teacher.id)}
+                    title="Quitar acceso a este profesor"
+                    style={{ background: 'none', border: 'none', color: '#b91c1c', cursor: 'pointer', padding: '0.35rem' }}
+                  >
+                    <UserMinus size={17} />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+
+          {!teachersData.titular && (!teachersData.assigned || teachersData.assigned.length === 0) && (
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: '0.5rem 0' }}>No hay datos de profesores cargados.</p>
+          )}
+        </div>
       </div>
+
+      {userRole === 'ADMIN' && (
+        <div className="glass-panel" style={{ marginBottom: '2rem' }}>
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', color: 'var(--primary)' }}>
+            <UserPlus size={20} /> Crear Nuevo Alumno (Desde cero)
+          </h3>
+
+          {message && (
+            <div style={{ backgroundColor: '#dcfce7', color: '#166534', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
+              {message}
+            </div>
+          )}
+          {error && (
+            <div style={{ backgroundColor: '#fee2e2', color: '#ef4444', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleAddStudent} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: '150px' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Nombre</label>
+                <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} required style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }} />
+              </div>
+              <div style={{ flex: 1, minWidth: '150px' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Apellidos</label>
+                <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} required style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }} />
+              </div>
+              <div style={{ flex: 2, minWidth: '250px' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Correo Electrónico</label>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }} />
+              </div>
+            </div>
+
+            <button type="submit" className="btn-primary" style={{ marginTop: '0.5rem', alignSelf: 'flex-start' }}>
+              Crear Alumno
+            </button>
+          </form>
+        </div>
+      )}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
         <h3 style={{ color: 'var(--primary)', margin: 0 }}>
