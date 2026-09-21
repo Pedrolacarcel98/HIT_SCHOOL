@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import CustomSelect from '../components/CustomSelect';
 import {
   FolderArchive,
   Plus,
@@ -515,7 +516,7 @@ const MaterialsManagement: React.FC = () => {
   };
 
   return (
-    <div className="page-container">
+    <div className="page-container materials-page">
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
@@ -524,24 +525,10 @@ const MaterialsManagement: React.FC = () => {
           </h1>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <div className="materials-actions">
           <button
             onClick={() => { setEditingStandardMaterial(null); setResTitle(''); setResDesc(''); setResType('DOCUMENT'); setResLevel('B2'); setResCategory('GRAMMAR_VOCABULARY'); setResUrl(''); setShowAddResourceModal(true); }}
             className="btn-primary"
-            style={{
-              background: 'var(--primary)',
-              color: '#fff',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
-              padding: '0.7rem 1rem',
-              borderRadius: '12px',
-              fontWeight: 500,
-              border: 'none',
-              cursor: 'pointer',
-              transition: 'background-color 0.2s ease'
-            }}
           >
             + Añadir Multimedia / Doc
           </button>
@@ -549,65 +536,42 @@ const MaterialsManagement: React.FC = () => {
           <button
             onClick={() => { setEditingMaterial(null); setShowFormBuilder(true); }}
             className="btn-primary"
-            style={{
-              background: 'var(--primary)',
-              color: '#fff',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
-              padding: '0.7rem 1rem',
-              borderRadius: '12px',
-              fontWeight: 500,
-              border: 'none',
-              cursor: 'pointer',
-              transition: 'background-color 0.2s ease'
-            }}
           >
             + Crear Examen / Formulario
           </button>
-
         </div>
       </div>
 
       {/* Tabs por Tipo de Material */}
-      <div className="scrollable-tabs" style={{ marginBottom: '1.5rem' }}>
-        {[
-          { id: 'ALL', label: 'Todos los Recursos', icon: <FolderArchive size={16} /> },
-          { id: 'DOCUMENT', label: 'Documentos', icon: <FileText size={16} /> },
-          { id: 'IMAGE', label: 'Fotos', icon: <Image size={16} /> },
-          { id: 'VIDEO', label: 'Vídeos', icon: <Video size={16} /> },
-          { id: 'AUDIO', label: 'Audios', icon: <Headphones size={16} /> },
-          { id: 'FORM', label: 'Exámenes y Formularios', icon: <HelpCircle size={16} /> },
-        ].map(tab => (
+      <div className="filter-pills-wrap">
+        <div className="filter-pills">
+          {[
+            { id: 'ALL', label: 'Todos los Recursos', icon: <FolderArchive size={16} /> },
+            { id: 'DOCUMENT', label: 'Documentos', icon: <FileText size={16} /> },
+            { id: 'IMAGE', label: 'Fotos', icon: <Image size={16} /> },
+            { id: 'VIDEO', label: 'Vídeos', icon: <Video size={16} /> },
+            { id: 'AUDIO', label: 'Audios', icon: <Headphones size={16} /> },
+            { id: 'FORM', label: 'Exámenes y Formularios', icon: <HelpCircle size={16} /> },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => { setShowStructuredTemplates(false); setTemplateSearchTerm(''); setTypeFilter(tab.id); }}
+              className={`filter-pill ${!showStructuredTemplates && typeFilter === tab.id ? 'is-active' : ''}`}
+              aria-pressed={!showStructuredTemplates && typeFilter === tab.id}
+            >
+              {tab.icon} {tab.label}
+            </button>
+          ))}
           <button
-            key={tab.id}
-            onClick={() => { setShowStructuredTemplates(false); setTemplateSearchTerm(''); setTypeFilter(tab.id); }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              padding: '0.6rem 1.2rem',
-              borderRadius: '20px',
-              border: !showStructuredTemplates && typeFilter === tab.id ? '1px solid var(--primary)' : '1px solid var(--border)',
-              background: !showStructuredTemplates && typeFilter === tab.id ? 'var(--primary-light)' : 'var(--surface)',
-              color: !showStructuredTemplates && typeFilter === tab.id ? 'var(--primary-text)' : 'var(--text-muted)',
-              fontWeight: !showStructuredTemplates && typeFilter === tab.id ? '600' : '500',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              fontSize: '0.85rem'
-            }}
+            type="button"
+            onClick={() => { setShowStructuredTemplates(true); setTemplateSearchTerm(''); }}
+            className={`filter-pill ${showStructuredTemplates ? 'is-active' : ''}`}
+            aria-pressed={showStructuredTemplates}
           >
-            {tab.icon} {tab.label}
+            <ListChecks size={16} /> Plantillas ({structuredTaskTemplates.length})
           </button>
-        ))}
-        <button
-          type="button"
-          onClick={() => { setShowStructuredTemplates(true); setTemplateSearchTerm(''); }}
-          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1.2rem', borderRadius: '20px', border: showStructuredTemplates ? '1px solid var(--primary)' : '1px solid var(--border)', background: showStructuredTemplates ? 'var(--primary-light)' : 'var(--surface)', color: showStructuredTemplates ? 'var(--primary-text)' : 'var(--text-muted)', fontWeight: showStructuredTemplates ? 700 : 500, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: '0.85rem' }}
-        >
-          <ListChecks size={16} /> Plantillas ({structuredTaskTemplates.length})
-        </button>
+        </div>
       </div>
 
       {showStructuredTemplates && (
@@ -680,41 +644,37 @@ const MaterialsManagement: React.FC = () => {
           />
         </div>
 
-        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Nivel:</span>
-            <select
-              value={levelFilter}
-              onChange={(e) => setLevelFilter(e.target.value)}
-              style={{ padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)', fontSize: '0.85rem' }}
-            >
-              <option value="ALL">Todos los Niveles</option>
-              <option value="A1">A1</option>
-              <option value="A2">A2</option>
-              <option value="B1">B1</option>
-              <option value="B2">B2</option>
-              <option value="C1">C1</option>
-              <option value="C2">C2</option>
-              <option value="GENERAL">General</option>
-            </select>
-          </div>
+        <div className="materials-filters">
+          <CustomSelect
+            value={levelFilter}
+            onChange={setLevelFilter}
+            ariaLabel="Filtrar por nivel"
+            options={[
+              { value: 'ALL', label: 'Todos los Niveles' },
+              { value: 'A1', label: 'A1' },
+              { value: 'A2', label: 'A2' },
+              { value: 'B1', label: 'B1' },
+              { value: 'B2', label: 'B2' },
+              { value: 'C1', label: 'C1' },
+              { value: 'C2', label: 'C2' },
+              { value: 'GENERAL', label: 'General' }
+            ]}
+          />
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Skill:</span>
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              style={{ padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)', fontSize: '0.85rem' }}
-            >
-              <option value="ALL">Todas las Skills</option>
-              <option value="GRAMMAR_VOCABULARY">Grammar & Vocabulary</option>
-              <option value="READING">Reading</option>
-              <option value="LISTENING">Listening</option>
-              <option value="WRITING">Writing</option>
-              <option value="SPEAKING">Speaking</option>
-              <option value="MOCK_EXAM">Mock Exams</option>
-            </select>
-          </div>
+          <CustomSelect
+            value={categoryFilter}
+            onChange={setCategoryFilter}
+            ariaLabel="Filtrar por skill"
+            options={[
+              { value: 'ALL', label: 'Todas las Skills' },
+              { value: 'GRAMMAR_VOCABULARY', label: 'Grammar & Vocabulary' },
+              { value: 'READING', label: 'Reading' },
+              { value: 'LISTENING', label: 'Listening' },
+              { value: 'WRITING', label: 'Writing' },
+              { value: 'SPEAKING', label: 'Speaking' },
+              { value: 'MOCK_EXAM', label: 'Mock Exams' }
+            ]}
+          />
         </div>
       </div>
 
@@ -771,40 +731,37 @@ const MaterialsManagement: React.FC = () => {
                   {m.description || 'Sin descripción adicional.'}
                 </p>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', borderTop: '1px solid var(--border)', paddingTop: '1rem', marginTop: 'auto' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
-                    <button
-                      onClick={() => setViewingMaterial(m)}
-                      className="btn-primary"
-                      style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1rem', fontSize: '0.85rem', whiteSpace: 'nowrap' }}
-                    >
-                      <Play size={15} /> {m.type === 'FORM' ? 'Abrir Examen' : 'Ver / Reproducir'}
-                    </button>
-                  </div>
+                <div className="material-card__footer">
+                  <button
+                    onClick={() => setViewingMaterial(m)}
+                    className="btn-primary"
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1rem', fontSize: '0.85rem', whiteSpace: 'nowrap', minWidth: 0 }}
+                  >
+                    <Play size={15} /> {m.type === 'FORM' ? 'Abrir Examen' : 'Ver / Reproducir'}
+                  </button>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', justifyContent: 'center', flexShrink: 0 }}>
+                  <div className="material-card__actions">
                     <button
                       onClick={() => duplicateMaterial(m)}
                       title="Duplicar recurso"
                       aria-label="Duplicar recurso"
-                      style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '6px', padding: '0.4rem', color: 'var(--text-muted)', cursor: 'pointer' }}
                     >
                       <Copy size={16} />
-                    </button>
-                    <button
-                      onClick={() => setDeletingMaterial(m)}
-                      title="Eliminar recurso"
-                      style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '6px', padding: '0.4rem', color: 'var(--text-muted)', cursor: 'pointer' }}
-                    >
-                      <Trash2 size={16} />
                     </button>
                     <button
                       onClick={() => m.type === 'FORM' ? (setEditingMaterial(m), setShowFormBuilder(true)) : openStandardMaterialEditor(m)}
                       title={m.type === 'FORM' ? 'Editar formulario' : 'Editar recurso'}
                       aria-label={m.type === 'FORM' ? 'Editar formulario' : 'Editar recurso'}
-                      style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '6px', padding: '0.4rem', color: 'var(--text-muted)', cursor: 'pointer' }}
                     >
                       <Edit2 size={16} />
+                    </button>
+                    <button
+                      onClick={() => setDeletingMaterial(m)}
+                      title="Eliminar recurso"
+                      aria-label="Eliminar recurso"
+                      className="is-danger"
+                    >
+                      <Trash2 size={16} />
                     </button>
                   </div>
                 </div>

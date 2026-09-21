@@ -72,6 +72,7 @@ interface TaskCardProps {
   task: TaskItem;
   mode?: 'STUDENT' | 'TEACHER';
   defaultExpanded?: boolean;
+  hideCategory?: boolean;
   onOpenStep?: (step: TaskStepItem, task: TaskItem) => void;
   onReviewStep?: (step: TaskStepItem, task: TaskItem) => void;
   onEditTask?: (task: TaskItem) => void;
@@ -106,6 +107,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
   task,
   mode = 'STUDENT',
   defaultExpanded,
+  hideCategory = false,
   onOpenStep,
   onReviewStep,
   onEditTask,
@@ -168,20 +170,22 @@ const TaskCard: React.FC<TaskCardProps> = ({
           title={isExpanded ? 'Contraer pasos' : 'Expandir pasos'}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
-            <span
-              style={{
-                fontSize: '0.72rem',
-                fontWeight: 700,
-                padding: '0.15rem 0.55rem',
-                borderRadius: '10px',
-                background: 'var(--primary-light)',
-                color: 'var(--primary-text)',
-                border: '1px solid var(--primary-border)',
-                textTransform: 'uppercase'
-              }}
-            >
-              {getCategoryLabel(task.category)}
-            </span>
+            {!hideCategory && (
+              <span
+                style={{
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  padding: '0.15rem 0.55rem',
+                  borderRadius: '10px',
+                  background: 'var(--primary-light)',
+                  color: 'var(--primary-text)',
+                  border: '1px solid var(--primary-border)',
+                  textTransform: 'uppercase'
+                }}
+              >
+                {getCategoryLabel(task.category)}
+              </span>
+            )}
 
             {task.isSequential && (
               <span
@@ -283,25 +287,19 @@ const TaskCard: React.FC<TaskCardProps> = ({
           {mode === 'TEACHER' && task.stats && (
             <div style={{ marginTop: '0.65rem' }}>
               {!task.isTemplate && (
-                <div style={{ background: 'var(--surface-alt)', borderRadius: '8px', border: '1px solid var(--border)', overflow: 'hidden' }}>
+                <div style={{ background: 'var(--surface-alt)', borderRadius: '12px', border: '1px solid var(--border)', overflow: 'hidden' }}>
                   <div
+                    className="task-students-header"
                     onClick={(e) => {
                       e.stopPropagation();
                       setIsStudentsExpanded(!isStudentsExpanded);
                     }}
                     style={{
-                      padding: '0.45rem 0.75rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '0.5rem',
-                      cursor: 'pointer',
-                      userSelect: 'none',
                       background: isStudentsExpanded ? 'rgba(0,0,0,0.02)' : 'transparent'
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
-                      <Users size={14} style={{ color: task.stats.completionRate >= 100 ? 'var(--primary)' : 'var(--primary)' }} />
+                    <div className="task-students-summary">
+                      <Users size={14} style={{ color: 'var(--primary)', flexShrink: 0 }} />
                       <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)' }}>
                         Alumnos:
                       </span>
@@ -311,6 +309,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                           fontWeight: 700,
                           padding: '0.15rem 0.5rem',
                           borderRadius: '10px',
+                          whiteSpace: 'nowrap',
                           background: task.stats.completionRate >= 100 ? '#ecfdf5' : '#fef9c3',
                           color: task.stats.completionRate >= 100 ? '#047857' : '#854d0e',
                           border: `1px solid ${task.stats.completionRate >= 100 ? '#a7f3d0' : '#fef08a'}`
@@ -318,7 +317,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                       >
                         {task.stats.completedStudentsCount}/{task.stats.totalTargetStudents}
                       </span>
-                      <span style={{ fontSize: '0.72rem', color: task.stats.completionRate >= 100 ? 'var(--primary)' : 'var(--text-muted)', fontWeight: 500 }}>
+                      <span className="task-students-rate" style={{ color: task.stats.completionRate >= 100 ? 'var(--primary)' : 'var(--text-muted)' }}>
                         ({task.stats.completionRate}% completada)
                       </span>
                     </div>
@@ -429,17 +428,19 @@ const TaskCard: React.FC<TaskCardProps> = ({
         </div>
 
         {/* Acciones Superiores */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+        <div className="task-card-actions">
           {mode === 'TEACHER' && (
             <>
               {onViewSubmissions && (
                 <button
                   type="button"
                   onClick={() => onViewSubmissions(task)}
-                  className="btn-primary"
-                  style={{ padding: '0.45rem 0.8rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                  className="btn-primary task-action-btn"
+                  title="Entregas y Calificaciones"
+                  aria-label="Entregas y Calificaciones"
                 >
-                  <Award size={14} /> Entregas y Calificaciones
+                  <Award size={15} />
+                  <span className="task-action-label">Entregas y Calificaciones</span>
                 </button>
               )}
 
@@ -448,10 +449,11 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   type="button"
                   onClick={() => onDuplicateTask(task)}
                   title="Duplicar / Reutilizar Tarea"
-                  className="btn-secondary"
-                  style={{ padding: '0.45rem 0.65rem', fontSize: '0.8rem' }}
+                  aria-label="Duplicar / Reutilizar Tarea"
+                  className="btn-secondary task-action-btn"
                 >
-                  <Copy size={14} /> Duplicar
+                  <Copy size={15} />
+                  <span className="task-action-label">Duplicar</span>
                 </button>
               )}
 
@@ -460,10 +462,11 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   type="button"
                   onClick={() => onSaveAsTemplate(task)}
                   title="Guardar como Plantilla en el Catálogo"
-                  className="btn-secondary"
-                  style={{ padding: '0.45rem 0.65rem', fontSize: '0.8rem' }}
+                  aria-label="Guardar como Plantilla en el Catálogo"
+                  className="btn-secondary task-action-btn"
                 >
-                  <BookmarkPlus size={14} /> Guardar Plantilla
+                  <BookmarkPlus size={15} />
+                  <span className="task-action-label">Guardar Plantilla</span>
                 </button>
               )}
 
@@ -472,10 +475,10 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   type="button"
                   onClick={() => onEditTask(task)}
                   title="Editar Tarea"
-                  className="btn-secondary"
-                  style={{ padding: '0.45rem 0.65rem', fontSize: '0.8rem' }}
+                  aria-label="Editar Tarea"
+                  className="btn-secondary task-action-btn"
                 >
-                  <Pencil size={14} />
+                  <Pencil size={15} />
                 </button>
               )}
 
@@ -484,10 +487,11 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   type="button"
                   onClick={() => onDeleteTask(task)}
                   title="Eliminar Tarea"
-                  className="btn-secondary"
-                  style={{ padding: '0.45rem 0.65rem', fontSize: '0.8rem', color: '#b91c1c' }}
+                  aria-label="Eliminar Tarea"
+                  className="btn-secondary task-action-btn"
+                  style={{ color: '#b91c1c' }}
                 >
-                  <Trash2 size={14} />
+                  <Trash2 size={15} />
                 </button>
               )}
             </>

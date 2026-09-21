@@ -1,31 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { createPortal } from 'react-dom';
 import {
   Award,
-  ArrowLeft,
   BookOpen,
-  CheckCircle2,
-  ChevronDown,
   ChevronRight,
-  ChevronUp,
-  Clock3,
-  Download,
-  Edit3,
-  ExternalLink,
-  Eye,
-  FileText,
-  GraduationCap,
   Laptop,
   Search,
-  Users,
-  X
+  Users
 } from 'lucide-react';
-import ExamReviewModal from '../components/ExamReviewModal';
-import type { ReviewQuestion } from '../components/ExamReviewModal';
-import AttachmentViewerModal, { isAttachmentImage, isAttachmentAudio } from '../components/AttachmentViewerModal';
-import type { AttachmentData } from '../components/AttachmentViewerModal';
-import AudioPlayer from '../components/AudioPlayer';
+import CustomSelect from '../components/CustomSelect';
+import ModalityBadge from '../components/ModalityBadge';
+import ExpedienteAcademico from '../components/ExpedienteAcademico';
+import type { CourseData, FlatSubmission, StudentWithMeta } from '../components/ExpedienteAcademico';
+import ClassGradesDetail from '../components/ClassGradesDetail';
 
 interface StudentData {
   id: string;
@@ -38,45 +25,6 @@ interface StudentData {
   };
   monthlyFee?: number | null;
   courseDurationMonths?: number | null;
-}
-
-interface FinalEvaluationData {
-  id?: string;
-  studentId?: string;
-  grammar?: number | null;
-  reading?: number | null;
-  writing?: number | null;
-  listening?: number | null;
-  speaking?: number | null;
-  overallGrade?: number | null;
-  middleExamGrade?: number | null;
-  finalExamGrade?: number | null;
-  middleGrammar?: number | null;
-  middleReading?: number | null;
-  middleWriting?: number | null;
-  middleListening?: number | null;
-  middleSpeaking?: number | null;
-  finalGrammar?: number | null;
-  finalReading?: number | null;
-  finalWriting?: number | null;
-  finalListening?: number | null;
-  finalSpeaking?: number | null;
-  tasksAverage?: number | null;
-  observations?: string | null;
-}
-
-interface TermEvaluationData extends FinalEvaluationData {
-  term: number;
-  tasksAverage?: number | null;
-  tasks?: Array<{ taskId: string; title: string; taskGrade: number | null; isCompleted: boolean }>;
-}
-
-interface CourseData {
-  id: string;
-  title: string;
-  teacherId: string;
-  modality?: 'PRESENCIAL' | 'ONLINE' | 'HIBRIDO';
-  students?: { id: string; name?: string; email: string }[];
 }
 
 interface SubmissionItem {
@@ -92,37 +40,6 @@ interface SubmissionItem {
     email: string;
     profile?: { firstName: string; lastName: string };
   };
-}
-
-interface FlatSubmission extends SubmissionItem {
-  assignmentTitle: string;
-  assignmentCategory: string;
-  dueDate?: string | null;
-  courseId?: string | null;
-  courseTitle?: string;
-  isDirect: boolean;
-  materialType: string;
-  materialUrl: string | null;
-  materialFormData: any;
-  studentName: string;
-  studentEmail: string;
-  structuredTaskId?: string | null;
-  structuredTaskTitle?: string | null;
-  structuredTaskCategory?: string | null;
-  structuredStepOrder?: number | null;
-  structuredStepTitle?: string | null;
-  structuredStepRequiresSubmission?: boolean;
-}
-
-interface StudentWithMeta extends StudentData {
-  fullName: string;
-  enrolledCourses: CourseData[];
-  submissions: FlatSubmission[];
-  totalSubmissions: number;
-  gradedSubmissions: number;
-  pendingSubmissions: number;
-  averageGrade: string | null;
-  modality: 'PRESENCIAL' | 'ONLINE';
 }
 
 interface AssignmentItem {
@@ -156,60 +73,6 @@ interface ParsedExamData {
   questionScores?: Record<string, number>;
 }
 
-interface SubmissionAttachment {
-  name: string;
-  mimeType: string;
-  dataUrl: string;
-  size?: number;
-}
-
-const parseSubmissionContent = (content?: string | null): { text: string; link: string | null; attachment: SubmissionAttachment | null } => {
-  if (!content) return { text: '', link: null, attachment: null };
-
-  try {
-    const parsed = JSON.parse(content);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      const attachment = parsed.attachment && typeof parsed.attachment === 'object' ? {
-        name: typeof parsed.attachment.name === 'string' ? parsed.attachment.name : 'archivo-adjunto',
-        mimeType: typeof parsed.attachment.mimeType === 'string' ? parsed.attachment.mimeType : 'application/octet-stream',
-        dataUrl: typeof parsed.attachment.dataUrl === 'string' ? parsed.attachment.dataUrl : '',
-        size: typeof parsed.attachment.size === 'number' ? parsed.attachment.size : undefined
-      } : null;
-
-      return {
-        text: typeof parsed.text === 'string' ? parsed.text : (typeof parsed.content === 'string' ? parsed.content : ''),
-        link: typeof parsed.link === 'string' ? parsed.link : (typeof parsed.url === 'string' ? parsed.url : null),
-        attachment
-      };
-    }
-  } catch {
-    // plain content or legacy URL
-  }
-
-  return {
-    text: content,
-    link: /^https?:\/\//i.test(content) ? content : null,
-    attachment: null
-  };
-};
-
-const openAttachmentInNewTab = (dataUrl: string) => {
-  try {
-    const [metadata, encodedData] = dataUrl.split(',', 2);
-    if (!metadata || !encodedData) throw new Error('Formato de archivo no válido');
-    const mimeType = metadata.match(/data:([^;]+)/)?.[1] || 'application/octet-stream';
-    const binary = metadata.includes(';base64') ? atob(encodedData) : decodeURIComponent(encodedData);
-    const bytes = metadata.includes(';base64')
-      ? Uint8Array.from(binary, (character) => character.charCodeAt(0))
-      : new TextEncoder().encode(binary);
-    const blobUrl = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
-    window.open(blobUrl, '_blank');
-    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-  } catch {
-    window.open(dataUrl, '_blank');
-  }
-};
-
 const parseSavedExam = (content?: string | null): ParsedExamData | null => {
   if (!content) return null;
   try {
@@ -237,162 +100,6 @@ const isSubmissionPending = (s: { materialType?: string; grade?: number | null; 
   return Boolean(exam?.hasOpenText || (exam?.openTextCount ?? 0) > 0);
 };
 
-interface StructuredTaskBlockProps {
-  blockKey: string;
-  submissions: FlatSubmission[];
-  expanded: boolean;
-  onToggle: (blockKey: string) => void;
-  onEdit: (submission: FlatSubmission) => void;
-  onReviewExam: (submission: FlatSubmission, examData: ParsedExamData) => void;
-}
-
-const groupStructuredSubmissions = (submissions: FlatSubmission[]) => {
-  const groups = new Map<string, FlatSubmission[]>();
-  submissions.forEach((submission) => {
-    if (!submission.structuredTaskId) return;
-    const key = `${submission.structuredTaskId}:${submission.studentId}`;
-    groups.set(key, [...(groups.get(key) || []), submission]);
-  });
-  return Array.from(groups.values()).filter((group) => group.some((submission) => {
-    const examData = parseSavedExam(submission.content);
-    return Boolean(submission.structuredStepRequiresSubmission || examData || submission.materialType === 'FORM');
-  }));
-};
-
-const StructuredTaskBlock: React.FC<StructuredTaskBlockProps> = ({ blockKey, submissions, expanded, onToggle, onEdit, onReviewExam }) => {
-  const toggleExpanded = () => onToggle(blockKey);
-  const orderedSubmissions = [...submissions].sort((a, b) => (a.structuredStepOrder || 0) - (b.structuredStepOrder || 0));
-  const first = orderedSubmissions[0];
-  const gradedSteps = orderedSubmissions.filter((submission) => submission.grade !== null && submission.grade !== undefined);
-  const averageGrade = gradedSteps.length > 0
-    ? gradedSteps.reduce((sum, submission) => sum + (submission.grade || 0), 0) / gradedSteps.length
-    : null;
-  const dueDate = first.dueDate;
-  const latestSubmissionAt = Math.max(...orderedSubmissions.map((submission) => new Date(submission.submittedAt).getTime()));
-  const isLate = Boolean(dueDate && latestSubmissionAt > new Date(dueDate).getTime());
-
-  return (
-    <article
-      onClick={toggleExpanded}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          toggleExpanded();
-        }
-      }}
-      style={{ padding: '1rem 1.15rem', borderRadius: '10px', border: '1px solid var(--border)', borderLeft: '4px solid #22c55e', background: 'var(--surface)', cursor: 'pointer' }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-        <div>
-          <span style={{ display: 'inline-block', marginBottom: '0.25rem', padding: '0.18rem 0.5rem', borderRadius: '6px', background: 'var(--primary-light)', color: 'var(--primary)', fontSize: '0.7rem', fontWeight: 700 }}>
-            {first.structuredTaskCategory || first.assignmentCategory}
-          </span>
-          <strong style={{ display: 'block', color: 'var(--text-main)', fontSize: '1rem' }}>{first.structuredTaskTitle || first.assignmentTitle}</strong>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
-            <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{first.studentName} · {orderedSubmissions.length} pasos</span>
-            {isLate && <span style={{ padding: '0.16rem 0.45rem', borderRadius: '10px', background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: '0.7rem', fontWeight: 700 }}>Fuera de plazo</span>}
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
-          <span style={{ padding: '0.3rem 0.7rem', borderRadius: '16px', background: averageGrade !== null && averageGrade >= 5 ? '#eaf4ef' : '#fef7e8', color: averageGrade !== null && averageGrade >= 5 ? '#24583e' : '#8d5b12', border: `1px solid ${averageGrade !== null && averageGrade >= 5 ? '#bfe0d0' : '#fae0b0'}`, fontWeight: 700, fontSize: '0.85rem' }}>
-            {averageGrade !== null ? `Nota tarea: ${averageGrade.toFixed(1)} / 10` : 'Pendiente de calificar'}
-          </span>
-          <button type="button" onClick={(event) => { event.stopPropagation(); toggleExpanded(); }} className="btn-secondary" aria-expanded={expanded} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.4rem 0.7rem', fontSize: '0.78rem' }}>
-            {expanded ? 'Ocultar pasos' : 'Ver entregas'} {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          </button>
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.75rem' }}>
-        {orderedSubmissions.map((submission) => {
-          const examData = parseSavedExam(submission.content);
-          const isExam = submission.materialType === 'FORM' || Boolean(examData);
-          const isEvaluable = Boolean(submission.structuredStepRequiresSubmission || isExam);
-          const hasGrade = submission.grade !== null && submission.grade !== undefined;
-          return (
-            <span key={submission.id} style={{ padding: '0.22rem 0.55rem', borderRadius: '6px', background: !isEvaluable ? '#ecfdf5' : (hasGrade ? '#eaf4ef' : '#fef7e8'), color: !isEvaluable ? '#065f46' : (hasGrade ? '#24583e' : '#8d5b12'), fontSize: '0.75rem', fontWeight: 600 }}>
-              {!isEvaluable ? '✓' : (hasGrade ? `${submission.grade!.toFixed(1)}/10` : '⏳')} {submission.structuredStepTitle || submission.assignmentTitle}
-            </span>
-          );
-        })}
-      </div>
-
-      {expanded && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px solid var(--border)' }}>
-          {orderedSubmissions.map((submission, index) => {
-            const examData = parseSavedExam(submission.content);
-            const isExam = submission.materialType === 'FORM' || Boolean(examData);
-            const isEvaluable = Boolean(submission.structuredStepRequiresSubmission || isExam);
-            const parsed = parseSubmissionContent(submission.content);
-            return (
-              <div key={submission.id} style={{ padding: '0.75rem', borderRadius: '8px', background: 'var(--surface-alt)', border: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                  <strong style={{ color: 'var(--text-main)', fontSize: '0.88rem' }}>Paso {index + 1}: {submission.structuredStepTitle || submission.assignmentTitle}</strong>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    {submission.grade !== null && submission.grade !== undefined && <span style={{ padding: '0.25rem 0.55rem', borderRadius: '10px', background: submission.grade >= 5 ? '#eaf4ef' : '#fdf0f0', border: `1px solid ${submission.grade >= 5 ? '#bfe0d0' : '#f7caca'}`, color: submission.grade >= 5 ? '#24583e' : '#9e2a2b', fontSize: '0.75rem', fontWeight: 700 }}>Nota: {submission.grade.toFixed(1)} / 10</span>}
-                    {isExam && examData && (
-                      <button
-                        type="button"
-                        onClick={(event) => { event.stopPropagation(); onReviewExam(submission, examData); }}
-                        className={isSubmissionPending(submission) ? "btn-primary" : "btn-secondary"}
-                        style={{
-                          padding: '0.3rem 0.6rem',
-                          fontSize: '0.75rem',
-                          background: isSubmissionPending(submission) ? '#d97706' : undefined,
-                          borderColor: isSubmissionPending(submission) ? '#b45309' : undefined,
-                          color: isSubmissionPending(submission) ? '#ffffff' : undefined,
-                        }}
-                      >
-                        <FileText size={13} /> {isSubmissionPending(submission) ? `Corregir (${examData.openTextCount || 1} pend.)` : 'Ver cuestionario'}
-                      </button>
-                    )}
-                    {isEvaluable && !isExam && <button type="button" onClick={(event) => { event.stopPropagation(); onEdit(submission); }} className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.35rem 0.65rem', fontSize: '0.75rem' }}><Edit3 size={13} /> Editar nota y feedback</button>}
-                  </div>
-                </div>
-                {isExam ? (
-                  <span style={{ display: 'block', marginTop: '0.4rem', color: isSubmissionPending(submission) ? '#b45309' : 'var(--text-muted)', fontSize: '0.78rem' }}>
-                    {examData?.hasOpenText
-                      ? (isSubmissionPending(submission) ? `⏳ Contiene ${examData.openTextCount} pregunta(s) de texto libre pendiente(s) de corrección por el profesor.` : 'Cuestionario corregido con preguntas abiertas.')
-                      : 'Test automático completado. La nota no se introduce manualmente.'}
-                  </span>
-                ) : (
-                  <div style={{ marginTop: '0.4rem', padding: '0.55rem 0.7rem', background: 'var(--surface)', borderRadius: '6px', color: 'var(--text-main)', fontSize: '0.82rem', whiteSpace: 'pre-wrap' }}>
-                    {parsed.text && <div>{parsed.text}</div>}
-                    {parsed.link && (
-                      <a href={parsed.link} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', marginTop: parsed.text ? '0.45rem' : 0, color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
-                        <ExternalLink size={13} /> Abrir enlace entregado
-                      </a>
-                    )}
-                    {parsed.attachment && parsed.attachment.dataUrl && (
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap', marginTop: parsed.text || parsed.link ? '0.45rem' : 0 }}>
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={parsed.attachment.name}>
-                          Archivo: {parsed.attachment.name}
-                        </span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                          <button type="button" onClick={() => openAttachmentInNewTab(parsed.attachment!.dataUrl)} className="btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.28rem 0.55rem', fontSize: '0.75rem' }}>
-                            <ExternalLink size={13} /> Abrir
-                          </button>
-                          <a href={parsed.attachment.dataUrl} download={parsed.attachment.name} className="btn-secondary" aria-label={`Descargar ${parsed.attachment.name}`} title="Descargar archivo" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0.35rem', textDecoration: 'none' }}>
-                            <Download size={15} />
-                          </a>
-                        </div>
-                      </div>
-                    )}
-                    {!parsed.text && !parsed.link && !parsed.attachment && 'Sin entrega registrada.'}
-                  </div>
-                )}
-                {submission.feedback && <div style={{ marginTop: '0.4rem', color: '#1e40af', fontSize: '0.78rem' }}>💬 {submission.feedback}</div>}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </article>
-  );
-};
-
 const TeacherGrades: React.FC = () => {
   const [students, setStudents] = useState<StudentData[]>([]);
   const [courses, setCourses] = useState<CourseData[]>([]);
@@ -409,158 +116,10 @@ const TeacherGrades: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState(initialStudentQuery);
   const [selectedStudentForDossier, setSelectedStudentForDossier] = useState<StudentWithMeta | null>(null);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
-  const [selectedTerm, setSelectedTerm] = useState(1);
-  const [termEvaluation, setTermEvaluation] = useState<TermEvaluationData | null>(null);
-
-  // Modales
-  const [evaluatingSubmission, setEvaluatingSubmission] = useState<{
-    subId: string;
-    studentName: string;
-    assignmentTitle: string;
-    submittedAt: string;
-    content: string | null;
-    currentGrade: number | null;
-    currentFeedback: string | null;
-  } | null>(null);
-  const [gradeInput, setGradeInput] = useState<string>('');
-  const [feedbackInput, setFeedbackInput] = useState<string>('');
-  const [isSavingGrade, setIsSavingGrade] = useState(false);
-  const [saveError, setSaveError] = useState('');
-  const [viewingAttachment, setViewingAttachment] = useState<AttachmentData | null>(null);
-  const [reviewingExam, setReviewingExam] = useState<{
-    subId: string;
-    title: string;
-    questions?: ReviewQuestion[];
-    answers: Record<string, any>;
-    score: number | null;
-    total?: number | null;
-    feedback: string | null;
-    questionScores?: Record<string, number>;
-    hasOpenText?: boolean;
-    openTextCount?: number;
-  } | null>(null);
-  const [expandedSubmissionDetailsId, setExpandedSubmissionDetailsId] = useState<string | null>(null);
-  const [expandedStructuredTaskKey, setExpandedStructuredTaskKey] = useState<string | null>(null);
-
-  // Evaluación Final por Competencias
-  const [currentEvaluation, setCurrentEvaluation] = useState<TermEvaluationData | null>(null);
-  const [isEvaluationModalOpen, setIsEvaluationModalOpen] = useState(false);
-  const [evaluationForm, setEvaluationForm] = useState({
-    middleExamGrade: '',
-    finalExamGrade: '',
-    middleGrammar: '', middleReading: '', middleWriting: '', middleListening: '', middleSpeaking: '',
-    finalGrammar: '', finalReading: '', finalWriting: '', finalListening: '', finalSpeaking: '',
-    grammar: '',
-    reading: '',
-    writing: '',
-    listening: '',
-    speaking: '',
-    overallGrade: '',
-    observations: ''
-  });
-  const [expandedExamSections, setExpandedExamSections] = useState({ middle: false, final: false });
-  const [isSavingEvaluation, setIsSavingEvaluation] = useState(false);
-
-  const displayedTermOverall = termEvaluation?.overallGrade;
-
-  useEffect(() => {
-    if (selectedStudentForDossier) {
-      const fetchEvaluation = async () => {
-        try {
-          const token = localStorage.getItem('token');
-          const courseId = selectedClassId || selectedStudentForDossier.enrolledCourses[0]?.id;
-          if (!courseId) {
-            setCurrentEvaluation(null);
-            return;
-          }
-          const res = await fetch(`${apiUrl}/api/term-grades/student/${selectedStudentForDossier.id}?courseId=${courseId}`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            const selectedTermData = data.terms?.[selectedTerm] || null;
-            setTermEvaluation(selectedTermData);
-            setCurrentEvaluation(selectedTermData);
-          } else {
-            setTermEvaluation(null);
-            setCurrentEvaluation(null);
-          }
-        } catch (err) {
-          console.error('Error al obtener evaluación final:', err);
-        }
-      };
-      fetchEvaluation();
-    } else {
-      setCurrentEvaluation(null);
-    }
-  }, [selectedStudentForDossier?.id, selectedClassId, selectedTerm]);
-
-  const openEvaluationModal = () => {
-    if (currentEvaluation) {
-      setEvaluationForm({
-        middleExamGrade: currentEvaluation.middleExamGrade !== null && currentEvaluation.middleExamGrade !== undefined ? String(currentEvaluation.middleExamGrade) : '',
-        finalExamGrade: currentEvaluation.finalExamGrade !== null && currentEvaluation.finalExamGrade !== undefined ? String(currentEvaluation.finalExamGrade) : '',
-        middleGrammar: currentEvaluation.middleGrammar !== null && currentEvaluation.middleGrammar !== undefined ? String(currentEvaluation.middleGrammar) : '', middleReading: currentEvaluation.middleReading !== null && currentEvaluation.middleReading !== undefined ? String(currentEvaluation.middleReading) : '', middleWriting: currentEvaluation.middleWriting !== null && currentEvaluation.middleWriting !== undefined ? String(currentEvaluation.middleWriting) : '', middleListening: currentEvaluation.middleListening !== null && currentEvaluation.middleListening !== undefined ? String(currentEvaluation.middleListening) : '', middleSpeaking: currentEvaluation.middleSpeaking !== null && currentEvaluation.middleSpeaking !== undefined ? String(currentEvaluation.middleSpeaking) : '',
-        finalGrammar: currentEvaluation.finalGrammar !== null && currentEvaluation.finalGrammar !== undefined ? String(currentEvaluation.finalGrammar) : '', finalReading: currentEvaluation.finalReading !== null && currentEvaluation.finalReading !== undefined ? String(currentEvaluation.finalReading) : '', finalWriting: currentEvaluation.finalWriting !== null && currentEvaluation.finalWriting !== undefined ? String(currentEvaluation.finalWriting) : '', finalListening: currentEvaluation.finalListening !== null && currentEvaluation.finalListening !== undefined ? String(currentEvaluation.finalListening) : '', finalSpeaking: currentEvaluation.finalSpeaking !== null && currentEvaluation.finalSpeaking !== undefined ? String(currentEvaluation.finalSpeaking) : '',
-        grammar: currentEvaluation.grammar !== null && currentEvaluation.grammar !== undefined ? String(currentEvaluation.grammar) : '',
-        reading: currentEvaluation.reading !== null && currentEvaluation.reading !== undefined ? String(currentEvaluation.reading) : '',
-        writing: currentEvaluation.writing !== null && currentEvaluation.writing !== undefined ? String(currentEvaluation.writing) : '',
-        listening: currentEvaluation.listening !== null && currentEvaluation.listening !== undefined ? String(currentEvaluation.listening) : '',
-        speaking: currentEvaluation.speaking !== null && currentEvaluation.speaking !== undefined ? String(currentEvaluation.speaking) : '',
-        overallGrade: currentEvaluation.overallGrade !== null && currentEvaluation.overallGrade !== undefined ? String(currentEvaluation.overallGrade) : '',
-        observations: currentEvaluation.observations || ''
-      });
-    } else {
-      setEvaluationForm({
-        middleExamGrade: '',
-        finalExamGrade: '',
-        middleGrammar: '', middleReading: '', middleWriting: '', middleListening: '', middleSpeaking: '',
-        finalGrammar: '', finalReading: '', finalWriting: '', finalListening: '', finalSpeaking: '',
-        grammar: '',
-        reading: '',
-        writing: '',
-        listening: '',
-        speaking: '',
-        overallGrade: '',
-        observations: ''
-      });
-    }
-    setExpandedExamSections({ middle: false, final: false });
-    setIsEvaluationModalOpen(true);
-  };
-
-  const handleSaveEvaluation = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedStudentForDossier) return;
-    try {
-      setIsSavingEvaluation(true);
-      const token = localStorage.getItem('token');
-      const courseId = selectedClassId || selectedStudentForDossier.enrolledCourses[0]?.id;
-      if (!courseId) return;
-      const res = await fetch(`${apiUrl}/api/term-grades/course/${courseId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          studentId: selectedStudentForDossier.id,
-          term: selectedTerm,
-          ...evaluationForm
-        })
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setCurrentEvaluation(updated);
-        setTermEvaluation(updated);
-        setIsEvaluationModalOpen(false);
-      }
-    } catch (err) {
-      console.error('Error al guardar evaluación final:', err);
-    } finally {
-      setIsSavingEvaluation(false);
-    }
-  };
+  const [selectedTerm] = useState(1);
+  const [kpiFilter, setKpiFilter] = useState<'ALL' | 'PENDING' | 'GRADED'>('ALL');
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 767px)').matches);
+  const [, setMobileStep] = useState<'CLASSES_LIST' | 'CLASS_STUDENTS' | 'STUDENT_GRADES'>('CLASSES_LIST');
 
   const fetchData = async () => {
     try {
@@ -577,7 +136,6 @@ const TeacherGrades: React.FC = () => {
       if (studentsRes.ok) setStudents(await studentsRes.json());
       if (coursesRes.ok) {
         const loadedCourses = await coursesRes.json();
-        // Cargar alumnos para cada clase
         const coursesWithStudents = await Promise.all(
           loadedCourses.map(async (c: CourseData) => {
             try {
@@ -601,6 +159,13 @@ const TeacherGrades: React.FC = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 767px)');
+    const handleChange = (event: MediaQueryListEvent) => setIsMobile(event.matches);
+    query.addEventListener('change', handleChange);
+    return () => query.removeEventListener('change', handleChange);
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -637,36 +202,36 @@ const TeacherGrades: React.FC = () => {
     if (initialStudentQuery) setViewMode('STUDENTS');
   }, [initialStudentQuery]);
 
-  // Extraer todas las entregas aplanadas
-  const allSubmissionsFlat = useMemo(() => {
+  // Entregas aplanadas
+  const allSubmissionsFlat: FlatSubmission[] = useMemo(() => {
     return assignments.flatMap(assignment =>
       assignment.submissions
         .filter(sub => (typeof sub.content === 'string' && sub.content.trim().length > 0) || (typeof sub.grade === 'number' && !Number.isNaN(sub.grade)))
         .map(sub => ({
-        ...sub,
-        assignmentTitle: assignment.title,
-        assignmentCategory: assignment.category || 'GRAMMAR_VOCABULARY',
-        dueDate: assignment.dueDate || assignment.structuredTaskStep?.task?.dueDate || null,
-        courseId: assignment.courseId,
-        courseTitle: assignment.course?.title,
-        isDirect: Boolean(assignment.studentId),
-        materialType: assignment.material?.type || (sub.content?.includes('"answers"') ? 'FORM' : 'DOCUMENT'),
-        materialUrl: assignment.material?.url || null,
-        materialFormData: assignment.material?.formData || null,
-        structuredTaskId: assignment.structuredTaskStep?.task?.id || null,
-        structuredTaskTitle: assignment.structuredTaskStep?.task?.title || null,
-        structuredTaskCategory: assignment.structuredTaskStep?.task?.category || null,
-        structuredStepOrder: assignment.structuredTaskStep?.order || null,
-        structuredStepTitle: assignment.structuredTaskStep?.title || null,
-        structuredStepRequiresSubmission: assignment.structuredTaskStep?.requiresSubmission || false,
-        studentName: sub.student?.profile ? `${sub.student.profile.firstName} ${sub.student.profile.lastName}`.trim() : (sub.student?.email || 'Alumno'),
-        studentEmail: sub.student?.email || ''
+          ...sub,
+          assignmentTitle: assignment.title,
+          assignmentCategory: assignment.category || 'GRAMMAR_VOCABULARY',
+          dueDate: assignment.dueDate || assignment.structuredTaskStep?.task?.dueDate || null,
+          courseId: assignment.courseId,
+          courseTitle: assignment.course?.title,
+          isDirect: Boolean(assignment.studentId),
+          materialType: assignment.material?.type || (sub.content?.includes('"answers"') ? 'FORM' : 'DOCUMENT'),
+          materialUrl: assignment.material?.url || null,
+          materialFormData: assignment.material?.formData || null,
+          structuredTaskId: assignment.structuredTaskStep?.task?.id || null,
+          structuredTaskTitle: assignment.structuredTaskStep?.task?.title || null,
+          structuredTaskCategory: assignment.structuredTaskStep?.task?.category || null,
+          structuredStepOrder: assignment.structuredTaskStep?.order || null,
+          structuredStepTitle: assignment.structuredTaskStep?.title || null,
+          structuredStepRequiresSubmission: assignment.structuredTaskStep?.requiresSubmission || false,
+          studentName: sub.student?.profile ? `${sub.student.profile.firstName} ${sub.student.profile.lastName}`.trim() : (sub.student?.email || 'Alumno'),
+          studentEmail: sub.student?.email || ''
         }))
     ).sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
   }, [assignments]);
 
-  // Asignar cursos a cada alumno
-  const studentsWithMeta = useMemo(() => {
+  // Alumnos con metadatos globales
+  const studentsWithMeta: StudentWithMeta[] = useMemo(() => {
     const role = localStorage.getItem('userRole');
     const visibleStudents = role === 'ADMIN'
       ? students
@@ -674,27 +239,14 @@ const TeacherGrades: React.FC = () => {
 
     return visibleStudents.map(student => {
       const studentName = student.profile ? `${student.profile.firstName} ${student.profile.lastName}`.trim() : student.email;
-      
-      // Clases donde está matriculado
       const enrolledCourses = courses.filter(c => c.students?.some(s => s.id === student.id));
-
-      // Entregas de este alumno
       const studentSubs = allSubmissionsFlat.filter(s => s.studentId === student.id);
       const gradedSubs = studentSubs.filter(s => s.grade !== null && s.grade !== undefined);
       const pendingSubs = studentSubs.filter(s => isSubmissionPending(s));
 
-      // Media aritmética
       const averageGrade = gradedSubs.length > 0
         ? (gradedSubs.reduce((acc, curr) => acc + (curr.grade || 0), 0) / gradedSubs.length).toFixed(1)
         : null;
-      const courseGradeSummaries = enrolledCourses.map(course => {
-        const courseStudentGrade = (courseTermGrades[course.id] || []).find((entry: any) => entry.studentId === student.id);
-        return {
-          courseId: course.id,
-          courseTitle: course.title,
-          overallGrade: courseStudentGrade?.overallGrade ?? null
-        };
-      });
 
       const modality: 'PRESENCIAL' | 'ONLINE' = student.modality === 'ONLINE' ? 'ONLINE' : 'PRESENCIAL';
 
@@ -707,47 +259,15 @@ const TeacherGrades: React.FC = () => {
         gradedSubmissions: gradedSubs.length,
         pendingSubmissions: pendingSubs.length,
         averageGrade,
-        courseGradeSummaries,
         modality
       };
     });
-  }, [students, courses, assignments, allSubmissionsFlat, courseTermGrades]);
-
-  const activeDossierStudent = useMemo(() => {
-    if (!selectedStudentForDossier) return null;
-    return studentsWithMeta.find(s => s.id === selectedStudentForDossier.id) || selectedStudentForDossier;
-  }, [studentsWithMeta, selectedStudentForDossier]);
-
-  const activeStructuredTaskGroups = useMemo(
-    () => activeDossierStudent ? groupStructuredSubmissions(activeDossierStudent.submissions) : [],
-    [activeDossierStudent]
-  );
-
-  useEffect(() => {
-    if (initialStudentQuery && studentsWithMeta.length > 0 && !selectedStudentForDossier) {
-      const q = initialStudentQuery.trim().toLowerCase();
-      const match = studentsWithMeta.find(st => st.fullName.toLowerCase().includes(q) || st.email.toLowerCase().includes(q));
-      if (match) {
-        setSelectedStudentForDossier(match);
-      }
-    }
-  }, [initialStudentQuery, studentsWithMeta, selectedStudentForDossier]);
-
-  // Filtrado de Alumnos
-  const filteredStudents = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
-    return studentsWithMeta.filter(st => {
-      const matchesSearch = !q || st.fullName.toLowerCase().includes(q) || st.email.toLowerCase().includes(q) || st.enrolledCourses.some(c => c.title.toLowerCase().includes(q));
-      const matchesModality = modalityFilter === 'ALL' || st.modality === modalityFilter;
-      return matchesSearch && matchesModality;
-    });
-  }, [studentsWithMeta, searchTerm, modalityFilter]);
+  }, [students, courses, allSubmissionsFlat]);
 
   // Clases con métricas
   const coursesWithMeta = useMemo(() => {
     return courses.map(course => {
       const modality: 'PRESENCIAL' | 'ONLINE' = course.modality === 'ONLINE' ? 'ONLINE' : 'PRESENCIAL';
-
       const classSubs = allSubmissionsFlat.filter(s => s.courseId === course.id);
       const gradedSubs = classSubs.filter(s => s.grade !== null && s.grade !== undefined);
       const pendingSubs = classSubs.filter(s => isSubmissionPending(s));
@@ -777,15 +297,31 @@ const TeacherGrades: React.FC = () => {
     });
   }, [courses, allSubmissionsFlat, courseTermGrades]);
 
+  // Filtrado de Alumnos
+  const filteredStudents = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    return studentsWithMeta.filter(st => {
+      const matchesSearch = !q || st.fullName.toLowerCase().includes(q) || st.email.toLowerCase().includes(q) || (st.enrolledCourses && st.enrolledCourses.some(c => c.title.toLowerCase().includes(q)));
+      const matchesModality = modalityFilter === 'ALL' || st.modality === modalityFilter;
+      const matchesKpi = kpiFilter === 'ALL'
+        || (kpiFilter === 'PENDING' && st.submissions && st.submissions.some(sub => isSubmissionPending(sub)))
+        || (kpiFilter === 'GRADED' && st.submissions && st.submissions.some(sub => sub.grade !== null && sub.grade !== undefined));
+      return matchesSearch && matchesModality && matchesKpi;
+    });
+  }, [studentsWithMeta, searchTerm, modalityFilter, kpiFilter]);
+
   // Filtrado de Clases
   const filteredCourses = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     return coursesWithMeta.filter(c => {
       const matchesSearch = !q || c.title.toLowerCase().includes(q);
       const matchesModality = modalityFilter === 'ALL' || c.modality === modalityFilter;
-      return matchesSearch && matchesModality;
+      const matchesKpi = kpiFilter === 'ALL'
+        || (kpiFilter === 'PENDING' && c.pendingSubmissions > 0)
+        || (kpiFilter === 'GRADED' && c.totalSubmissions - c.pendingSubmissions > 0);
+      return matchesSearch && matchesModality && matchesKpi;
     });
-  }, [coursesWithMeta, searchTerm, modalityFilter]);
+  }, [coursesWithMeta, searchTerm, modalityFilter, kpiFilter]);
 
   const selectedClassForDossier = useMemo(
     () => coursesWithMeta.find(course => course.id === selectedClassId) || null,
@@ -801,1886 +337,338 @@ const TeacherGrades: React.FC = () => {
   );
 
   const openClassDossier = (course: typeof coursesWithMeta[number]) => {
-    const firstStudent = course.students?.flatMap(courseStudent => {
-      const student = studentsWithMeta.find(candidate => candidate.id === courseStudent.id);
-      return student ? [student] : [];
-    })[0];
-
     setSelectedClassId(course.id);
-    setSelectedStudentForDossier(firstStudent ? {
-      ...firstStudent,
-      submissions: firstStudent.submissions.filter(submission => submission.courseId === course.id)
-    } : null);
   };
 
-  const selectClassStudent = (student: StudentWithMeta) => {
-    if (!selectedClassForDossier) return;
-    setSelectedStudentForDossier({
-      ...student,
-      submissions: student.submissions.filter(submission => submission.courseId === selectedClassForDossier.id)
-    });
-  };
-
-  const openGradingModal = (sub: {
-    id: string;
-    studentName: string;
-    assignmentTitle: string;
-    submittedAt: string;
-    content: string | null;
-    grade: number | null;
-    feedback: string | null;
-  }) => {
-    setEvaluatingSubmission({
-      subId: sub.id,
-      studentName: sub.studentName,
-      assignmentTitle: sub.assignmentTitle,
-      submittedAt: sub.submittedAt,
-      content: sub.content,
-      currentGrade: sub.grade,
-      currentFeedback: sub.feedback
-    });
-    setGradeInput(sub.grade !== null && sub.grade !== undefined ? String(sub.grade) : '');
-    setFeedbackInput(sub.feedback || '');
-    setSaveError('');
-  };
-
-  const handleSaveGrade = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!evaluatingSubmission) return;
-
-    const savedExam = parseSavedExam(evaluatingSubmission.content);
-    const calculatedExamGrade = savedExam?.score !== null && savedExam?.score !== undefined && savedExam.total
-      ? (savedExam.score / savedExam.total) * 10
-      : null;
-    const numGrade = calculatedExamGrade ?? (gradeInput.trim() !== '' ? parseFloat(gradeInput) : null);
-    if (numGrade !== null && (isNaN(numGrade) || numGrade < 0 || numGrade > 10)) {
-      setSaveError('La calificación debe ser un número entre 0 y 10.');
-      return;
-    }
-
-    try {
-      setIsSavingGrade(true);
-      setSaveError('');
-      const token = localStorage.getItem('token');
-
-      const res = await fetch(`${apiUrl}/api/assignments/submissions/${evaluatingSubmission.subId}/grade`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          grade: numGrade,
-          feedback: feedbackInput.trim() || null
-        })
-      });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        setSaveError(errData.error || 'Error al guardar la calificación.');
-        return;
-      }
-
-      // Actualizar estado local en assignments
-      const updatedFeedback = feedbackInput.trim() || null;
-      setAssignments(prev => prev.map(assignment => ({
-        ...assignment,
-        submissions: assignment.submissions.map(s => {
-          if (s.id === evaluatingSubmission.subId) {
-            return {
-              ...s,
-              grade: numGrade,
-              feedback: updatedFeedback
-            };
-          }
-          return s;
-        })
-      })));
-
-      setSelectedStudentForDossier(prev => {
-        if (!prev) return null;
-        const updatedSubs = prev.submissions.map(s => {
-          if (s.id === evaluatingSubmission.subId) {
-            return {
-              ...s,
-              grade: numGrade,
-              feedback: updatedFeedback
-            };
-          }
-          return s;
-        });
-        const gradedSubs = updatedSubs.filter(s => s.grade !== null && s.grade !== undefined);
-        const avg = gradedSubs.length > 0
-          ? (gradedSubs.reduce((acc, curr) => acc + (curr.grade || 0), 0) / gradedSubs.length).toFixed(1)
-          : null;
-        return {
-          ...prev,
-          submissions: updatedSubs,
-          gradedSubmissions: gradedSubs.length,
-          pendingSubmissions: updatedSubs.filter(s => isSubmissionPending(s)).length,
-          averageGrade: avg
-        };
-      });
-
-      setEvaluatingSubmission(null);
-      fetchData();
-    } catch (err) {
-      console.error(err);
-      setSaveError('Error de conexión al guardar la calificación.');
-    } finally {
-      setIsSavingGrade(false);
-    }
-  };
-
-  const handleSaveExamGradeAndFeedback = async (data: { grade: number; feedback: string; questionScores: Record<string, number> }) => {
-    if (!reviewingExam) return;
-
-    const token = localStorage.getItem('token');
-    const updatedFeedback = data.feedback ? data.feedback.trim() : null;
-    const res = await fetch(`${apiUrl}/api/assignments/submissions/${reviewingExam.subId}/grade`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        grade: data.grade,
-        feedback: updatedFeedback,
-        questionScores: data.questionScores
-      })
-    });
-
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}));
-      throw new Error(errorData.error || 'Error al guardar la calificación del examen.');
-    }
-
-    setAssignments(prev => prev.map(assignment => ({
-      ...assignment,
-      submissions: assignment.submissions.map(sub => sub.id === reviewingExam.subId ? {
-        ...sub,
-        grade: data.grade,
-        feedback: updatedFeedback
-      } : sub)
-    })));
-
-    setSelectedStudentForDossier(prev => {
-      if (!prev) return null;
-      const updatedSubs = prev.submissions.map(s => {
-        if (s.id === reviewingExam.subId) {
-          return {
-            ...s,
-            grade: data.grade,
-            feedback: updatedFeedback
-          };
-        }
-        return s;
-      });
-      const gradedSubs = updatedSubs.filter(s => s.grade !== null && s.grade !== undefined);
-      const avg = gradedSubs.length > 0
-        ? (gradedSubs.reduce((acc, curr) => acc + (curr.grade || 0), 0) / gradedSubs.length).toFixed(1)
-        : null;
-      return {
-        ...prev,
-        submissions: updatedSubs,
-        gradedSubmissions: gradedSubs.length,
-        pendingSubmissions: updatedSubs.filter(s => isSubmissionPending(s)).length,
-        averageGrade: avg
-      };
-    });
-
-    setReviewingExam(null);
-    fetchData();
-  };
-
-  const handleSaveExamFeedback = async (feedback: string) => {
-    if (!reviewingExam) return;
-
-    const token = localStorage.getItem('token');
-    const updatedFeedback = feedback ? feedback.trim() : null;
-    const res = await fetch(`${apiUrl}/api/assignments/submissions/${reviewingExam.subId}/grade`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({ grade: reviewingExam.score, feedback: updatedFeedback })
-    });
-
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}));
-      throw new Error(errorData.error || 'Error al guardar el feedback.');
-    }
-
-    setAssignments(prev => prev.map(assignment => ({
-      ...assignment,
-      submissions: assignment.submissions.map(sub => sub.id === reviewingExam.subId ? { ...sub, feedback: updatedFeedback } : sub)
-    })));
-
-    setSelectedStudentForDossier(prev => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        submissions: prev.submissions.map(s => {
-          if (s.id === reviewingExam.subId) {
-            return {
-              ...s,
-              feedback: updatedFeedback
-            };
-          }
-          return s;
-        })
-      };
-    });
-
-    setReviewingExam(null);
-    fetchData();
-  };
-
-  // Métricas globales
+  // KPIs globales
   const totalSubmissionsCount = allSubmissionsFlat.length;
   const totalPendingCount = allSubmissionsFlat.filter(s => isSubmissionPending(s)).length;
   const totalGradedCount = allSubmissionsFlat.filter(s => s.grade !== null && s.grade !== undefined).length;
-  const gradingExamData = evaluatingSubmission ? parseSavedExam(evaluatingSubmission.content) : null;
-  const isAutocorrectedExam = Boolean(gradingExamData?.total && gradingExamData.score !== null && gradingExamData.score !== undefined);
 
   return (
-    <div className="page-container animate-fade-in" style={{ maxWidth: '1200px', margin: '0 auto' }}>
-      {/* Header Principal */}
-      <header style={{ marginBottom: '1.75rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
-          <div>
-            <h1 style={{ margin: 0, fontSize: '1.6rem', display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-              <Award style={{ color: 'var(--primary)' }} size={24} /> Calificaciones
-            </h1>
-          </div>
-
-          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
-            <div style={{ padding: '0.45rem 0.85rem', background: 'var(--surface)', borderRadius: '10px', border: '1px solid var(--border)', fontSize: '0.85rem' }}>
-              Entregas: <strong style={{ color: 'var(--text-main)' }}>{totalSubmissionsCount}</strong>
+    <div
+      className="page-container animate-fade-in pb-8"
+      style={{
+        maxWidth: selectedClassId ? '1440px' : '1240px',
+        margin: '0 auto',
+        width: '100%',
+        paddingBottom: '2rem'
+      }}
+    >
+      {/* Header Principal con KPIs (Solo si no estamos en detalle de clase) */}
+      {!selectedClassId && (
+        <header style={{ marginBottom: '1.75rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+            <div>
+              <h1 style={{ margin: 0, fontSize: '1.6rem', display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <Award style={{ color: 'var(--primary)' }} size={24} /> Calificaciones
+              </h1>
             </div>
-            <div style={{ padding: '0.45rem 0.85rem', background: totalPendingCount > 0 ? '#fef7e8' : 'var(--surface)', border: totalPendingCount > 0 ? '1px solid #fae0b0' : '1px solid var(--border)', borderRadius: '10px', fontSize: '0.85rem', color: totalPendingCount > 0 ? '#8d5b12' : 'var(--text-muted)' }}>
-              Por corregir: <strong>{totalPendingCount}</strong>
-            </div>
-            <div style={{ padding: '0.45rem 0.85rem', background: 'var(--primary-light)', border: '1px solid var(--primary-border)', borderRadius: '10px', fontSize: '0.85rem', color: 'var(--primary-text)' }}>
-              Corregidas: <strong>{totalGradedCount}</strong>
-            </div>
-          </div>
-        </div>
-      </header>
 
-      {/* Selector de Macro-Sección y Modos de Vista */}
-      <div className="glass-panel" style={{ padding: '1.25rem 1.75rem', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-          {/* Tabs Principales: Vista por Alumnos vs Vista por Clases */}
-          <div style={{ display: 'flex', background: 'var(--surface-alt)', padding: '4px', borderRadius: '10px', border: '1px solid var(--border)' }}>
-            <button
-              type="button"
-              onClick={() => { setViewMode('STUDENTS'); setSelectedClassId(null); }}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                padding: '0.6rem 1.1rem',
-                borderRadius: '8px',
-                border: 'none',
-                background: viewMode === 'STUDENTS' ? 'var(--surface)' : 'transparent',
-                color: viewMode === 'STUDENTS' ? 'var(--primary)' : 'var(--text-muted)',
-                fontWeight: viewMode === 'STUDENTS' ? 700 : 500,
-                boxShadow: viewMode === 'STUDENTS' ? 'var(--shadow-sm)' : 'none',
-                cursor: 'pointer',
-                fontSize: '0.9rem',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <Users size={17} /> Vista General por Alumnos ({students.length})
-            </button>
-
-            <button
-              type="button"
-              onClick={() => { setViewMode('CLASSES'); setSelectedStudentForDossier(null); }}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                padding: '0.6rem 1.1rem',
-                borderRadius: '8px',
-                border: 'none',
-                background: viewMode === 'CLASSES' ? 'var(--surface)' : 'transparent',
-                color: viewMode === 'CLASSES' ? 'var(--primary)' : 'var(--text-muted)',
-                fontWeight: viewMode === 'CLASSES' ? 700 : 500,
-                boxShadow: viewMode === 'CLASSES' ? 'var(--shadow-sm)' : 'none',
-                cursor: 'pointer',
-                fontSize: '0.9rem',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <BookOpen size={17} /> Vista Agrupada por Clases ({courses.length})
-            </button>
-          </div>
-
-          {/* Macro Filtro: Presencial vs Online */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>Modalidad:</span>
-            {([
-              ['ALL', 'Todas las modalidades', null],
-              ['PRESENCIAL', 'Presencial (Academia)', <GraduationCap size={15} />],
-              ['ONLINE', 'Online / Individuales', <Laptop size={15} />]
-            ] as const).map(([val, label, icon]) => (
+            <div className="grades-kpis">
               <button
-                key={val}
                 type="button"
-                onClick={() => setModalityFilter(val)}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.35rem',
-                  padding: '0.45rem 0.85rem',
-                  borderRadius: '16px',
-                  border: modalityFilter === val ? '1px solid var(--primary)' : '1px solid var(--border)',
-                  background: modalityFilter === val ? 'var(--primary-light)' : 'var(--surface)',
-                  color: modalityFilter === val ? 'var(--primary-text)' : 'var(--text-muted)',
-                  fontWeight: modalityFilter === val ? 700 : 500,
-                  fontSize: '0.84rem',
-                  cursor: 'pointer'
-                }}
+                onClick={() => setKpiFilter('ALL')}
+                className={`grades-kpi ${kpiFilter === 'ALL' ? 'is-active' : ''}`}
+                aria-pressed={kpiFilter === 'ALL'}
               >
-                {icon}
-                {label}
+                Entregas: <strong>{totalSubmissionsCount}</strong>
               </button>
-            ))}
+              <button
+                type="button"
+                onClick={() => setKpiFilter(current => current === 'PENDING' ? 'ALL' : 'PENDING')}
+                className={`grades-kpi ${totalPendingCount > 0 ? 'is-alert' : ''} ${kpiFilter === 'PENDING' ? 'is-active' : ''}`}
+                aria-pressed={kpiFilter === 'PENDING'}
+              >
+                Por corregir: <strong>{totalPendingCount}</strong>
+              </button>
+              <button
+                type="button"
+                onClick={() => setKpiFilter(current => current === 'GRADED' ? 'ALL' : 'GRADED')}
+                className={`grades-kpi ${kpiFilter === 'GRADED' ? 'is-active' : ''}`}
+                aria-pressed={kpiFilter === 'GRADED'}
+              >
+                Corregidas: <strong>{totalGradedCount}</strong>
+              </button>
+            </div>
           </div>
-        </div>
-
-        {/* Barra de Búsqueda */}
-        <div style={{ position: 'relative' }}>
-          <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-          <input
-            type="text"
-            placeholder={viewMode === 'STUDENTS' ? 'Buscar alumno por nombre, email o clase...' : 'Buscar clase o grupo...'}
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '0.7rem 1rem 0.7rem 2.6rem',
-              borderRadius: '8px',
-              border: '1px solid var(--border)',
-              background: 'var(--surface-alt)',
-              color: 'var(--text-main)',
-              fontSize: '0.92rem',
-              outline: 'none'
-            }}
-          />
-        </div>
-      </div>
+        </header>
+      )}
 
       {/* =========================================================================
-          VISTA 1: VISTA GENERAL POR ALUMNOS
+          1. CONDICIONAL RENDER ESTRICTO: VISTA DETALLE DE CLASE vs VISTA PRINCIPAL
          ========================================================================= */}
-      {(viewMode === 'STUDENTS' || selectedClassId !== null) && (
+      {selectedClassId && selectedClassForDossier ? (
+        <ClassGradesDetail
+          classId={selectedClassId}
+          initialCourse={selectedClassForDossier}
+          initialStudents={selectedClassStudents}
+          initialSubmissions={allSubmissionsFlat}
+          onBack={() => {
+            setSelectedClassId(null);
+            setSelectedStudentForDossier(null);
+            setMobileStep('CLASSES_LIST');
+          }}
+          onGradeSaved={fetchData}
+        />
+      ) : (
+        /* =========================================================================
+           VISTA PRINCIPAL: BUSCADOR GLOBAL, TABS Y LISTADOS GENERALES
+           ========================================================================= */
         <>
-          {loading ? (
-            <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-              Cargando alumnos y calificaciones...
-            </div>
-          ) : filteredStudents.length === 0 ? (
-            <div className="glass-panel" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-              <Users size={48} style={{ color: 'var(--primary)', opacity: 0.35, marginBottom: '1rem' }} />
-              <h3 style={{ margin: '0 0 0.5rem', color: 'var(--text-main)' }}>No se encontraron alumnos</h3>
-              <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.9rem' }}>
-                Prueba cambiando los filtros de modalidad o los términos de búsqueda.
-              </p>
+          {selectedStudentForDossier && viewMode === 'STUDENTS' ? (
+            <div className="w-full">
+              <ExpedienteAcademico
+                studentId={selectedStudentForDossier.id}
+                classId={null}
+                student={selectedStudentForDossier}
+                allSubmissions={allSubmissionsFlat}
+                onBack={() => setSelectedStudentForDossier(null)}
+                onGradeSaved={fetchData}
+              />
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem', alignItems: 'flex-start' }}>
-              {/* Listado de Alumnos */}
-              <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
-                <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)', fontWeight: 600, fontSize: '0.88rem', color: 'var(--text-muted)' }}>
-                  ALUMNOS REGISTRADOS ({filteredStudents.length})
-                </div>
-
-                <div style={{ maxHeight: '680px', overflowY: 'auto' }}>
-                  {filteredStudents.map(student => {
-                    const isSelected = selectedStudentForDossier?.id === student.id;
-
-                    return (
-                      <div
-                        key={student.id}
-                        onClick={() => setSelectedStudentForDossier(student)}
-                        style={{
-                          padding: '1.1rem 1.25rem',
-                          borderBottom: '1px solid var(--border)',
-                          cursor: 'pointer',
-                          background: isSelected ? 'var(--primary-subtle)' : 'transparent',
-                          borderLeft: isSelected ? '4px solid var(--primary)' : '4px solid transparent',
-                          transition: 'all 0.15s ease'
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.35rem' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                            <div style={{
-                              width: '36px',
-                              height: '36px',
-                              borderRadius: '50%',
-                              background: 'var(--primary)',
-                              color: '#fff',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontWeight: 700,
-                              fontSize: '0.85rem'
-                            }}>
-                              {student.fullName.slice(0, 2).toUpperCase()}
-                            </div>
-                            <div>
-                              <strong style={{ fontSize: '0.98rem', color: 'var(--text-main)', display: 'block' }}>
-                                {student.fullName}
-                              </strong>
-                              <small style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{student.email}</small>
-                            </div>
-                          </div>
-
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.25rem',
-                            fontSize: '0.72rem',
-                            fontWeight: 700,
-                            padding: '2px 8px',
-                            borderRadius: '10px',
-                            background: student.modality === 'ONLINE' ? '#eef2ff' : '#f0fdf4',
-                            color: student.modality === 'ONLINE' ? '#4338ca' : '#15803d',
-                            border: `1px solid ${student.modality === 'ONLINE' ? '#c7d2fe' : '#bbf7d0'}`
-                          }}>
-                            {student.modality === 'ONLINE' ? <Laptop size={12} /> : <GraduationCap size={12} />}
-                            {student.modality === 'ONLINE' ? 'Online' : 'Presencial'}
-                          </span>
-                        </div>
-
-                        {/* Clases matriculadas */}
-                        <div style={{ margin: '0.5rem 0', display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
-                          {student.enrolledCourses.length > 0 ? (
-                            student.enrolledCourses.map(c => (
-                              <span key={c.id} style={{ fontSize: '0.72rem', background: 'var(--surface-alt)', border: '1px solid var(--border)', padding: '2px 6px', borderRadius: '4px', color: 'var(--text-main)' }}>
-                                📖 {c.title}
-                              </span>
-                            ))
-                          ) : (
-                            <span style={{ fontSize: '0.72rem', color: 'var(--text-light)', fontStyle: 'italic' }}>
-                              Sin clases grupales (Alumno individual)
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Resumen de Calificaciones */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem', paddingTop: '0.4rem', borderTop: '1px dashed var(--border)', fontSize: '0.82rem' }}>
-                          <span style={{ color: 'var(--text-muted)' }}>
-                            Tareas: <strong>{student.totalSubmissions}</strong>
-                            {student.pendingSubmissions > 0 && (
-                              <span style={{ color: '#8d5b12', fontWeight: 600, marginLeft: '4px' }}>
-                                ({student.pendingSubmissions} pend.)
-                              </span>
-                            )}
-                          </span>
-
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                            <span style={{ color: 'var(--text-muted)' }}>Notas por clase:</span>
-                            {student.courseGradeSummaries.length > 0 ? student.courseGradeSummaries.map((courseGrade: any) => (
-                              <span key={courseGrade.courseId} title={courseGrade.courseTitle} style={{
-                                fontWeight: 700,
-                                color: typeof courseGrade.overallGrade === 'number' && courseGrade.overallGrade >= 5 ? '#24583e' : '#9e2a2b',
-                                background: typeof courseGrade.overallGrade === 'number' && courseGrade.overallGrade >= 5 ? '#eaf4ef' : '#fdf0f0',
-                                padding: '1px 7px',
-                                borderRadius: '12px',
-                                border: `1px solid ${typeof courseGrade.overallGrade === 'number' && courseGrade.overallGrade >= 5 ? '#bfe0d0' : '#f7caca'}`
-                              }}>
-                                {courseGrade.courseTitle}: {typeof courseGrade.overallGrade === 'number' ? `${courseGrade.overallGrade.toFixed(1)} / 10` : '- / 10'}
-                              </span>
-                            )) : (
-                              <span style={{ color: 'var(--text-light)', fontStyle: 'italic' }}>- / 10</span>
-                            )}
-                            <ChevronRight size={16} style={{ color: 'var(--text-muted)' }} />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Expediente Académico Detallado del Alumno Seleccionado */}
-              {activeDossierStudent && (
-                createPortal(
-                <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: '260px', zIndex: 50, minHeight: '100vh', overflowY: 'auto', background: '#f3e8ff', padding: '2rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: '1.25rem' }}>
-                  {selectedClassForDossier && (
-                    <aside className="glass-panel" style={{ width: '300px', flexShrink: 0, padding: 0, overflow: 'hidden', position: 'sticky', top: 0, alignSelf: 'stretch', height: 'auto' }}>
-                      <div style={{ padding: '1rem', borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)' }}>
-                        <span style={{ display: 'block', color: 'var(--primary)', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase' }}>Clase</span>
-                        <strong style={{ display: 'block', marginTop: '0.2rem', color: 'var(--text-main)' }}>{selectedClassForDossier.title}</strong>
-                        <span style={{ display: 'block', marginTop: '0.25rem', color: 'var(--text-muted)', fontSize: '0.78rem' }}>{selectedClassStudents.length} alumnos</span>
-                      </div>
-                      <div style={{ maxHeight: 'calc(100vh - 190px)', overflowY: 'auto' }}>
-                        {selectedClassStudents.map(student => {
-                          const isClassStudentSelected = activeDossierStudent.id === student.id;
-                          return (
-                            <button key={student.id} type="button" onClick={() => selectClassStudent(student)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.8rem 0.9rem', border: 'none', borderBottom: '1px solid var(--border)', borderLeft: isClassStudentSelected ? '4px solid var(--primary)' : '4px solid transparent', background: isClassStudentSelected ? 'var(--primary-subtle)' : 'var(--surface)', color: 'var(--text-main)', textAlign: 'left', cursor: 'pointer' }}>
-                              <span style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--primary)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.75rem', fontWeight: 700 }}>{student.fullName.slice(0, 2).toUpperCase()}</span>
-                              <span style={{ minWidth: 0 }}><strong style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.84rem' }}>{student.fullName}</strong><small style={{ display: 'block', marginTop: '0.15rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{student.email}</small></span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </aside>
-                  )}
-                  <div className="animate-fade-in" style={{ flex: selectedClassForDossier ? '0 1 880px' : '0 1 1200px', minWidth: 0, width: selectedClassForDossier ? 'min(880px, 100%)' : 'min(1200px, 100%)', maxWidth: selectedClassForDossier ? '880px' : '1200px', height: 'fit-content', padding: '2rem', background: '#fff', border: '1px solid rgba(226, 232, 240, 0.8)', borderRadius: '16px', boxShadow: 'var(--shadow-sm)' }}>
+            <>
+              {/* Selector de Macro-Sección y Modos de Vista */}
+              <div className="glass-panel grades-mobile-filter-panel" style={{ padding: '1.25rem 1.75rem', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                  {/* Tabs Principales: Vista por Alumnos vs Vista por Clases */}
+                  <div style={{ display: 'flex', background: 'var(--surface-alt)', padding: '4px', borderRadius: '10px', border: '1px solid var(--border)' }}>
                     <button
                       type="button"
-                      onClick={() => { setSelectedStudentForDossier(null); setSelectedClassId(null); }}
-                      className="btn-secondary"
-                      aria-label="Volver a Calificaciones"
-                      title="Volver a Calificaciones"
-                      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', padding: 0, marginBottom: '1.5rem' }}
-                    >
-                      <ArrowLeft size={19} />
-                    </button>
-                  {/* Encabezado del Expediente */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--border)', paddingBottom: '1rem', marginBottom: '1.25rem' }}>
-                    <div>
-                      <span style={{ display: 'inline-flex', padding: '0.25rem 0.55rem', borderRadius: '999px', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        {selectedClassForDossier ? `EXPEDIENTE ACADÉMICO · ${selectedClassForDossier.title}` : 'EXPEDIENTE ACADÉMICO DEL ALUMNO'}
-                      </span>
-                      <h1 style={{ margin: '0.35rem 0 0', fontSize: '1.75rem', color: 'var(--text-main)' }}>
-                        {activeDossierStudent.fullName}
-                      </h1>
-                      <p style={{ margin: '0.15rem 0 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                        {activeDossierStudent.email} · <span style={{ display: 'inline-flex', alignItems: 'center', padding: '0.15rem 0.5rem', borderRadius: '999px', background: '#f3e8ff', color: '#7e22ce', border: '1px solid #d8b4fe', fontWeight: 700, fontSize: '0.76rem' }}>
-                          {activeDossierStudent.modality === 'ONLINE' ? 'Modalidad Online' : 'Modalidad Presencial'}
-                        </span>
-                      </p>
-                    </div>
-
-                  </div>
-
-                  {/* Sección de Evaluación Final por Competencias */}
-                  <div
-                    style={{
-                      padding: '1.25rem',
-                      borderRadius: '12px',
-                      background: 'var(--surface-alt)',
-                      border: '1px solid var(--border)',
-                      marginBottom: '1.5rem'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                        <div style={{ background: 'var(--primary-light)', padding: '0.5rem', borderRadius: '8px', color: 'var(--primary)' }}>
-                          <Award size={20} />
-                        </div>
-                        <div>
-                          <h3 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--text-main)' }}>Evaluación Final / Competencias</h3>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={openEvaluationModal}
-                        className="btn-primary"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.85rem', fontSize: '0.82rem' }}
-                      >
-                        <Edit3 size={15} />
-                        {currentEvaluation ? 'Editar Evaluación Final' : 'Asignar Notas Finales'}
-                      </button>
-                    </div>
-
-                    <div style={{ display: 'inline-flex', alignItems: 'center', background: 'var(--surface)', borderRadius: '10px', padding: '4px', border: '1px solid var(--border)', marginBottom: '1rem' }}>
-                      {[1, 2, 3].map((termNumber) => (
-                        <button
-                          key={termNumber}
-                          type="button"
-                          onClick={() => setSelectedTerm(termNumber)}
-                          style={{ padding: '0.45rem 0.85rem', borderRadius: '7px', border: 'none', background: selectedTerm === termNumber ? 'var(--primary)' : 'transparent', color: selectedTerm === termNumber ? '#fff' : 'var(--text-main)', fontWeight: selectedTerm === termNumber ? 700 : 500, cursor: 'pointer', fontSize: '0.82rem' }}
-                        >
-                          {termNumber}º Trimestre
-                        </button>
-                      ))}
-                    </div>
-
-                    <div>
-                        {activeDossierStudent.modality !== 'ONLINE' && (
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '0.65rem', marginBottom: '0.85rem' }}>
-                            {[
-                              ['MIDDLE TERM', currentEvaluation?.middleExamGrade, 'Examen parcial (35%)'],
-                              ['FINAL TERM', currentEvaluation?.finalExamGrade, 'Examen final (35%)'],
-                              ['MEDIA TAREAS', currentEvaluation?.tasksAverage, 'Prácticas (30%)'],
-                              ['CALIFICACIÓN TRIMESTRAL', displayedTermOverall, 'Nota ponderada']
-                            ].map(([label, value, subtitle]) => (
-                              <div key={label} style={{ padding: '0.65rem', background: label === 'CALIFICACIÓN TRIMESTRAL' ? 'var(--primary-light)' : 'var(--surface)', borderRadius: '8px', border: `1px solid ${label === 'CALIFICACIÓN TRIMESTRAL' ? 'var(--primary-border)' : 'var(--border)'}`, textAlign: 'center' }}>
-                                <span style={{ fontSize: '0.68rem', color: label === 'CALIFICACIÓN TRIMESTRAL' ? 'var(--primary-text)' : 'var(--text-muted)', display: 'block', fontWeight: 700 }}>{label}</span>
-                                <strong style={{ fontSize: '1.05rem', color: label === 'CALIFICACIÓN TRIMESTRAL' ? 'var(--primary-text)' : 'var(--text-main)', display: 'block', marginTop: '0.2rem' }}>{typeof value === 'number' ? `${value.toFixed(1)} / 10` : '- / 10'}</strong>
-                                <small style={{ display: 'block', marginTop: '0.15rem', color: 'var(--text-muted)', fontSize: '0.65rem' }}>{subtitle}</small>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {activeDossierStudent.modality === 'ONLINE' && (
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: '0.65rem', marginBottom: '0.85rem' }}>
-                            {[['GRAMMAR', currentEvaluation?.grammar], ['READING', currentEvaluation?.reading], ['WRITING', currentEvaluation?.writing], ['LISTENING', currentEvaluation?.listening], ['SPEAKING', currentEvaluation?.speaking], ['NOTA GLOBAL', currentEvaluation?.overallGrade]].map(([label, value]) => (
-                              <div key={label} style={{ padding: '0.65rem', background: label === 'NOTA GLOBAL' ? 'var(--primary-light)' : 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
-                                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'block', fontWeight: 700 }}>{label}</span>
-                                <strong style={{ fontSize: '1.05rem', color: 'var(--primary)', display: 'block', marginTop: '0.2rem' }}>{typeof value === 'number' ? `${value.toFixed(1)} / 10` : '- / 10'}</strong>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {activeDossierStudent.modality === 'ONLINE' && false && (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: '0.65rem', marginBottom: '0.85rem' }}>
-                          <div style={{ padding: '0.65rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>GRAMMAR</span>
-                            <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>
-                              {currentEvaluation?.grammar !== null && currentEvaluation?.grammar !== undefined ? `${currentEvaluation?.grammar} / 10` : '-'}
-                            </strong>
-                          </div>
-
-                          <div style={{ padding: '0.65rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>READING</span>
-                            <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>
-                              {currentEvaluation?.reading !== null && currentEvaluation?.reading !== undefined ? `${currentEvaluation?.reading} / 10` : '-'}
-                            </strong>
-                          </div>
-
-                          <div style={{ padding: '0.65rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>WRITING</span>
-                            <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>
-                              {currentEvaluation?.writing !== null && currentEvaluation?.writing !== undefined ? `${currentEvaluation?.writing} / 10` : '-'}
-                            </strong>
-                          </div>
-
-                          <div style={{ padding: '0.65rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>LISTENING</span>
-                            <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>
-                              {currentEvaluation?.listening !== null && currentEvaluation?.listening !== undefined ? `${currentEvaluation?.listening} / 10` : '-'}
-                            </strong>
-                          </div>
-
-                          <div style={{ padding: '0.65rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>SPEAKING</span>
-                            <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>
-                              {currentEvaluation?.speaking !== null && currentEvaluation?.speaking !== undefined ? `${currentEvaluation?.speaking} / 10` : '-'}
-                            </strong>
-                          </div>
-
-                          <div style={{ padding: '0.65rem', background: 'var(--primary-light)', borderRadius: '8px', border: '1px solid var(--primary-border)', textAlign: 'center' }}>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--primary-text)', display: 'block', fontWeight: 700 }}>NOTA GLOBAL</span>
-                            <strong style={{ fontSize: '1.1rem', color: 'var(--primary-text)' }}>
-                              {currentEvaluation?.overallGrade !== null && currentEvaluation?.overallGrade !== undefined ? `${currentEvaluation?.overallGrade} / 10` : '-'}
-                            </strong>
-                          </div>
-                        </div>)}
-
-                        {currentEvaluation?.observations && (
-                          <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--text-main)', fontStyle: 'italic', background: 'var(--surface)', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                            💬 Observaciones: "{currentEvaluation.observations}"
-                          </p>
-                        )}
-                      {!currentEvaluation && (
-                      <div style={{ padding: '0.75rem 0.9rem', background: '#fef7e8', borderRadius: '8px', border: '1px solid #fae0b0', color: '#8d5b12', fontSize: '0.85rem' }}>
-                        ⚠️ Pendiente de evaluación final.
-                      </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Listado de Entregas del Alumno */}
-                  <h4 style={{ margin: '0 0 0.85rem', fontSize: '1rem', color: 'var(--text-main)' }}>
-                    Historial de Tareas y Exámenes ({activeDossierStudent.submissions.filter(sub => !termEvaluation?.tasks?.length || termEvaluation.tasks.some(task => sub.assignmentTitle.toLowerCase().includes(task.title.toLowerCase()) || task.title.toLowerCase().includes(sub.assignmentTitle.toLowerCase()))).length})
-                  </h4>
-
-                  {activeDossierStudent.submissions.length === 0 ? (
-                    <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-muted)', background: 'var(--surface-alt)', borderRadius: '10px' }}>
-                      Este alumno aún no ha realizado entregas de tareas ni exámenes.
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                      {activeStructuredTaskGroups.map((group) => (
-                        <StructuredTaskBlock
-                          key={`${group[0].structuredTaskId}:${group[0].studentId}`}
-                          blockKey={`${group[0].structuredTaskId}:${group[0].studentId}`}
-                          submissions={group}
-                          expanded={expandedStructuredTaskKey === `${group[0].structuredTaskId}:${group[0].studentId}`}
-                          onToggle={(blockKey) => setExpandedStructuredTaskKey((current) => current === blockKey ? null : blockKey)}
-                          onEdit={openGradingModal}
-                          onReviewExam={(submission, examData) => setReviewingExam({
-                            subId: submission.id,
-                            title: submission.assignmentTitle,
-                            questions: submission.materialFormData?.questions || [],
-                            answers: examData.answers,
-                            score: submission.grade,
-                            total: examData.total,
-                            feedback: submission.feedback,
-                            questionScores: examData.questionScores,
-                            hasOpenText: examData.hasOpenText,
-                            openTextCount: examData.openTextCount
-                          })}
-                        />
-                      ))}
-                      {activeDossierStudent.submissions.filter(sub => !sub.structuredTaskId && (!termEvaluation?.tasks?.length || termEvaluation.tasks.some(task => sub.assignmentTitle.toLowerCase().includes(task.title.toLowerCase()) || task.title.toLowerCase().includes(sub.assignmentTitle.toLowerCase())))).map(sub => {
-                        const examData = parseSavedExam(sub.content);
-                        const isExam = sub.materialType === 'FORM' || Boolean(examData);
-                        const hasGrade = sub.grade !== null && sub.grade !== undefined;
-                        const isLate = Boolean(sub.dueDate && new Date(sub.submittedAt) > new Date(sub.dueDate));
-                        const submissionDetails = parseSubmissionContent(sub.content);
-                        const documentUrl = submissionDetails.link || submissionDetails.attachment?.dataUrl || sub.materialUrl;
-
-                        return (
-                          <div
-                            key={sub.id}
-                            style={{
-                              padding: '1.1rem 1.25rem',
-                              borderRadius: '10px',
-                              border: '1px solid var(--border)',
-                              background: 'var(--surface)',
-                              borderLeft: `4px solid ${hasGrade ? (sub.grade! >= 5 ? '#22c55e' : '#ef4444') : '#f59e0b'}`
-                            }}
-                          >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                              <div>
-                                <strong style={{ fontSize: '1rem', color: 'var(--text-main)', display: 'block' }}>
-                                  {sub.assignmentTitle}
-                                </strong>
-                                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                                  Entregado el {new Date(sub.submittedAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                                </span>
-                                {isLate && <span style={{ display: 'inline-flex', alignItems: 'center', marginTop: '0.3rem', padding: '0.18rem 0.45rem', borderRadius: '10px', background: '#fef3c7', border: '1px solid #fde68a', color: '#92400e', fontSize: '0.72rem', fontWeight: 700 }}>Entregada fuera de plazo</span>}
-                              </div>
-
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                                {hasGrade ? (
-                                  <span style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '0.35rem',
-                                    padding: '0.35rem 0.75rem',
-                                    borderRadius: '16px',
-                                    fontWeight: 700,
-                                    fontSize: '0.92rem',
-                                    background: sub.grade! >= 5 ? '#eaf4ef' : '#fdf0f0',
-                                    color: sub.grade! >= 5 ? '#24583e' : '#9e2a2b',
-                                    border: `1px solid ${sub.grade! >= 5 ? '#bfe0d0' : '#f7caca'}`
-                                  }}>
-                                    <CheckCircle2 size={15} /> {sub.grade!.toFixed(1)} / 10
-                                  </span>
-                                ) : (
-                                  <span style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '0.35rem',
-                                    padding: '0.35rem 0.75rem',
-                                    borderRadius: '16px',
-                                    fontWeight: 600,
-                                    fontSize: '0.82rem',
-                                    background: '#fef7e8',
-                                    color: '#8d5b12',
-                                    border: '1px solid #fae0b0'
-                                  }}>
-                                    <Clock3 size={14} /> Pendiente de evaluar
-                                  </span>
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={() => setExpandedSubmissionDetailsId(expandedSubmissionDetailsId === sub.id ? null : sub.id)}
-                                  className="btn-secondary"
-                                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.35rem 0.65rem', fontSize: '0.78rem' }}
-                                >
-                                  {expandedSubmissionDetailsId === sub.id ? 'Ocultar detalle' : 'Ver detalle'}
-                                  {expandedSubmissionDetailsId === sub.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Contenido / Texto entregado o Examen */}
-                            {expandedSubmissionDetailsId === sub.id && sub.content && (() => {
-                              if (examData) {
-                                return (
-                                  <div style={{
-                                    margin: '0.6rem 0',
-                                    padding: '0.75rem 1rem',
-                                    background: 'var(--surface-alt)',
-                                    borderRadius: '8px',
-                                    border: '1px solid var(--border)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    flexWrap: 'wrap',
-                                    gap: '0.75rem'
-                                  }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                                      <div style={{ background: 'var(--primary-light)', color: 'var(--primary)', padding: '0.4rem', borderRadius: '6px' }}>
-                                        <FileText size={18} />
-                                      </div>
-                                      <div>
-                                        <strong style={{ display: 'block', fontSize: '0.9rem', color: 'var(--text-main)' }}>
-                                          {examData.hasOpenText ? 'Cuestionario con preguntas abiertas' : 'Examen tipo test completado'}
-                                        </strong>
-                                        {examData.score !== null && examData.score !== undefined && examData.total ? (
-                                          <small style={{ color: 'var(--text-muted)' }}>
-                                            {examData.score} de {examData.total} puntos objetivos
-                                          </small>
-                                        ) : null}
-                                      </div>
-                                    </div>
-
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                      {examData.hasOpenText && isSubmissionPending(sub) && (
-                                        <span style={{ fontSize: '0.78rem', background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', padding: '0.2rem 0.5rem', borderRadius: '4px', fontWeight: 600 }}>
-                                          ⏳ {examData.openTextCount} {examData.openTextCount === 1 ? 'pregunta por calificar' : 'preguntas por calificar'}
-                                        </span>
-                                      )}
-                                      <button
-                                        type="button"
-                                        onClick={() => setReviewingExam({
-                                          subId: sub.id,
-                                          title: sub.assignmentTitle,
-                                          questions: sub.materialFormData?.questions || [],
-                                          answers: examData.answers,
-                                          score: sub.grade,
-                                          total: examData.total,
-                                          feedback: sub.feedback,
-                                          questionScores: examData.questionScores,
-                                          hasOpenText: examData.hasOpenText,
-                                          openTextCount: examData.openTextCount
-                                        })}
-                                        className={isSubmissionPending(sub) ? "btn-primary" : "btn-secondary"}
-                                        style={{
-                                          padding: '0.35rem 0.75rem',
-                                          fontSize: '0.8rem',
-                                          background: isSubmissionPending(sub) ? '#d97706' : undefined,
-                                          borderColor: isSubmissionPending(sub) ? '#b45309' : undefined
-                                        }}
-                                      >
-                                        <FileText size={14} /> {isSubmissionPending(sub) ? 'Corregir Examen' : 'Revisar'}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => openGradingModal(sub)}
-                                        className="btn-primary"
-                                        style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
-                                      >
-                                        <Edit3 size={14} /> Editar Nota y Feedback
-                                      </button>
-                                    </div>
-                                  </div>
-                                );
-                              }
-
-                              return (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', margin: '0.5rem 0' }}>
-                                  {submissionDetails.text && (
-                                    <div style={{ padding: '0.6rem 0.8rem', background: 'var(--surface-alt)', borderRadius: '6px', fontSize: '0.85rem' }}>
-                                      <p style={{ margin: 0, color: 'var(--text-main)', whiteSpace: 'pre-wrap' }}>
-                                        {submissionDetails.text}
-                                      </p>
-                                    </div>
-                                  )}
-
-                                  {submissionDetails.link && (
-                                    <div style={{ padding: '0.6rem 0.8rem', background: 'var(--surface-alt)', borderRadius: '6px', fontSize: '0.85rem' }}>
-                                      <a href={submissionDetails.link} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
-                                        <ExternalLink size={14} /> Abrir documento entregado en la nube
-                                      </a>
-                                    </div>
-                                  )}
-
-                                  {submissionDetails.attachment && submissionDetails.attachment.dataUrl && (
-                                    <div style={{ padding: '0.6rem 0.8rem', background: 'var(--surface-alt)', borderRadius: '6px', fontSize: '0.85rem' }}>
-                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
-                                          <FileText size={15} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-                                          <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>Archivo adjunto:</span>
-                                          <span style={{ color: 'var(--text-main)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '240px' }} title={submissionDetails.attachment.name}>
-                                            {submissionDetails.attachment.name}
-                                          </span>
-                                        </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                          <button
-                                            type="button"
-                                            onClick={() => setViewingAttachment(submissionDetails.attachment)}
-                                            className="btn-secondary"
-                                            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.28rem 0.6rem', fontSize: '0.78rem' }}
-                                            title="Ver archivo online sin descargar"
-                                          >
-                                            <Eye size={13} /> Ver en línea
-                                          </button>
-                                          <a
-                                            href={submissionDetails.attachment.dataUrl}
-                                            download={submissionDetails.attachment.name}
-                                            title="Descargar archivo adjunto"
-                                            aria-label={`Descargar ${submissionDetails.attachment.name}`}
-                                            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0.3rem', borderRadius: '6px', color: 'var(--primary)', border: '1px solid var(--primary-border)', background: 'var(--surface)', textDecoration: 'none' }}
-                                          >
-                                            <Download size={15} />
-                                          </a>
-                                        </div>
-                                      </div>
-                                      {isAttachmentImage(submissionDetails.attachment) && (
-                                        <div style={{ marginTop: '0.5rem' }}>
-                                          <img
-                                            src={submissionDetails.attachment.dataUrl}
-                                            alt={submissionDetails.attachment.name}
-                                            onClick={() => setViewingAttachment(submissionDetails.attachment)}
-                                            style={{
-                                              maxHeight: '150px',
-                                              maxWidth: '100%',
-                                              borderRadius: '6px',
-                                              border: '1px solid var(--border)',
-                                              cursor: 'pointer',
-                                              objectFit: 'contain',
-                                              background: '#fff',
-                                              display: 'block'
-                                            }}
-                                            title="Clic para ampliar y rotar"
-                                          />
-                                        </div>
-                                      )}
-                                      {isAttachmentAudio(submissionDetails.attachment) && (
-                                        <div style={{ marginTop: '0.5rem' }}>
-                                          <AudioPlayer src={submissionDetails.attachment.dataUrl} title={submissionDetails.attachment.name} />
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-
-                                  {!submissionDetails.text && !submissionDetails.link && !submissionDetails.attachment && sub.content && (
-                                    <div style={{ padding: '0.6rem 0.8rem', background: 'var(--surface-alt)', borderRadius: '6px', fontSize: '0.85rem' }}>
-                                      <p style={{ margin: 0, color: 'var(--text-main)', whiteSpace: 'pre-wrap' }}>
-                                        {sub.content}
-                                      </p>
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })()}
-
-                            {/* Feedback del profesor */}
-                            {expandedSubmissionDetailsId === sub.id && sub.feedback && (
-                              <div style={{ marginTop: '0.65rem', padding: '0.65rem 0.85rem', background: '#eff6ff', borderRadius: '8px', border: '1px solid #bfdbfe', fontSize: '0.86rem' }}>
-                                <strong style={{ color: '#1d4ed8', display: 'block', marginBottom: '0.25rem', fontSize: '0.78rem', fontWeight: 700 }}>
-                                  💬 Comentarios y observaciones del profesor:
-                                </strong>
-                                <p style={{ margin: 0, color: '#1e3a8a', whiteSpace: 'pre-wrap', lineHeight: '1.45' }}>{sub.feedback}</p>
-                              </div>
-                            )}
-
-                            {/* Botones de acción (para tareas manuales o documentos adjuntos) */}
-                            {expandedSubmissionDetailsId === sub.id && (!isExam || documentUrl) && (
-                              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border)' }}>
-                                {documentUrl && (
-                                  <a
-                                    href={documentUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="btn-secondary"
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.35rem 0.7rem', fontSize: '0.8rem', textDecoration: 'none' }}
-                                  >
-                                    <ExternalLink size={14} /> Abrir Doc
-                                  </a>
-                                )}
-
-                                {!isExam && (
-                                  <button
-                                    type="button"
-                                    onClick={() => openGradingModal(sub)}
-                                    className="btn-primary"
-                                    style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem' }}
-                                  >
-                                    <Edit3 size={14} /> {hasGrade ? 'Editar Nota y Feedback' : 'Evaluar Tarea'}
-                                  </button>
-                                )}
-                              </div>
-                            )}
-
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-                </div>
-                , document.body)
-              )}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* =========================================================================
-          VISTA 2: VISTA AGRUPADA POR CLASES / GRUPOS
-         ========================================================================= */}
-      {viewMode === 'CLASSES' && (
-        <>
-          {loading ? (
-            <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-              Cargando clases y calificaciones...
-            </div>
-          ) : filteredCourses.length === 0 ? (
-            <div className="glass-panel" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-              <BookOpen size={48} style={{ color: 'var(--primary)', opacity: 0.35, marginBottom: '1rem' }} />
-              <h3 style={{ margin: '0 0 0.5rem', color: 'var(--text-main)' }}>No se encontraron clases</h3>
-              <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.9rem' }}>
-                Prueba cambiando el filtro de modalidad o buscando otro título.
-              </p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              {filteredCourses.map(course => {
-                const isExpanded = selectedClassId === course.id;
-                const structuredGroups = groupStructuredSubmissions(course.submissions);
-
-                return (
-                  <div key={course.id} className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
-                    {/* Header de la Tarjeta de Clase */}
-                    <div
-                      onClick={() => openClassDossier(course)}
+                      onClick={() => { setViewMode('STUDENTS'); setSelectedClassId(null); setSelectedStudentForDossier(null); setMobileStep('CLASSES_LIST'); }}
                       style={{
-                        padding: '1.25rem 1.75rem',
-                        background: isExpanded ? 'var(--surface-alt)' : 'var(--surface)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        justifyContent: 'space-between',
+                        display: 'inline-flex',
                         alignItems: 'center',
-                        gap: '1rem',
-                        flexWrap: 'wrap',
-                        borderBottom: isExpanded ? '1px solid var(--border)' : 'none'
+                        gap: '0.5rem',
+                        padding: '0.6rem 1.1rem',
+                        borderRadius: '8px',
+                        border: 'none',
+                        background: viewMode === 'STUDENTS' ? 'var(--surface)' : 'transparent',
+                        color: viewMode === 'STUDENTS' ? 'var(--primary)' : 'var(--text-muted)',
+                        fontWeight: viewMode === 'STUDENTS' ? 700 : 500,
+                        boxShadow: viewMode === 'STUDENTS' ? 'var(--shadow-sm)' : 'none',
+                        cursor: 'pointer',
+                        fontSize: '0.9rem',
+                        transition: 'all 0.15s ease'
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                        <div style={{
-                          padding: '0.75rem',
-                          borderRadius: '12px',
-                          background: course.modality === 'ONLINE' ? '#eef2ff' : 'var(--primary-light)',
-                          color: course.modality === 'ONLINE' ? '#4338ca' : 'var(--primary)'
-                        }}>
-                          {course.modality === 'ONLINE' ? <Laptop size={24} /> : <BookOpen size={24} />}
-                        </div>
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--text-main)' }}>{course.title}</h3>
-                            <span style={{
-                              fontSize: '0.72rem',
-                              fontWeight: 700,
-                              padding: '2px 8px',
-                              borderRadius: '10px',
-                              background: course.modality === 'ONLINE' ? '#eef2ff' : '#f0fdf4',
-                              color: course.modality === 'ONLINE' ? '#4338ca' : '#15803d',
-                              border: `1px solid ${course.modality === 'ONLINE' ? '#c7d2fe' : '#bbf7d0'}`
-                            }}>
-                              {course.modality === 'ONLINE' ? 'Online' : 'Presencial'}
-                            </span>
-                          </div>
-                          <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                            {course.totalStudents} alumnos matriculados · {course.totalSubmissions} entregas totales
-                          </span>
-                        </div>
-                      </div>
+                      <Users size={17} /> Vista General por Alumnos ({students.length})
+                    </button>
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                        {course.pendingSubmissions > 0 && (
-                          <span style={{ padding: '0.3rem 0.7rem', background: '#fef7e8', color: '#8d5b12', border: '1px solid #fae0b0', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 600 }}>
-                            {course.pendingSubmissions} por corregir
-                          </span>
-                        )}
+                    <button
+                      type="button"
+                      onClick={() => { setViewMode('CLASSES'); setSelectedClassId(null); setSelectedStudentForDossier(null); setMobileStep('CLASSES_LIST'); }}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        padding: '0.6rem 1.1rem',
+                        borderRadius: '8px',
+                        border: 'none',
+                        background: viewMode === 'CLASSES' ? 'var(--surface)' : 'transparent',
+                        color: viewMode === 'CLASSES' ? 'var(--primary)' : 'var(--text-muted)',
+                        fontWeight: viewMode === 'CLASSES' ? 700 : 500,
+                        boxShadow: viewMode === 'CLASSES' ? 'var(--shadow-sm)' : 'none',
+                        cursor: 'pointer',
+                        fontSize: '0.9rem',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <BookOpen size={17} /> Vista Agrupada por Clases ({courses.length})
+                    </button>
+                  </div>
+                </div>
 
-                        <div style={{ textAlign: 'right' }}>
-                          <small style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.75rem' }}>Nota global del {selectedTerm}º trimestre</small>
-                          <strong style={{ fontSize: '1.05rem', color: course.classOverallGrade && parseFloat(course.classOverallGrade) >= 5 ? '#24583e' : 'var(--text-main)' }}>
-                            {course.classOverallGrade ? `${course.classOverallGrade} / 10` : '- / 10'}
-                          </strong>
+                {/* Barra de Búsqueda y filtro de modalidad */}
+                <div className="grades-filters-row">
+                  <div className="filters-panel__search">
+                    <Search size={17} />
+                    <input
+                      type="text"
+                      placeholder={viewMode === 'STUDENTS' ? (isMobile ? 'Buscar alumno...' : 'Buscar alumno por nombre, email o clase...') : (isMobile ? 'Buscar clase...' : 'Buscar clase o grupo...')}
+                      value={searchTerm}
+                      onChange={e => setSearchTerm(e.target.value)}
+                      aria-label="Buscar en calificaciones"
+                    />
+                  </div>
+
+                  <div className="grades-filters-row__select">
+                    <CustomSelect
+                      value={modalityFilter}
+                      onChange={setModalityFilter}
+                      ariaLabel="Filtrar por modalidad"
+                      options={[
+                        { value: 'ALL', label: 'Todas las modalidades' },
+                        { value: 'PRESENCIAL', label: 'Presencial (Academia)' },
+                        { value: 'ONLINE', label: 'Online / Individuales' }
+                      ]}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* VISTA 1: ALUMNOS */}
+              {viewMode === 'STUDENTS' && (
+                <>
+                  {loading ? (
+                    <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                      Cargando alumnos y calificaciones...
+                    </div>
+                  ) : filteredStudents.length === 0 ? (
+                    <div className="glass-panel" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
+                      <Users size={48} style={{ color: 'var(--primary)', opacity: 0.35, marginBottom: '1rem' }} />
+                      <h3 style={{ margin: '0 0 0.5rem', color: 'var(--text-main)' }}>No se encontraron alumnos</h3>
+                      <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.9rem' }}>
+                        Prueba cambiando los filtros de modalidad o los términos de búsqueda.
+                      </p>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem', alignItems: 'flex-start' }}>
+                      <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
+                        <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)', fontWeight: 600, fontSize: '0.88rem', color: 'var(--text-muted)' }}>
+                          ALUMNOS REGISTRADOS ({filteredStudents.length})
                         </div>
 
-                        {isExpanded ? <ChevronDown size={20} style={{ color: 'var(--text-muted)' }} /> : <ChevronRight size={20} style={{ color: 'var(--text-muted)' }} />}
+                        <div style={{ maxHeight: '680px', overflowY: 'auto' }}>
+                          {filteredStudents.map(student => (
+                            <div
+                              key={student.id}
+                              onClick={() => setSelectedStudentForDossier(student)}
+                              style={{
+                                padding: '1.1rem 1.25rem',
+                                borderBottom: '1px solid var(--border)',
+                                cursor: 'pointer',
+                                background: 'transparent',
+                                borderLeft: '4px solid transparent',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
+                                <div style={{
+                                  width: '36px',
+                                  height: '36px',
+                                  flexShrink: 0,
+                                  borderRadius: '50%',
+                                  background: 'var(--primary)',
+                                  color: '#fff',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontWeight: 700,
+                                  fontSize: '0.85rem'
+                                }}>
+                                  {student.fullName.slice(0, 2).toUpperCase()}
+                                </div>
+                                <div style={{ minWidth: 0 }}>
+                                  <strong style={{ fontSize: '0.95rem', color: 'var(--text-main)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {student.fullName}
+                                  </strong>
+                                  <small style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.76rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{student.email}</small>
+                                  <ModalityBadge modality={student.modality} className="student-card-modality" />
+                                </div>
+                              </div>
+
+                              <div style={{ marginTop: '0.65rem', paddingTop: '0.5rem', borderTop: '1px dashed var(--border)' }}>
+                                <span style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                  Tareas: <strong>{student.totalSubmissions ?? 0}</strong>
+                                  {(student.pendingSubmissions ?? 0) > 0 && (
+                                    <span style={{ color: '#92400e', fontWeight: 700, marginLeft: '4px' }}>
+                                      ({student.pendingSubmissions} pend.)
+                                    </span>
+                                  )}
+                                </span>
+
+                                <div className="student-grade-row">
+                                  <span className="student-grade-row__course">Media global de tareas</span>
+                                  <span className={`student-grade-row__pill ${student.averageGrade === null ? 'is-empty' : Number(student.averageGrade) >= 5 ? 'is-pass' : 'is-fail'}`}>
+                                    {student.averageGrade !== null ? `${student.averageGrade} / 10` : '- / 10'}
+                                  </span>
+                                  <ChevronRight size={15} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </div>
+                  )}
+                </>
+              )}
 
-                    {/* Desglose de Entregas de los Alumnos de la Clase */}
-                    {isExpanded && (
-                      <div style={{ padding: '1.5rem 1.75rem', background: 'var(--background)' }}>
-                        {course.termGrades.length > 0 && (
-                          <div style={{ marginBottom: '1.25rem' }}>
-                            <h4 style={{ margin: '0 0 0.75rem', fontSize: '1.05rem', color: 'var(--text-main)' }}>
-                              Calificaciones de los alumnos · {selectedTerm}º trimestre
-                            </h4>
-                            <div className="table-responsive">
-                              <table style={{ width: '100%', borderCollapse: 'collapse', background: 'var(--surface)', border: '1px solid var(--border)' }}>
-                                <thead>
-                                  <tr style={{ background: 'var(--surface-alt)', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-                                    <th style={{ padding: '0.7rem 0.85rem', textAlign: 'left' }}>ALUMNO</th>
-                                    <th style={{ padding: '0.7rem 0.85rem', textAlign: 'left' }}>MEDIA TAREAS</th>
-                                    <th style={{ padding: '0.7rem 0.85rem', textAlign: 'left' }}>NOTA GLOBAL</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {course.termGrades.map((student) => (
-                                    <tr key={student.studentId} style={{ borderTop: '1px solid var(--border)' }}>
-                                      <td style={{ padding: '0.7rem 0.85rem', color: 'var(--text-main)', fontWeight: 600 }}>{student.fullName}</td>
-                                      <td style={{ padding: '0.7rem 0.85rem', color: 'var(--text-muted)' }}>{typeof student.tasksAverage === 'number' ? `${student.tasksAverage.toFixed(1)} / 10` : '- / 10'}</td>
-                                      <td style={{ padding: '0.7rem 0.85rem', color: 'var(--primary)', fontWeight: 700 }}>{typeof student.overallGrade === 'number' ? `${student.overallGrade.toFixed(1)} / 10` : '- / 10'}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
+              {/* VISTA 2: CLASES */}
+              {viewMode === 'CLASSES' && (
+                <>
+                  {loading ? (
+                    <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                      Cargando clases y calificaciones...
+                    </div>
+                  ) : filteredCourses.length === 0 ? (
+                    <div className="glass-panel" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
+                      <BookOpen size={48} style={{ color: 'var(--primary)', opacity: 0.35, marginBottom: '1rem' }} />
+                      <h3 style={{ margin: '0 0 0.5rem', color: 'var(--text-main)' }}>No se encontraron clases</h3>
+                      <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.9rem' }}>
+                        Prueba cambiando el filtro de modalidad o buscando otro título.
+                      </p>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                      {filteredCourses.map(course => (
+                        <div key={course.id} className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
+                          <div
+                            onClick={() => openClassDossier(course)}
+                            className="class-card-header"
+                            style={{
+                              background: 'var(--surface)',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <div className="class-card-header__main">
+                              <div style={{
+                                padding: '0.6rem',
+                                borderRadius: '10px',
+                                flexShrink: 0,
+                                background: course.modality === 'ONLINE' ? '#eef2ff' : 'var(--primary-light)',
+                                color: course.modality === 'ONLINE' ? '#4338ca' : 'var(--primary)'
+                              }}>
+                                {course.modality === 'ONLINE' ? <Laptop size={20} /> : <BookOpen size={20} />}
+                              </div>
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                  <h3 className="class-card-header__title">{course.title}</h3>
+                                  <ModalityBadge modality={course.modality} />
+                                </div>
+                                <span className="class-card-header__meta">
+                                  {`${course.totalStudents} alumno${course.totalStudents === 1 ? '' : 's'} matriculado${course.totalStudents === 1 ? '' : 's'} · ${course.totalSubmissions} entrega${course.totalSubmissions === 1 ? '' : 'es'}`}
+                                </span>
+                                <span className={`class-card-header__status ${course.pendingSubmissions > 0 ? 'is-pending' : 'is-clear'}`}>
+                                  {course.pendingSubmissions > 0
+                                    ? `${course.pendingSubmissions} por corregir`
+                                    : 'Al día'}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="class-card-header__aside">
+                              <div style={{ textAlign: 'right', minWidth: 0 }}>
+                                <small style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.7rem' }}>Nota {selectedTerm}º trim.</small>
+                                <strong style={{ fontSize: '1.05rem', whiteSpace: 'nowrap', color: course.classOverallGrade && parseFloat(course.classOverallGrade) >= 5 ? '#24583e' : 'var(--text-main)' }}>
+                                  {course.classOverallGrade ? `${course.classOverallGrade} / 10` : '- / 10'}
+                                </strong>
+                              </div>
+                              <ChevronRight size={20} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                             </div>
                           </div>
-                        )}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                          <h4 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--text-main)' }}>
-                            Entregas de los alumnos de {course.title} ({course.submissions.length})
-                          </h4>
                         </div>
-
-                        {course.submissions.length === 0 ? (
-                          <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-muted)', background: 'var(--surface)', borderRadius: '10px' }}>
-                            Aún no hay entregas de tareas ni exámenes en esta clase.
-                          </div>
-                        ) : (
-                          <>
-                          {structuredGroups.map((group) => (
-                            <StructuredTaskBlock
-                              key={`${group[0].structuredTaskId}:${group[0].studentId}`}
-                              blockKey={`${group[0].structuredTaskId}:${group[0].studentId}`}
-                              submissions={group}
-                              expanded={expandedStructuredTaskKey === `${group[0].structuredTaskId}:${group[0].studentId}`}
-                              onToggle={(blockKey) => setExpandedStructuredTaskKey((current) => current === blockKey ? null : blockKey)}
-                              onEdit={openGradingModal}
-                              onReviewExam={(submission, examData) => setReviewingExam({
-                                subId: submission.id,
-                                title: submission.assignmentTitle,
-                                questions: submission.materialFormData?.questions || [],
-                                answers: examData.answers,
-                                score: submission.grade,
-                                total: examData.total,
-                                feedback: submission.feedback,
-                                questionScores: examData.questionScores,
-                                hasOpenText: examData.hasOpenText,
-                                openTextCount: examData.openTextCount
-                              })}
-                            />
-                          ))}
-                          <div className="table-responsive">
-                            <table style={{ width: '100%', minWidth: '700px', borderCollapse: 'collapse', textAlign: 'left', background: 'var(--surface)', borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--border)' }}>
-                              <thead>
-                                <tr style={{ background: 'var(--surface-alt)', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.84rem' }}>
-                                  <th style={{ padding: '0.85rem 1rem', fontWeight: 600 }}>ALUMNO</th>
-                                  <th style={{ padding: '0.85rem 1rem', fontWeight: 600 }}>TAREA</th>
-                                  <th style={{ padding: '0.85rem 1rem', fontWeight: 600 }}>FECHA</th>
-                                  <th style={{ padding: '0.85rem 1rem', fontWeight: 600 }}>CALIFICACIÓN</th>
-                                  <th style={{ padding: '0.85rem 1rem', fontWeight: 600 }}>FEEDBACK</th>
-                                  <th style={{ padding: '0.85rem 1rem', fontWeight: 600, textAlign: 'right' }}>ACCIONES</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {course.submissions.filter(sub => !sub.structuredTaskId).map(sub => {
-                                  const examData = parseSavedExam(sub.content);
-                                  const isExam = sub.materialType === 'FORM' || Boolean(examData);
-                                  const hasGrade = sub.grade !== null && sub.grade !== undefined;
-                                  const submissionDetails = parseSubmissionContent(sub.content);
-                                  const documentUrl = (sub.content && /^https?:\/\//i.test(sub.content)) ? sub.content : sub.materialUrl;
-
-                                  return (
-                                    <React.Fragment key={sub.id}>
-                                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                                      <td style={{ padding: '0.85rem 1rem', fontWeight: 600, color: 'var(--text-main)', fontSize: '0.9rem' }}>
-                                        {sub.studentName}
-                                      </td>
-                                      <td style={{ padding: '0.85rem 1rem', color: 'var(--text-main)', fontSize: '0.9rem' }}>
-                                        {sub.assignmentTitle}
-                                      </td>
-                                      <td style={{ padding: '0.85rem 1rem', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-                                        {new Date(sub.submittedAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
-                                      </td>
-                                      <td style={{ padding: '0.85rem 1rem' }}>
-                                        {hasGrade ? (
-                                          <span style={{
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '0.25rem',
-                                            padding: '0.25rem 0.65rem',
-                                            borderRadius: '12px',
-                                            fontWeight: 700,
-                                            fontSize: '0.85rem',
-                                            background: sub.grade! >= 5 ? '#eaf4ef' : '#fdf0f0',
-                                            color: sub.grade! >= 5 ? '#24583e' : '#9e2a2b',
-                                            border: `1px solid ${sub.grade! >= 5 ? '#bfe0d0' : '#f7caca'}`
-                                          }}>
-                                            {sub.grade!.toFixed(1)} / 10
-                                          </span>
-                                        ) : (
-                                          <span style={{ padding: '0.25rem 0.65rem', borderRadius: '12px', fontSize: '0.78rem', background: '#fef7e8', color: '#8d5b12', border: '1px solid #fae0b0', fontWeight: 600 }}>
-                                            Pendiente
-                                          </span>
-                                        )}
-                                      </td>
-                                      <td style={{ padding: '0.85rem 1rem', fontSize: '0.82rem', color: 'var(--text-muted)', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                        {sub.feedback || '—'}
-                                      </td>
-                                      <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.4rem' }}>
-                                          <button
-                                            type="button"
-                                            onClick={() => setExpandedSubmissionDetailsId(expandedSubmissionDetailsId === sub.id ? null : sub.id)}
-                                            className="btn-secondary"
-                                            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem', padding: '0.3rem 0.6rem', fontSize: '0.78rem' }}
-                                          >
-                                            {expandedSubmissionDetailsId === sub.id ? 'Ocultar detalle' : 'Ver detalle'}
-                                            {expandedSubmissionDetailsId === sub.id ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                                          </button>
-                                          {documentUrl && (
-                                            <a
-                                              href={documentUrl}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="btn-secondary"
-                                              style={{ display: 'inline-flex', alignItems: 'center', padding: '0.3rem 0.6rem', fontSize: '0.78rem', textDecoration: 'none' }}
-                                            >
-                                              Doc
-                                            </a>
-                                          )}
-
-                                          {isExam ? (
-                                            <>
-                                            {examData?.hasOpenText && isSubmissionPending(sub) && (
-                                              <span style={{ display: 'inline-flex', alignItems: 'center', fontSize: '0.72rem', background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', padding: '0.15rem 0.4rem', borderRadius: '4px', fontWeight: 600 }}>
-                                                ⏳ {examData.openTextCount} por calificar
-                                              </span>
-                                            )}
-                                            <button
-                                              type="button"
-                                              onClick={() => setReviewingExam({
-                                                subId: sub.id,
-                                                title: sub.assignmentTitle,
-                                                questions: sub.materialFormData?.questions || [],
-                                                answers: examData?.answers || {},
-                                                score: sub.grade,
-                                                total: examData?.total,
-                                                feedback: sub.feedback,
-                                                questionScores: examData?.questionScores,
-                                                hasOpenText: examData?.hasOpenText,
-                                                openTextCount: examData?.openTextCount
-                                              })}
-                                              className={isSubmissionPending(sub) ? "btn-primary" : "btn-secondary"}
-                                              style={{
-                                                padding: '0.3rem 0.6rem',
-                                                fontSize: '0.78rem',
-                                                background: isSubmissionPending(sub) ? '#d97706' : undefined,
-                                                borderColor: isSubmissionPending(sub) ? '#b45309' : undefined
-                                              }}
-                                            >
-                                              {isSubmissionPending(sub) ? 'Corregir' : 'Ver Test'}
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={() => openGradingModal(sub)}
-                                              className="btn-primary"
-                                              style={{ padding: '0.3rem 0.6rem', fontSize: '0.78rem' }}
-                                            >
-                                              Editar Nota y Feedback
-                                            </button>
-                                            </>
-                                          ) : (
-                                            <button
-                                              type="button"
-                                              onClick={() => openGradingModal(sub)}
-                                              className="btn-primary"
-                                              style={{ padding: '0.35rem 0.75rem', fontSize: '0.78rem' }}
-                                            >
-                                              {hasGrade ? 'Editar' : 'Evaluar'}
-                                            </button>
-                                          )}
-                                        </div>
-                                      </td>
-                                    </tr>
-                                    {expandedSubmissionDetailsId === sub.id && (
-                                      <tr>
-                                        <td colSpan={6} style={{ padding: '0.85rem 1rem', background: 'var(--surface-alt)', borderBottom: '1px solid var(--border)' }}>
-                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
-                                            <div style={{ flex: '1 1 420px' }}>
-                                              <strong style={{ display: 'block', marginBottom: '0.45rem', color: 'var(--text-main)', fontSize: '0.85rem' }}>Respuesta del alumno</strong>
-                                              {isExam ? (
-                                                <div style={{ padding: '0.65rem 0.8rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-                                                  Cuestionario respondido. Pulsa «Ver Test» para revisar sus respuestas.
-                                                </div>
-                                              ) : (
-                                                <div style={{ padding: '0.65rem 0.8rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-main)', fontSize: '0.84rem', whiteSpace: 'pre-wrap' }}>
-                                                  {submissionDetails.text || submissionDetails.link || (submissionDetails.attachment ? `Archivo: ${submissionDetails.attachment.name}` : 'Sin contenido textual.')}
-                                                </div>
-                                              )}
-                                            </div>
-                                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.4rem' }}>
-                                              {isExam && (
-                                                <button
-                                                  type="button"
-                                                  onClick={() => setReviewingExam({
-                                                    subId: sub.id,
-                                                    title: sub.assignmentTitle,
-                                                    questions: sub.materialFormData?.questions || [],
-                                                    answers: examData?.answers || {},
-                                                    score: sub.grade,
-                                                    total: examData?.total,
-                                                    feedback: sub.feedback,
-                                                    questionScores: examData?.questionScores,
-                                                    hasOpenText: examData?.hasOpenText,
-                                                    openTextCount: examData?.openTextCount
-                                                  })}
-                                                  className={isSubmissionPending(sub) ? "btn-primary" : "btn-secondary"}
-                                                  style={{
-                                                    padding: '0.4rem 0.7rem',
-                                                    fontSize: '0.78rem',
-                                                    background: isSubmissionPending(sub) ? '#d97706' : undefined,
-                                                    borderColor: isSubmissionPending(sub) ? '#b45309' : undefined
-                                                  }}
-                                                >
-                                                  <FileText size={13} /> {isSubmissionPending(sub) ? 'Corregir Test' : 'Ver Test'}
-                                                </button>
-                                              )}
-                                              <button type="button" onClick={() => openGradingModal(sub)} className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.4rem 0.7rem', fontSize: '0.78rem' }}>
-                                                <Edit3 size={13} /> Editar Nota y Feedback
-                                              </button>
-                                            </div>
-                                          </div>
-                                        </td>
-                                      </tr>
-                                    )}
-                                    </React.Fragment>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </>
           )}
         </>
       )}
-
-      {/* =========================================================================
-          MODAL DE CALIFICACIÓN Y FEEDBACK
-         ========================================================================= */}
-      {evaluatingSubmission && createPortal(
-        <div className="modal-backdrop" style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0, 0, 0, 0.65)',
-          backdropFilter: 'blur(5px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 80,
-          padding: '1rem'
-        }}>
-          <div className="glass-panel modal-card" style={{
-            width: '100%',
-            maxWidth: '560px',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            padding: '2rem'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
-              <button
-                type="button"
-                onClick={() => setEvaluatingSubmission(null)}
-                className="modal-close"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {saveError && (
-              <div style={{ padding: '0.75rem 1rem', background: '#fdf0f0', color: '#9e2a2b', border: '1px solid #f7caca', borderRadius: '8px', marginBottom: '1.25rem', fontSize: '0.88rem' }}>
-                {saveError}
-              </div>
-            )}
-
-            <div style={{ padding: '1rem', background: 'var(--surface-alt)', borderRadius: '10px', border: '1px solid var(--border)', marginBottom: '1.25rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
-                <strong style={{ fontSize: '0.95rem', color: 'var(--text-main)' }}>{evaluatingSubmission.assignmentTitle}</strong>
-                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                  {new Date(evaluatingSubmission.submittedAt).toLocaleDateString('es-ES')}
-                </span>
-              </div>
-
-              {evaluatingSubmission.content && (() => {
-                if (parseSavedExam(evaluatingSubmission.content)) {
-                  const examGrade = evaluatingSubmission.currentGrade !== null && evaluatingSubmission.currentGrade !== undefined
-                    ? evaluatingSubmission.currentGrade.toFixed(1)
-                    : '-';
-                  return (
-                    <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px dashed var(--border)', display: 'flex', justifyContent: 'center' }}>
-                      <div style={{ color: 'var(--primary-text)', fontWeight: 700, fontSize: '1.65rem', lineHeight: 1, textAlign: 'center' }}>
-                        {examGrade} <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>/ 10</span>
-                      </div>
-                    </div>
-                  );
-                }
-
-                const subDetails = parseSubmissionContent(evaluatingSubmission.content);
-                const hasDetails = Boolean(subDetails.text || subDetails.link || subDetails.attachment);
-
-                if (hasDetails) {
-                  return (
-                    <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px dashed var(--border)', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                      {subDetails.text && (
-                        <p style={{ margin: 0, color: 'var(--text-main)', fontSize: '0.88rem', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
-                          {subDetails.text}
-                        </p>
-                      )}
-                      {subDetails.link && (
-                        <a href={subDetails.link} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--primary)', fontWeight: 600, fontSize: '0.85rem', textDecoration: 'none' }}>
-                          <ExternalLink size={14} /> Abrir documento entregado en la nube
-                        </a>
-                      )}
-                      {subDetails.attachment && subDetails.attachment.dataUrl && (
-                        <div style={{ padding: '0.6rem 0.75rem', background: 'var(--surface)', borderRadius: '6px', border: '1px solid var(--border)' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: 0 }}>
-                              <FileText size={16} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-                              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px' }} title={subDetails.attachment.name}>
-                                {subDetails.attachment.name}
-                              </span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                              <button
-                                type="button"
-                                onClick={() => setViewingAttachment(subDetails.attachment)}
-                                className="btn-secondary"
-                                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.28rem 0.6rem', fontSize: '0.78rem' }}
-                                title="Ver archivo online sin descargar"
-                              >
-                                <Eye size={13} /> Ver en línea
-                              </button>
-                              <a
-                                href={subDetails.attachment.dataUrl}
-                                download={subDetails.attachment.name}
-                                className="btn-secondary"
-                                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.28rem 0.6rem', fontSize: '0.78rem', textDecoration: 'none' }}
-                                title="Descargar archivo"
-                              >
-                                <Download size={13} /> Descargar
-                              </a>
-                            </div>
-                          </div>
-                          {isAttachmentImage(subDetails.attachment) && (
-                            <div style={{ marginTop: '0.5rem' }}>
-                              <img
-                                src={subDetails.attachment.dataUrl}
-                                alt={subDetails.attachment.name}
-                                onClick={() => setViewingAttachment(subDetails.attachment)}
-                                style={{
-                                  maxHeight: '160px',
-                                  maxWidth: '100%',
-                                  borderRadius: '6px',
-                                  border: '1px solid var(--border)',
-                                  cursor: 'pointer',
-                                  objectFit: 'contain',
-                                  background: '#fff',
-                                  display: 'block'
-                                }}
-                                title="Clic para ampliar y rotar"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                }
-
-                if (/^https?:\/\//i.test(evaluatingSubmission.content)) {
-                  return (
-                    <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px dashed var(--border)' }}>
-                      <a href={evaluatingSubmission.content} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
-                        <ExternalLink size={15} /> Abrir documento entregado
-                      </a>
-                    </div>
-                  );
-                }
-
-                return (
-                  <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px dashed var(--border)' }}>
-                    <p style={{ margin: 0, color: 'var(--text-main)', fontSize: '0.88rem', whiteSpace: 'pre-wrap' }}>
-                      {evaluatingSubmission.content}
-                    </p>
-                  </div>
-                );
-              })()}
-            </div>
-
-            <form onSubmit={handleSaveGrade} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              {!isAutocorrectedExam && <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-main)' }}>
-                  Calificación Numérica (0 - 10)
-                </label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <input
-                    type="number"
-                    min="0"
-                    max="10"
-                    step="0.1"
-                    required
-                    placeholder="Ej. 8.5"
-                    value={gradeInput}
-                    onChange={e => setGradeInput(e.target.value)}
-                    style={{
-                      width: '120px',
-                      padding: '0.75rem',
-                      borderRadius: '8px',
-                      border: '1px solid var(--border)',
-                      background: 'var(--surface-alt)',
-                      color: 'var(--text-main)',
-                      fontSize: '1.2rem',
-                      fontWeight: 'bold',
-                      textAlign: 'center',
-                      outline: 'none'
-                    }}
-                    autoFocus
-                  />
-                  <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                    {[5, 7, 8, 9, 10].map(qGrade => (
-                      <button
-                        key={qGrade}
-                        type="button"
-                        onClick={() => setGradeInput(String(qGrade))}
-                        style={{
-                          padding: '0.4rem 0.65rem',
-                          borderRadius: '6px',
-                          border: '1px solid var(--border)',
-                          background: gradeInput === String(qGrade) ? 'var(--primary)' : 'var(--surface)',
-                          color: gradeInput === String(qGrade) ? '#ffffff' : 'var(--text-main)',
-                          cursor: 'pointer',
-                          fontSize: '0.82rem',
-                          fontWeight: 600
-                        }}
-                      >
-                        {qGrade}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>}
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-main)' }}>
-                  Observaciones y Feedback (Visible para el alumno)
-                </label>
-                <textarea
-                  rows={4}
-                  placeholder="Escribe comentarios formativos, correcciones de gramática, vocabulario o pronunciación..."
-                  value={feedbackInput}
-                  onChange={e => setFeedbackInput(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem 1rem',
-                    borderRadius: '8px',
-                    border: '1px solid var(--border)',
-                    background: 'var(--surface-alt)',
-                    color: 'var(--text-main)',
-                    fontSize: '0.9rem',
-                    resize: 'vertical',
-                    outline: 'none',
-                    lineHeight: '1.45'
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
-                <button
-                  type="button"
-                  onClick={() => setEvaluatingSubmission(null)}
-                  disabled={isSavingGrade}
-                  style={{
-                    padding: '0.75rem 1.25rem',
-                    borderRadius: '8px',
-                    border: '1px solid var(--border)',
-                    background: 'transparent',
-                    color: 'var(--text-main)',
-                    cursor: 'pointer',
-                    fontWeight: 600
-                  }}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSavingGrade}
-                  className="btn-primary"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    padding: '0.75rem 1.5rem'
-                  }}
-                >
-                  <CheckCircle2 size={16} />
-                  {isSavingGrade ? 'Guardando...' : 'Guardar Calificación'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      , document.body
-      )}
-
-      {/* =========================================================================
-          MODAL DE REVISIÓN DE EXAMEN TIPO TEST
-         ========================================================================= */}
-      {reviewingExam && createPortal(
-        <ExamReviewModal
-          title={reviewingExam.title}
-          questions={reviewingExam.questions}
-          answers={reviewingExam.answers}
-          score={reviewingExam.score}
-          total={reviewingExam.total}
-          audioMode="backend-proxy"
-          feedback={reviewingExam.feedback}
-          questionScores={reviewingExam.questionScores}
-          onSaveFeedback={handleSaveExamFeedback}
-          onSaveGradeAndFeedback={handleSaveExamGradeAndFeedback}
-          onClose={() => setReviewingExam(null)}
-        />
-      , document.body
-      )}
-
-      {/* =========================================================================
-          MODAL DE EVALUACIÓN FINAL POR COMPETENCIAS
-         ========================================================================= */}
-      {isEvaluationModalOpen && activeDossierStudent && createPortal(
-        <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
-          <div className="glass-panel modal-card" style={{ width: '100%', maxWidth: '760px', maxHeight: '90vh', overflowY: 'auto', padding: '2rem', background: 'var(--surface)', position: 'relative' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
-              <div>
-                <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 700, textTransform: 'uppercase' }}>
-                  EVALUACIÓN DOCENTE
-                </span>
-                <h3 style={{ margin: '0.2rem 0 0', fontSize: '1.2rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <Award style={{ color: 'var(--primary)' }} /> Evaluación Final / Competencias
-                </h3>
-                <p style={{ margin: '0.2rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                  {activeDossierStudent.fullName}
-                </p>
-              </div>
-              <button type="button" onClick={() => setIsEvaluationModalOpen(false)} className="modal-close" aria-label="Cerrar modal">
-                <X size={20} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveEvaluation} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {activeDossierStudent.modality !== 'ONLINE' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                  {([
-                    ['middle', 'MIDDLE TERM (35%)'],
-                    ['final', 'FINAL TERM (35%)']
-                  ] as const).map(([exam, label]) => {
-                    const skillFields = [
-                      [`${exam}Grammar`, 'Grammar and Vocabulary'],
-                      [`${exam}Reading`, 'Reading'],
-                      [`${exam}Speaking`, 'Speaking'],
-                      [`${exam}Listening`, 'Listening'],
-                      [`${exam}Writing`, 'Writing']
-                    ] as const;
-                    const enteredGrades = skillFields
-                      .map(([field]) => evaluationForm[field].trim())
-                      .filter((value) => value !== '')
-                      .map(Number)
-                      .filter((grade) => Number.isFinite(grade) && grade >= 0 && grade <= 10);
-                    const average = enteredGrades.length > 0 ? (enteredGrades.reduce((sum, grade) => sum + grade, 0) / enteredGrades.length).toFixed(1) : null;
-
-                    return (
-                      <div key={exam} style={{ border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)', overflow: 'hidden' }}>
-                        <button type="button" onClick={() => setExpandedExamSections((current) => ({ ...current, [exam]: !current[exam] }))} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', padding: '0.85rem 1rem', border: 'none', background: 'transparent', color: 'var(--text-main)', cursor: 'pointer', textAlign: 'left' }}>
-                          <span style={{ fontSize: '0.88rem', fontWeight: 700 }}>{label}</span>
-                          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--primary-text)' }}>{average ? `Media: ${average} / 10` : 'Añadir destrezas'}</span>
-                        </button>
-                        {expandedExamSections[exam] && (
-                          <div style={{ padding: '0 1rem 1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '0.75rem' }}>
-                            {skillFields.map(([field, skill]) => (
-                              <label key={field} style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)' }}>
-                                {skill}
-                                <input type="number" step="0.1" min="0" max="10" value={evaluationForm[field]} onChange={e => setEvaluationForm({ ...evaluationForm, [field]: e.target.value })} placeholder="Sin calificar" style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', outline: 'none' }} />
-                              </label>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              {activeDossierStudent.modality === 'ONLINE' && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.3rem' }}>
-                    Grammar
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="10"
-                    value={evaluationForm.grammar}
-                    onChange={e => setEvaluationForm({ ...evaluationForm, grammar: e.target.value })}
-                    placeholder="0 - 10"
-                    style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', outline: 'none' }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.3rem' }}>
-                    Reading
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="10"
-                    value={evaluationForm.reading}
-                    onChange={e => setEvaluationForm({ ...evaluationForm, reading: e.target.value })}
-                    placeholder="0 - 10"
-                    style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', outline: 'none' }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.3rem' }}>
-                    Writing
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="10"
-                    value={evaluationForm.writing}
-                    onChange={e => setEvaluationForm({ ...evaluationForm, writing: e.target.value })}
-                    placeholder="0 - 10"
-                    style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', outline: 'none' }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.3rem' }}>
-                    Listening
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="10"
-                    value={evaluationForm.listening}
-                    onChange={e => setEvaluationForm({ ...evaluationForm, listening: e.target.value })}
-                    placeholder="0 - 10"
-                    style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', outline: 'none' }}
-                  />
-                </div>
-
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.3rem' }}>
-                    Speaking
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="10"
-                    value={evaluationForm.speaking}
-                    onChange={e => setEvaluationForm({ ...evaluationForm, speaking: e.target.value })}
-                    placeholder="0 - 10"
-                    style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', outline: 'none' }}
-                  />
-                </div>
-              </div>}
-
-              {activeDossierStudent.modality === 'ONLINE' ? <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
-                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--primary)' }}>
-                    Nota Global
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const vals = [
-                        evaluationForm.grammar,
-                        evaluationForm.reading,
-                        evaluationForm.writing,
-                        evaluationForm.listening,
-                        evaluationForm.speaking
-                      ]
-                        .map(Number)
-                        .filter(n => !isNaN(n) && n > 0);
-                      if (vals.length > 0) {
-                        const avg = (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
-                        setEvaluationForm({ ...evaluationForm, overallGrade: avg });
-                      }
-                    }}
-                    style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }}
-                  >
-                    ⚡ Calcular Media Automática
-                  </button>
-                </div>
-                <input
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="10"
-                  value={evaluationForm.overallGrade}
-                  onChange={e => setEvaluationForm({ ...evaluationForm, overallGrade: e.target.value })}
-                  placeholder="Ej. 8.5"
-                  style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--primary-border)', background: 'var(--primary-light)', fontWeight: 700, color: 'var(--primary-text)', outline: 'none' }}
-                />
-              </div> : (
-                <div style={{ padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid var(--primary-border)', background: 'var(--primary-light)' }}>
-                  <span style={{ display: 'block', fontSize: '0.78rem', color: 'var(--primary-text)', fontWeight: 700 }}>MEDIA DE TAREAS (30%)</span>
-                  <strong style={{ display: 'block', marginTop: '0.2rem', fontSize: '1.15rem', color: 'var(--primary-text)' }}>
-                    {typeof currentEvaluation?.tasksAverage === 'number' ? `${currentEvaluation.tasksAverage.toFixed(1)} / 10` : '- / 10'}
-                  </strong>
-                  <small style={{ display: 'block', marginTop: '0.15rem', color: 'var(--primary-text)' }}>Calculada automáticamente a partir de las tareas del trimestre</small>
-                </div>
-              )}
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.3rem' }}>
-                  Observaciones y Feedback del Profesor
-                </label>
-                <textarea
-                  rows={3}
-                  value={evaluationForm.observations}
-                  onChange={e => setEvaluationForm({ ...evaluationForm, observations: e.target.value })}
-                  placeholder="Comentarios sobre la evolución, recomendaciones de estudio..."
-                  style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', outline: 'none', resize: 'vertical' }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
-                <button type="button" onClick={() => setIsEvaluationModalOpen(false)} style={{ padding: '0.55rem 1rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', fontWeight: 600 }}>
-                  Cancelar
-                </button>
-                <button type="submit" disabled={isSavingEvaluation} className="btn-primary" style={{ padding: '0.55rem 1.25rem' }}>
-                  {isSavingEvaluation ? 'Guardando...' : 'Guardar Evaluación Final'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      , document.body
-      )}
-
-      {/* Visor Online de Archivos Adjuntos (Fotos de exámenes y PDFs) */}
-      <AttachmentViewerModal
-        attachment={viewingAttachment}
-        onClose={() => setViewingAttachment(null)}
-      />
     </div>
   );
 };

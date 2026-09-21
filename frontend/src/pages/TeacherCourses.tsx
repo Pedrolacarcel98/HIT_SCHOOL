@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, CheckCircle2, Clock, Copy, GraduationCap, Laptop, LayoutGrid, List, MoreVertical, Pencil, Plus, Trash2, Users, X } from 'lucide-react';
+import { BookOpen, CheckCircle2, Clock, Copy, Laptop, LayoutGrid, List, MoreVertical, Pencil, Plus, Search, Trash2, Users, X } from 'lucide-react';
+import CustomSelect from '../components/CustomSelect';
+import ModalityBadge from '../components/ModalityBadge';
 
 interface Course {
   id: string;
@@ -27,6 +29,7 @@ const TeacherCourses: React.FC = () => {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [courseError, setCourseError] = useState('');
   const [modalityFilter, setModalityFilter] = useState<'ALL' | 'PRESENCIAL' | 'ONLINE'>('ALL');
+  const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>(() => {
     return (localStorage.getItem('hit_courses_view_mode') as 'grid' | 'table') || 'grid';
   });
@@ -157,6 +160,8 @@ const TeacherCourses: React.FC = () => {
 
   const filteredCourses = courses.filter(c => {
     const modality = c.modality || 'PRESENCIAL';
+    const matchesSearch = c.title.toLowerCase().includes(searchTerm.trim().toLowerCase());
+    if (!matchesSearch) return false;
     if (modalityFilter === 'PRESENCIAL') return modality === 'PRESENCIAL';
     if (modalityFilter === 'ONLINE') return modality === 'ONLINE' || modality === 'HIBRIDO';
     return true;
@@ -170,38 +175,43 @@ const TeacherCourses: React.FC = () => {
         </div>
       </header>
 
-      {/* Selector de Modalidad Presencial vs Online */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          {([
-            ['ALL', 'Todas las clases', null],
-            ['PRESENCIAL', 'Presencial (Academia)', <GraduationCap size={15} />],
-            ['ONLINE', 'Online / Particulares', <Laptop size={15} />]
-          ] as const).map(([val, label, icon]) => (
+      <div className="filters-panel">
+        <div className="filters-panel__search">
+          <Search size={17} />
+          <input
+            type="search"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Buscar clase por nombre..."
+            aria-label="Buscar clase por nombre"
+          />
+          {searchTerm && (
             <button
-              key={val}
               type="button"
-              onClick={() => setModalityFilter(val)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                padding: '0.5rem 0.95rem',
-                borderRadius: '16px',
-                border: modalityFilter === val ? '1px solid var(--primary)' : '1px solid var(--border)',
-                background: modalityFilter === val ? 'var(--primary-light)' : 'var(--surface)',
-                color: modalityFilter === val ? 'var(--primary-text)' : 'var(--text-muted)',
-                fontWeight: modalityFilter === val ? 700 : 500,
-                fontSize: '0.85rem',
-                cursor: 'pointer'
-              }}
+              className="course-search-clear"
+              onClick={() => setSearchTerm('')}
+              aria-label="Limpiar búsqueda"
             >
-              {icon}
-              {label}
+              <X size={16} />
             </button>
-          ))}
+          )}
         </div>
 
+        <div className="filters-panel__selects">
+          <CustomSelect
+            value={modalityFilter}
+            onChange={setModalityFilter}
+            ariaLabel="Filtrar por modalidad"
+            options={[
+              { value: 'ALL', label: 'Todas las clases' },
+              { value: 'PRESENCIAL', label: 'Presencial (Academia)' },
+              { value: 'ONLINE', label: 'Online / Particulares' }
+            ]}
+          />
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
           {/* Conmutador de vista: Cuadrícula vs Tabla */}
           <div style={{ display: 'inline-flex', background: 'var(--surface-alt)', border: '1px solid var(--border)', borderRadius: '8px', padding: '3px', gap: '3px' }}>
@@ -314,21 +324,7 @@ const TeacherCourses: React.FC = () => {
                     </div>
                     <div style={{ minWidth: 0, flex: 1 }}>
                       <h3 style={{ margin: 0, color: 'var(--text)', fontSize: '1.15rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{course.title}</h3>
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.25rem',
-                        marginTop: '2px',
-                        fontSize: '0.72rem',
-                        fontWeight: 700,
-                        padding: '1px 7px',
-                        borderRadius: '10px',
-                        background: isOnline ? '#e0f2fe' : '#f3e8ff',
-                        color: isOnline ? '#0369a1' : '#7e22ce',
-                        border: `1px solid ${isOnline ? '#bae6fd' : '#d8b4fe'}`
-                      }}>
-                        {modality === 'HIBRIDO' ? 'Híbrido' : isOnline ? 'Online' : 'Presencial'}
-                      </span>
+                      <ModalityBadge modality={modality} className="course-card-modality" />
                     </div>
                     <div style={{ marginLeft: 'auto', position: 'relative' }} onClick={(event) => event.stopPropagation()}>
                       <button title="Acciones de la clase" aria-label="Acciones de la clase" onClick={() => setOpenMenuId(openMenuId === course.id ? null : course.id)} style={iconButtonStyle}><MoreVertical size={20} /></button>
@@ -454,19 +450,7 @@ const TeacherCourses: React.FC = () => {
 
                         {/* Modalidad */}
                         <td style={{ padding: '0.9rem 1rem' }}>
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                            padding: '2px 8px',
-                            borderRadius: '10px',
-                            background: isOnline ? '#e0f2fe' : '#f3e8ff',
-                            color: isOnline ? '#0369a1' : '#7e22ce',
-                            border: `1px solid ${isOnline ? '#bae6fd' : '#d8b4fe'}`
-                          }}>
-                            {modality === 'HIBRIDO' ? 'Híbrido' : isOnline ? 'Online' : 'Presencial'}
-                          </span>
+                          <ModalityBadge modality={modality} />
                         </td>
 
                         {/* Alumnos */}
@@ -573,7 +557,9 @@ const TeacherCourses: React.FC = () => {
           <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem' }}>
             <BookOpen size={40} style={{ color: 'var(--primary)', opacity: 0.5, marginBottom: '1rem' }} />
             <p style={{ color: 'var(--text-muted)', margin: 0 }}>
-              {modalityFilter === 'ALL' ? 'Aún no tienes ninguna clase creada. ¡Crea la primera para empezar!' : `No hay clases en la categoría ${modalityFilter === 'PRESENCIAL' ? 'Presencial' : 'Online'}.`}
+              {searchTerm.trim()
+                ? `No se encontraron clases que coincidan con "${searchTerm}".`
+                : (modalityFilter === 'ALL' ? 'Aún no tienes ninguna clase creada. ¡Crea la primera para empezar!' : `No hay clases en la categoría ${modalityFilter === 'PRESENCIAL' ? 'Presencial' : 'Online'}.`)}
             </p>
           </div>
         )

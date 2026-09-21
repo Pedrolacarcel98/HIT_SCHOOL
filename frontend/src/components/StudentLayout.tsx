@@ -12,7 +12,7 @@ const StudentLayout: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
   const { parentName, childrenList, selectedStudentId, setSelectedStudentId, refreshParentData } = useParent();
-  const { hasNewGrades, hasNewTasks, markGradesSeen, markTasksSeen } = useLearningNotifications(selectedStudentId);
+  const { hasNewGrades, hasNewTasks, markGradesSeen } = useLearningNotifications(selectedStudentId);
 
   const userRole = localStorage.getItem('userRole');
 
@@ -33,8 +33,7 @@ const StudentLayout: React.FC = () => {
 
   useEffect(() => {
     if (location.pathname === '/student/grades') markGradesSeen();
-    if (location.pathname === '/student/courses') markTasksSeen();
-  }, [location.pathname, markGradesSeen, markTasksSeen]);
+  }, [location.pathname, markGradesSeen]);
 
   useEffect(() => {
     const fetchUnreadChatCount = async () => {

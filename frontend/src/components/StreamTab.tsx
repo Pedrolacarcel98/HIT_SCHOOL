@@ -9,6 +9,7 @@ const StreamTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [mediaUrl, setMediaUrl] = useState('');
   const [mediaUrlType, setMediaUrlType] = useState<'image' | 'video'>('image');
+  const [showUrlInput, setShowUrlInput] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [postError, setPostError] = useState('');
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
@@ -58,6 +59,7 @@ const StreamTab: React.FC<{ courseId: string }> = ({ courseId }) => {
         setMediaPreview(null);
         setMediaUrl('');
         setMediaUrlType('image');
+        setShowUrlInput(false);
         fetchPosts();
       } else {
         const errorData = await res.json().catch(() => ({}));
@@ -95,6 +97,15 @@ const StreamTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     setMediaPreview(null);
   };
 
+  const toggleUrlInput = () => {
+    const next = !showUrlInput;
+    if (!next) {
+      setMediaUrl('');
+      setMediaUrlType('image');
+    }
+    setShowUrlInput(next);
+  };
+
   const handleDeletePost = async (postId: string) => {
     const confirmed = window.confirm('¿Seguro que quieres borrar este anuncio?');
     if (!confirmed) return;
@@ -122,53 +133,68 @@ const StreamTab: React.FC<{ courseId: string }> = ({ courseId }) => {
 
   return (
     <div className="animate-fade-in">
-      <div className="glass-panel" style={{ marginBottom: '2rem', padding: '1.5rem' }}>
-        <form onSubmit={handlePost} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-          <div style={{ flex: '1 1 240px', minWidth: 0 }}>
-            <textarea 
-              value={newPost}
-              onChange={(e) => setNewPost(e.target.value)}
-              placeholder="Anuncia algo a tu clase..."
-              style={{ width: '100%', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', resize: 'vertical', minHeight: '80px', fontFamily: 'inherit' }}
-            />
-            {postError && <p style={{ margin: '0.6rem 0 0', color: '#9e2a2b', fontSize: '0.84rem' }}>{postError}</p>}
-            {mediaPreview && mediaFile && (
-              <div style={{ position: 'relative', marginTop: '0.75rem', width: 'fit-content', maxWidth: '100%' }}>
-                {mediaFile.type.startsWith('image/') ? (
-                  <img src={mediaPreview} alt="Vista previa del adjunto" style={{ display: 'block', width: '180px', maxWidth: '100%', maxHeight: '130px', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--border)' }} />
-                ) : (
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem', borderRadius: '8px', background: 'var(--surface-alt)', border: '1px solid var(--border)', color: 'var(--text-main)' }}>
-                    <Video size={18} style={{ color: 'var(--primary)' }} /> {mediaFile.name}
-                  </div>
-                )}
-                <button type="button" onClick={removeMedia} title="Quitar archivo" aria-label="Quitar archivo" style={{ position: 'absolute', top: '-8px', right: '-8px', width: '24px', height: '24px', border: 'none', borderRadius: '50%', background: '#9e2a2b', color: '#fff', display: 'grid', placeItems: 'center', cursor: 'pointer' }}>
-                  <X size={14} />
-                </button>
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', marginTop: '0.75rem' }}>
-              <Link size={17} style={{ color: 'var(--primary)' }} />
+      <div className="glass-panel post-composer" style={{ marginBottom: '2rem' }}>
+        <form onSubmit={handlePost}>
+          <textarea
+            value={newPost}
+            onChange={(e) => setNewPost(e.target.value)}
+            placeholder="Anuncia algo a tu clase..."
+            className="composer-textarea"
+          />
+          {postError && <p style={{ margin: '0.6rem 0 0', color: '#9e2a2b', fontSize: '0.84rem' }}>{postError}</p>}
+
+          {mediaPreview && mediaFile && (
+            <div style={{ position: 'relative', marginTop: '0.75rem', width: 'fit-content', maxWidth: '100%' }}>
+              {mediaFile.type.startsWith('image/') ? (
+                <img src={mediaPreview} alt="Vista previa del adjunto" style={{ display: 'block', width: '180px', maxWidth: '100%', maxHeight: '130px', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--border)' }} />
+              ) : (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem', borderRadius: '8px', background: 'var(--surface-alt)', border: '1px solid var(--border)', color: 'var(--text-main)' }}>
+                  <Video size={18} style={{ color: 'var(--primary)' }} /> {mediaFile.name}
+                </div>
+              )}
+              <button type="button" onClick={removeMedia} title="Quitar archivo" aria-label="Quitar archivo" style={{ position: 'absolute', top: '-8px', right: '-8px', width: '24px', height: '24px', border: 'none', borderRadius: '50%', background: '#9e2a2b', color: '#fff', display: 'grid', placeItems: 'center', cursor: 'pointer' }}>
+                <X size={14} />
+              </button>
+            </div>
+          )}
+
+          {showUrlInput && (
+            <div className="composer-url-panel">
               <input
                 type="url"
                 value={mediaUrl}
                 onChange={(event) => setMediaUrl(event.target.value)}
                 placeholder="URL de imagen o vídeo de Google Drive"
                 aria-label="URL de imagen o vídeo de Google Drive"
-                style={{ flex: '1 1 260px', minWidth: 0, padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
+                autoFocus
               />
-              <select value={mediaUrlType} onChange={(event) => setMediaUrlType(event.target.value as 'image' | 'video')} aria-label="Tipo de recurso de Google Drive" style={{ padding: '0.6rem 0.65rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}>
-                <option value="image">Imagen</option>
-                <option value="video">Vídeo</option>
-              </select>
+              <div className="composer-type-toggle" role="group" aria-label="Tipo de recurso de Google Drive">
+                <button type="button" className={mediaUrlType === 'image' ? 'is-active' : ''} aria-pressed={mediaUrlType === 'image'} onClick={() => setMediaUrlType('image')}>Imagen</button>
+                <button type="button" className={mediaUrlType === 'video' ? 'is-active' : ''} aria-pressed={mediaUrlType === 'video'} onClick={() => setMediaUrlType('video')}>Vídeo</button>
+              </div>
             </div>
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <label title="Adjuntar imagen o vídeo" aria-label="Adjuntar imagen o vídeo" style={{ width: '42px', height: '42px', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)', color: 'var(--primary)', display: 'grid', placeItems: 'center', cursor: 'pointer' }}>
-              <ImagePlus size={19} />
-              <input type="file" accept="image/*,video/*" onChange={handleMediaChange} style={{ display: 'none' }} />
-            </label>
-            <button type="submit" disabled={isPublishing} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', height: '42px' }}>
-              <Send size={18} /> {isPublishing ? 'Publicando...' : 'Publicar'}
+          )}
+
+          <div className="composer-toolbar">
+            <div className="composer-actions">
+              <button
+                type="button"
+                onClick={toggleUrlInput}
+                className={`composer-icon-btn ${showUrlInput ? 'is-active' : ''}`}
+                title="Insertar URL de Google Drive"
+                aria-label="Insertar URL de Google Drive"
+                aria-pressed={showUrlInput}
+              >
+                <Link size={19} />
+              </button>
+              <label className="composer-icon-btn" title="Adjuntar imagen o vídeo" aria-label="Adjuntar imagen o vídeo">
+                <ImagePlus size={19} />
+                <input type="file" accept="image/*,video/*" onChange={handleMediaChange} style={{ display: 'none' }} />
+              </label>
+            </div>
+
+            <button type="submit" disabled={isPublishing} className="btn-primary composer-publish-btn">
+              <Send size={17} /> {isPublishing ? 'Publicando...' : 'Publicar'}
             </button>
           </div>
         </form>

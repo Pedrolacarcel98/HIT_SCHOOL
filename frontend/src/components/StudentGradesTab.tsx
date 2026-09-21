@@ -10,6 +10,7 @@ import {
 import TaskDeliveryReviewModal, { type TaskForReview } from './TaskDeliveryReviewModal';
 import StudentCompetencyGrades from './StudentCompetencyGrades';
 import { generateReportCardPDF, type ReportCardData, type ReportCardTaskItem } from '../utils/reportCard';
+import { getCategoryLabel } from '../utils/skillCategories';
 import { useParent } from '../context/ParentContext';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -162,7 +163,7 @@ const StudentGradesTab: React.FC<{ courseId: string; courseTitle?: string }> = (
             <button
               type="button"
               onClick={handleDownloadReportCard}
-              className="btn-secondary"
+              className="btn-secondary report-card-btn"
               style={{
                 padding: '0.45rem 0.9rem',
                 fontSize: '0.85rem',
@@ -187,7 +188,7 @@ const StudentGradesTab: React.FC<{ courseId: string; courseTitle?: string }> = (
         />}
 
         {!isOnline && currentTermInfo && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '0.65rem', marginTop: '1rem' }}>
+          <div className="grades-summary-grid">
             {[
               ['MIDDLE TERM', currentTermInfo.middleExamGrade, 'Examen parcial (35%)'],
               ['FINAL TERM', currentTermInfo.finalExamGrade, 'Examen final (35%)'],
@@ -256,7 +257,7 @@ const StudentGradesTab: React.FC<{ courseId: string; courseTitle?: string }> = (
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
                         <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 7px', borderRadius: '5px', background: 'var(--primary-light)', color: 'var(--primary)' }}>
-                          {task.category || 'GENERAL'}
+                          {getCategoryLabel(task.category)}
                         </span>
                         {task.dueDate && (
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>

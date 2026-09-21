@@ -409,7 +409,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
     <div>
       {/* Barra Superior de Acciones de Clase */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '2rem' }}>
-        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <div className="classwork-actions">
           <button
             onClick={() => openCreateTask()}
             className="btn-primary"
@@ -434,7 +434,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
               cursor: 'pointer'
             }}
           >
-            <BookmarkPlus size={18} /> + Asignar desde Plantilla
+            <BookmarkPlus size={18} /> Asignar desde Plantilla
           </button>
         </div>
 
@@ -475,33 +475,23 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                 tabIndex={0}
                 aria-expanded={isExpanded}
                 onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleTopic(group.id); } }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '0.75rem',
-                  cursor: 'pointer',
-                  userSelect: 'none'
-                }}
+                className="category-header"
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <h3 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    {group.label}
-                  </h3>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '0.2rem 0.6rem', borderRadius: '12px', background: group.tasks.length > 0 ? 'var(--primary-light)' : 'var(--surface-alt)', color: group.tasks.length > 0 ? 'var(--primary-text)' : 'var(--text-muted)' }}>
+                <h3 className="category-title">{group.label}</h3>
+
+                <div className="category-meta">
+                  <span className={`category-count ${group.tasks.length > 0 ? 'has-tasks' : 'is-empty'}`}>
                     {group.tasks.length} {group.tasks.length === 1 ? 'tarea' : 'tareas'}
                   </span>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); openCreateTask(group.id); }}
-                    className="btn-secondary"
-                    style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                    className="btn-secondary category-add-btn"
                     title={`Añadir tarea a ${group.label}`}
+                    aria-label={`Añadir tarea a ${group.label}`}
                   >
-                    <Plus size={14} /> Añadir
+                    <Plus size={16} strokeWidth={2.5} />
+                    <span className="category-add-label">Añadir</span>
                   </button>
                   <button
                     type="button"
@@ -551,6 +541,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                           key={task.id}
                           task={taskItem}
                           mode="TEACHER"
+                          hideCategory
                           onEditTask={openEditTask}
                           onDuplicateTask={handleDuplicateTask}
                           onSaveAsTemplate={handleSaveAsTemplate}

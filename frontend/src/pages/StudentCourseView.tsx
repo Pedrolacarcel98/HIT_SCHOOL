@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, MessageSquare, BookOpen, CheckCircle2, Award, Users } from 'lucide-react';
 import StudentStreamTab from '../components/StudentStreamTab';
@@ -6,7 +6,6 @@ import StudentClassworkTab from '../components/StudentClassworkTab';
 import StudentGradesTab from '../components/StudentGradesTab';
 import StudentPeopleTab from '../components/StudentPeopleTab';
 import { useParent } from '../context/ParentContext';
-import { useLearningNotifications } from '../hooks/useLearningNotifications';
 
 type CourseTab = 'stream' | 'classwork' | 'completed' | 'grades' | 'people';
 
@@ -15,9 +14,19 @@ const StudentCourseView: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { selectedStudentId } = useParent();
-  const { markCourseTasksSeen } = useLearningNotifications(selectedStudentId);
 
-  const validTabs: CourseTab[] = ['stream', 'classwork', 'completed', 'grades', 'people'];
+  const userRole = (localStorage.getItem('userRole') || '').toUpperCase();
+  const canViewPeople = userRole === 'TEACHER' || userRole === 'ADMIN';
+
+  const courseTabs = useMemo<{ id: CourseTab; label: string; icon: React.ReactNode }[]>(() => [
+    { id: 'stream', label: 'Tablón', icon: <MessageSquare size={18} /> },
+    { id: 'classwork', label: 'Tareas de clase', icon: <BookOpen size={18} /> },
+    { id: 'completed', label: 'Tareas completadas', icon: <CheckCircle2 size={18} /> },
+    { id: 'grades', label: 'Mis Calificaciones', icon: <Award size={18} /> },
+    ...(canViewPeople ? [{ id: 'people' as CourseTab, label: 'Compañeros', icon: <Users size={18} /> }] : [])
+  ], [canViewPeople]);
+
+  const validTabs: CourseTab[] = useMemo(() => courseTabs.map(tab => tab.id), [courseTabs]);
   const paramTab = searchParams.get('tab') as CourseTab | null;
   const savedTab = id ? sessionStorage.getItem(`hit_student_course_tab_${id}`) as CourseTab | null : null;
   const initialTab: CourseTab = 
@@ -50,6 +59,13 @@ const StudentCourseView: React.FC = () => {
     }
   }, [paramTab]);
 
+  // La pestaña pudo quedar persistida en sessionStorage antes de restringirla por rol
+  useEffect(() => {
+    if (!validTabs.includes(activeTab)) {
+      setActiveTab('stream');
+    }
+  }, [activeTab, validTabs]);
+
   useEffect(() => {
     const fetchCourseDetails = async () => {
       try {
@@ -70,10 +86,6 @@ const StudentCourseView: React.FC = () => {
     };
     fetchCourseDetails();
   }, [id, selectedStudentId]);
-
-  useEffect(() => {
-    if (id) markCourseTasksSeen(id);
-  }, [id, markCourseTasksSeen]);
 
   if (!course) {
     return (
@@ -104,11 +116,15 @@ const StudentCourseView: React.FC = () => {
 
         {/* Pestañas */}
         <div className="scrollable-tabs" style={{ padding: '0 1.5rem', height: '48px', alignItems: 'center', gap: '1.5rem' }}>
-          <TabButton active={activeTab === 'stream'} onClick={() => setActiveTab('stream')} icon={<MessageSquare size={18}/>} label="Tablón" />
-          <TabButton active={activeTab === 'classwork'} onClick={() => setActiveTab('classwork')} icon={<BookOpen size={18}/>} label="Tareas de clase" />
-          <TabButton active={activeTab === 'completed'} onClick={() => setActiveTab('completed')} icon={<CheckCircle2 size={18}/>} label="Tareas completadas" />
-          <TabButton active={activeTab === 'grades'} onClick={() => setActiveTab('grades')} icon={<Award size={18}/>} label="Mis Calificaciones" />
-          <TabButton active={activeTab === 'people'} onClick={() => setActiveTab('people')} icon={<Users size={18}/>} label="Compañeros" />
+          {courseTabs.map(tab => (
+            <TabButton
+              key={tab.id}
+              active={activeTab === tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              icon={tab.icon}
+              label={tab.label}
+            />
+          ))}
         </div>
       </nav>
 
@@ -118,7 +134,7 @@ const StudentCourseView: React.FC = () => {
         {activeTab === 'classwork' && <StudentClassworkTab courseId={id!} viewMode="PENDING" />}
         {activeTab === 'completed' && <StudentClassworkTab courseId={id!} viewMode="COMPLETED" />}
         {activeTab === 'grades' && <StudentGradesTab courseId={id!} />}
-        {activeTab === 'people' && <StudentPeopleTab courseId={id!} />}
+        {activeTab === 'people' && canViewPeople && <StudentPeopleTab courseId={id!} />}
       </main>
     </div>
   );

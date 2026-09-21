@@ -235,8 +235,6 @@ const DashboardStudent: React.FC = () => {
     );
   }
 
-  // Si es estudiante, tomamos su nombre del primer registro
-  const singleStudent = dashboardData[0]?.student;
   const totalPendingAssignments = dashboardData.reduce((acc, curr) => acc + curr.assignments.pendingCount, 0);
   const greeting = getTimeGreeting(accountName);
 

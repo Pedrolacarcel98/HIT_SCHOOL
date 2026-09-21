@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { CheckCircle2, Clock3, FileText, XCircle, CalendarDays } from 'lucide-react';
+import { CheckCircle2, FileText, XCircle, CalendarDays } from 'lucide-react';
 import { useParent } from '../context/ParentContext';
 import { generateInvoicePDF, generateStatementPDF } from '../utils/invoice';
 import { getPaymentVisualStatus } from '../utils/paymentStatus';
@@ -254,8 +254,8 @@ const StudentPayments: React.FC = () => {
           </h1>
         </div>
         {groupedPayments.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+          <div className="payments-toolbar">
+            <div className="payments-year-field">
               <label htmlFor="student-statement-year" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>
                 Año:
               </label>
@@ -285,6 +285,7 @@ const StudentPayments: React.FC = () => {
 
             <button
               onClick={() => handleDownloadStatement(statementYear)}
+              className="payments-statement-btn"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -321,12 +322,12 @@ const StudentPayments: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
           {displayedGroups.map((group) => (
             <div key={group.enrollment.id} className="glass-panel" style={{ padding: '1.5rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
-                <CalendarDays size={20} style={{ color: 'var(--primary)' }} />
-                <h2 style={{ margin: 0, fontSize: '1.3rem', color: 'var(--text-main)' }}>
+              <div className="enrollment-period-header">
+                <CalendarDays size={20} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                <h2 className="enrollment-period-title">
                   Periodo de Matrícula: {new Date(group.enrollment.startDate).toLocaleDateString()} {group.enrollment.endDate ? `- ${new Date(group.enrollment.endDate).toLocaleDateString()}` : '(Activa)'}
                 </h2>
-                <span style={{ marginLeft: 'auto', background: '#fef9c3', border: '1px solid #fde68a', color: '#854d0e', padding: '0.25rem 0.75rem', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 600 }}>
+                <span className="enrollment-period-fee" style={{ background: '#fef9c3', border: '1px solid #fde68a', color: '#854d0e', padding: '0.25rem 0.75rem', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 600 }}>
                   {group.enrollment.monthlyFee} € / mes
                 </span>
               </div>
@@ -345,44 +346,47 @@ const StudentPayments: React.FC = () => {
                         padding: '1.25rem'
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.9rem' }}>
-                        <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-main)' }}>{payment.label}</h3>
-                        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
-                          <Clock3 size={14} /> Actualizado automáticamente
-                        </span>
-                      </div>
+                      {(() => {
+                        const visualStatus = payment.data
+                          ? getPaymentVisualStatus(payment.data.isPaid, payment.month, payment.year)
+                          : null;
+                        const isPaid = visualStatus === 'PAID';
+                        const badge = visualStatus === 'PAID'
+                          ? { label: 'Pagado', icon: <CheckCircle2 size={16} />, color: '#047857', background: '#d1fae5' }
+                          : visualStatus === 'OVERDUE'
+                            ? { label: 'Impago', icon: <XCircle size={16} />, color: '#b91c1c', background: '#fee2e2' }
+                            : { label: 'Pendiente', icon: <XCircle size={16} />, color: '#b45309', background: '#fef3c7' };
 
-                      {payment.data && (
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            gap: '1rem',
-                            flexWrap: 'wrap'
-                          }}
-                        >
-                          <div>
-                            <p style={{ margin: '0.45rem 0 0', color: 'var(--text-main)', fontSize: '0.95rem', fontWeight: 600 }}>
-                              {payment.data.amount ? `${payment.data.amount} €` : 'Importe no disponible'}
-                            </p>
-                          </div>
+                        return (
+                          <>
+                            <div className="payment-card-header">
+                              <div style={{ minWidth: 0 }}>
+                                <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-main)' }}>{payment.label}</h3>
+                              </div>
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                            {(() => {
-                              const visualStatus = getPaymentVisualStatus(payment.data.isPaid, payment.month, payment.year);
-                              const isPaid = visualStatus === 'PAID';
-                              return (
+                              {visualStatus && (
+                                <span className="payment-status-badge" style={{ color: badge.color, background: badge.background }}>
+                                  {badge.icon} {badge.label}
+                                </span>
+                              )}
+                            </div>
+
+                            {payment.data && (
+                              <div className="payment-card-footer">
+                                <span className="payment-card-amount">
+                                  {payment.data.amount ? `${payment.data.amount} €` : 'Importe no disponible'}
+                                </span>
+
                                 <button
                                   type="button"
                                   disabled={!isPaid}
                                   onClick={() => isPaid && handleDownloadInvoice(payment)}
-                                  className="btn-secondary"
+                                  className="btn-secondary payment-invoice-btn"
                                   style={{
                                     display: 'inline-flex',
                                     alignItems: 'center',
                                     gap: '0.45rem',
-                                    padding: '0.45rem 0.85rem',
+                                    padding: '0.5rem 0.9rem',
                                     fontSize: '0.85rem',
                                     borderRadius: '8px',
                                     opacity: isPaid ? 1 : 0.5,
@@ -392,28 +396,11 @@ const StudentPayments: React.FC = () => {
                                 >
                                   <FileText size={16} /> Factura PDF
                                 </button>
-                              );
-                            })()}
-
-                            {getPaymentVisualStatus(payment.data!.isPaid, payment.month, payment.year) === 'PAID' ? (
-                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#047857', background: '#d1fae5', padding: '0.4rem 0.85rem', borderRadius: '20px', fontWeight: 700 }}>
-                                <CheckCircle2 size={18} />
-                                Pagado
-                              </div>
-                            ) : getPaymentVisualStatus(payment.data!.isPaid, payment.month, payment.year) === 'OVERDUE' ? (
-                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#b91c1c', background: '#fee2e2', padding: '0.4rem 0.85rem', borderRadius: '20px', fontWeight: 700 }}>
-                                <XCircle size={18} />
-                                Impago
-                              </div>
-                            ) : (
-                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#b45309', background: '#fef3c7', padding: '0.4rem 0.85rem', borderRadius: '20px', fontWeight: 700 }}>
-                                <XCircle size={18} />
-                                Pendiente
                               </div>
                             )}
-                          </div>
-                        </div>
-                      )}
+                          </>
+                        );
+                      })()}
                     </div>
                   ))}
                 </div>

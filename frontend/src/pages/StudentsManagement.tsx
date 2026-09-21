@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import CustomSelect from '../components/CustomSelect';
+import ModalityBadge from '../components/ModalityBadge';
 import {
   UserPlus,
   Search,
@@ -12,8 +14,6 @@ import {
   X,
   AlertTriangle,
   Users,
-  GraduationCap,
-  Laptop,
   Phone,
   Eye,
   UserCheck,
@@ -678,113 +678,57 @@ const StudentsManagement: React.FC = () => {
         </div>
       </div>
 
-      {/* Selector de Modalidad & Filtros & Buscador */}
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          {([
-            ['ALL', 'Todos los alumnos'],
-            ['ACTIVE', 'Alta'],
-            ['INACTIVE', 'Baja']
-          ] as const).map(([val, label]) => (
-            <button
-              key={val}
-              type="button"
-              onClick={() => setStatusFilter(val)}
-              style={{
-                padding: '0.45rem 0.85rem',
-                borderRadius: '16px',
-                border: statusFilter === val ? '1px solid var(--primary)' : '1px solid var(--border)',
-                background: statusFilter === val ? 'var(--primary-light)' : 'var(--surface)',
-                color: statusFilter === val ? 'var(--primary-text)' : 'var(--text-muted)',
-                fontWeight: statusFilter === val ? 700 : 500,
-                fontSize: '0.84rem',
-                cursor: 'pointer'
-              }}
-            >
-              {label}
-            </button>
-          ))}
-
-          <div style={{ width: '1px', height: '22px', background: 'var(--border)', margin: '0 0.25rem' }} />
-
-          {([
-            ['ALL', 'Todas las modalidades', null],
-            ['PRESENCIAL', 'Presencial', <GraduationCap size={15} />],
-            ['ONLINE', 'Online / Híbrido', <Laptop size={15} />]
-          ] as const).map(([val, label, icon]) => (
-            <button
-              key={val}
-              type="button"
-              onClick={() => setModalityFilter(val)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                padding: '0.45rem 0.85rem',
-                borderRadius: '16px',
-                border: modalityFilter === val ? '1px solid var(--primary)' : '1px solid var(--border)',
-                background: modalityFilter === val ? 'var(--primary-light)' : 'var(--surface)',
-                color: modalityFilter === val ? 'var(--primary-text)' : 'var(--text-muted)',
-                fontWeight: modalityFilter === val ? 700 : 500,
-                fontSize: '0.84rem',
-                cursor: 'pointer'
-              }}
-            >
-              {icon}
-              {label}
-            </button>
-          ))}
-
-          <div style={{ width: '1px', height: '22px', background: 'var(--border)', margin: '0 0.25rem' }} />
-
-          {([
-            ['ALL', 'Todas las cuentas'],
-            ['WITH_PARENT', 'Con Padre/Tutor 👨‍👧'],
-            ['INDEPENDENT', 'Independientes']
-          ] as const).map(([val, label]) => (
-            <button
-              key={val}
-              type="button"
-              onClick={() => setFamilyFilter(val)}
-              style={{
-                padding: '0.45rem 0.8rem',
-                borderRadius: '16px',
-                border: familyFilter === val ? '1px solid var(--text-main)' : '1px solid var(--border)',
-                background: familyFilter === val ? 'var(--surface-alt)' : 'transparent',
-                color: familyFilter === val ? 'var(--text-main)' : 'var(--text-muted)',
-                fontWeight: familyFilter === val ? 600 : 400,
-                fontSize: '0.82rem',
-                cursor: 'pointer'
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <div style={{ position: 'relative', flex: '1 1 240px', minWidth: 0, maxWidth: '380px' }}>
-          <Search size={17} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+      {/* Filtros & Buscador */}
+      <div className="filters-panel">
+        <div className="filters-panel__search">
+          <Search size={17} />
           <input
             type="text"
             placeholder="Buscar por nombre, DNI, teléfono, tutor..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '0.6rem 1rem 0.6rem 2.4rem',
-              borderRadius: '8px',
-              border: '1px solid var(--border)',
-              background: 'var(--surface-alt)',
-              color: 'var(--text-main)',
-              outline: 'none',
-              fontSize: '0.88rem'
-            }}
+            aria-label="Buscar alumnos"
+          />
+        </div>
+
+        <div className="filters-panel__selects">
+          <CustomSelect
+            value={statusFilter}
+            onChange={setStatusFilter}
+            ariaLabel="Filtrar por estado"
+            options={[
+              { value: 'ALL', label: 'Todos los estados' },
+              { value: 'ACTIVE', label: 'Alta' },
+              { value: 'INACTIVE', label: 'Baja' }
+            ]}
+          />
+
+          <CustomSelect
+            value={modalityFilter}
+            onChange={setModalityFilter}
+            ariaLabel="Filtrar por modalidad"
+            options={[
+              { value: 'ALL', label: 'Todas las modalidades' },
+              { value: 'PRESENCIAL', label: 'Presencial' },
+              { value: 'ONLINE', label: 'Online / Híbrido' }
+            ]}
+          />
+
+          <CustomSelect
+            value={familyFilter}
+            onChange={setFamilyFilter}
+            ariaLabel="Filtrar por tipo de cuenta"
+            options={[
+              { value: 'ALL', label: 'Todas las cuentas' },
+              { value: 'WITH_PARENT', label: 'Con Padre/Tutor' },
+              { value: 'INDEPENDENT', label: 'Independientes' }
+            ]}
           />
         </div>
       </div>
 
       {/* Students Table */}
-      <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
+      <div className="glass-panel students-table-panel" style={{ padding: 0, overflow: 'hidden' }}>
         <div className="table-responsive">
           <table style={{ width: '100%', minWidth: '820px', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
@@ -853,9 +797,7 @@ const StudentsManagement: React.FC = () => {
                                 <Phone size={12} /> {s.profile.phone}
                               </div>
                             )}
-                            <span style={{ display: 'inline-flex', alignItems: 'center', marginTop: '0.3rem', padding: '0.15rem 0.5rem', borderRadius: '999px', background: modality === 'PRESENCIAL' ? '#f3e8ff' : '#e0f2fe', color: modality === 'PRESENCIAL' ? '#7e22ce' : '#0369a1', border: `1px solid ${modality === 'PRESENCIAL' ? '#d8b4fe' : '#bae6fd'}`, fontSize: '0.7rem', fontWeight: 700 }}>
-                              {modality === 'PRESENCIAL' ? 'Presencial' : modality === 'HIBRIDO' ? 'Híbrido' : 'Online'}
-                            </span>
+                            <ModalityBadge modality={modality} className="student-card-modality" />
                           </div>
                         </div>
                       </td>
@@ -1021,6 +963,117 @@ const StudentsManagement: React.FC = () => {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Misma información en tarjetas: la tabla de 6 columnas no cabe bajo 768px */}
+      <div className="students-card-list">
+        {loading ? (
+          <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem 0' }}>Cargando alumnos y fichas...</p>
+        ) : filteredStudents.length === 0 ? (
+          <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem 0' }}>
+            {searchTerm ? 'No se encontraron alumnos con ese criterio.' : 'No hay alumnos registrados en el sistema.'}
+          </p>
+        ) : (
+          filteredStudents.map((s) => {
+            const initials = `${s.profile?.firstName?.[0] || ''}${s.profile?.lastName?.[0] || ''}`.toUpperCase() || 'AL';
+            const age = calculateAge(s.profile?.birthDate);
+            const modality = s.modality || 'PRESENCIAL';
+            const isActive = s.status === 'ACTIVE';
+            const activeEnrollment = s.academyEnrollments?.find(e => !e.endDate);
+            const hasUnpaid = s.paymentStatuses?.some(p => !p.isPaid);
+
+            return (
+              <div key={s.id} className="glass-panel students-card">
+                <div className="students-card__header">
+                  <div style={{ width: '38px', height: '38px', flexShrink: 0, borderRadius: '50%', background: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                    {initials}
+                  </div>
+
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div className="students-card__name">
+                      {s.profile?.firstName} {s.profile?.lastName}
+                      {age !== null && (
+                        <span style={{ marginLeft: '0.45rem', fontSize: '0.76rem', color: 'var(--text-muted)', fontWeight: 400 }}>({age} años)</span>
+                      )}
+                    </div>
+                    <div className="students-card__email">{s.email}</div>
+                    {s.profile?.phone && (
+                      <div style={{ color: 'var(--primary)', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '2px' }}>
+                        <Phone size={12} /> {s.profile.phone}
+                      </div>
+                    )}
+                    <ModalityBadge modality={modality} className="student-card-modality" />
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem', flexShrink: 0 }}>
+                    <span style={{ padding: '0.3rem 0.6rem', background: isActive ? '#dcfce7' : '#fee2e2', color: isActive ? '#166534' : '#991b1b', borderRadius: '16px', fontSize: '0.72rem', fontWeight: 600 }}>
+                      {isActive ? 'Alta' : 'Baja'}
+                    </span>
+                    {canManageStudents && (
+                      <button
+                        type="button"
+                        onClick={() => isActive ? handleBaja(s) : handleOpenAlta(s)}
+                        style={{ padding: '0.25rem 0.75rem', borderRadius: '999px', border: `1px solid ${isActive ? '#fecaca' : '#bbf7d0'}`, background: isActive ? '#fef2f2' : '#f0fdf4', color: isActive ? '#dc2626' : '#16a34a', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 500, whiteSpace: 'nowrap' }}
+                      >
+                        {isActive ? 'Dar de baja' : 'Dar de alta'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <dl className="students-card__data">
+                  <dt>DNI / NIE</dt>
+                  <dd>
+                    {s.profile?.dni
+                      ? <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{s.profile.dni}</span>
+                      : <span style={{ color: 'var(--text-light)', fontStyle: 'italic' }}>No asignado</span>}
+                  </dd>
+
+                  <dt>Cuenta / Tutor</dt>
+                  <dd>
+                    {s.parent
+                      ? <>👨‍👧 {s.parent.profile?.firstName} {s.parent.profile?.lastName} <span style={{ color: 'var(--text-muted)' }}>({s.parent.email})</span></>
+                      : <span style={{ color: 'var(--text-muted)' }}>Independiente</span>}
+                  </dd>
+
+                  <dt>Matrícula activa</dt>
+                  <dd>
+                    {activeEnrollment
+                      ? `Desde ${new Date(activeEnrollment.startDate || '').toLocaleDateString('es-ES')} · ${activeEnrollment.monthlyFee}€ / ${activeEnrollment.billingPeriod === 'QUARTERLY' ? 'trimestre' : 'mes'}`
+                      : <span style={{ color: 'var(--text-light)', fontStyle: 'italic' }}>Sin matrícula activa</span>}
+                  </dd>
+                </dl>
+
+                <div className="students-card__actions">
+                  {userRole === 'ADMIN' && hasUnpaid && !isActive && (
+                    <button
+                      type="button"
+                      onClick={() => downloadUnpaidPDF(s)}
+                      title="Descargar PDF de Impagos"
+                      aria-label="Descargar PDF de Impagos"
+                      className="is-unpaid"
+                    >
+                      <FileText size={16} />
+                    </button>
+                  )}
+                  <button onClick={() => setViewingStudent(s)} title="Ver ficha completa" aria-label="Ver ficha completa">
+                    <Eye size={16} />
+                  </button>
+                  {canManageStudents && (
+                    <>
+                      <button onClick={() => handleStartEdit(s)} title="Editar ficha de alumno" aria-label="Editar ficha de alumno">
+                        <Edit2 size={16} />
+                      </button>
+                      <button onClick={() => setDeletingStudent(s)} title="Eliminar alumno" aria-label="Eliminar alumno">
+                        <Trash2 size={16} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* Modal: Ver Ficha Completa del Alumno */}

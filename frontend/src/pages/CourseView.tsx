@@ -4,7 +4,7 @@ import { ArrowLeft, MessageSquare, BookOpen, Users, Copy, X, Award } from 'lucid
 import StreamTab from '../components/StreamTab';
 import ClassworkTab from '../components/ClassworkTab';
 import PeopleTab from '../components/PeopleTab';
-import GradesTab from '../components/GradesTab';
+import ClassGradesDetail from '../components/ClassGradesDetail';
 
 const CourseView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -45,7 +45,7 @@ const CourseView: React.FC = () => {
   };
 
   useEffect(() => {
-    if (paramTab && (paramTab === 'stream' || paramTab === 'classwork' || paramTab === 'people') && paramTab !== activeTab) {
+    if (paramTab && (paramTab === 'stream' || paramTab === 'classwork' || paramTab === 'people' || paramTab === 'grades') && paramTab !== activeTab) {
       setActiveTabState(paramTab);
     }
   }, [paramTab]);
@@ -164,11 +164,17 @@ const CourseView: React.FC = () => {
       </nav>
 
       {/* Contenido Principal */}
-      <div className="page-container" style={{ maxWidth: activeTab === 'grades' ? '1200px' : '1000px' }}>
+      <div className="page-container" style={{ maxWidth: activeTab === 'grades' ? '1440px' : '1000px', width: '100%' }}>
         {activeTab === 'stream' && <StreamTab courseId={id!} />}
         {activeTab === 'classwork' && <ClassworkTab courseId={id!} />}
         {activeTab === 'people' && <PeopleTab courseId={id!} />}
-        {activeTab === 'grades' && <GradesTab courseId={id!} />}
+        {activeTab === 'grades' && (
+          <ClassGradesDetail
+            classId={id!}
+            initialCourse={course}
+            onBack={() => navigate('/teacher/courses')}
+          />
+        )}
       </div>
 
       {/* Modal Duplicar Clase */}

@@ -11,6 +11,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import CustomSelect from "../components/CustomSelect";
 
 interface Parent {
   id: string;
@@ -288,81 +289,37 @@ const ParentsManagement: React.FC = () => {
           <button
             className="btn-primary"
             onClick={openCreate}
-            style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
+            style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0, whiteSpace: "nowrap" }}
           >
             <UserPlus size={18} /> Nuevo Tutor
           </button>
         )}
       </div>
-      <div
-        className="parents-management__filters"
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: "1rem",
-          flexWrap: "wrap",
-          marginBottom: "1.5rem",
-        }}
-      >
-        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-          {(
-            [
-              ["ALL", "Todos los tutores"],
-              ["ACTIVE", "Alta"],
-              ["INACTIVE", "Baja"],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              className="parents-management__filter"
-              key={value}
-              type="button"
-              onClick={() => setStatusFilter(value)}
-              style={{
-                padding: "0.45rem 0.85rem",
-                borderRadius: 16,
-                border:
-                  statusFilter === value
-                    ? "1px solid var(--primary)"
-                    : "1px solid var(--border)",
-                background:
-                  statusFilter === value
-                    ? "var(--primary-light)"
-                    : "var(--surface)",
-                color:
-                  statusFilter === value
-                    ? "var(--primary-text)"
-                    : "var(--text-muted)",
-                fontWeight: statusFilter === value ? 700 : 500,
-                cursor: "pointer",
-                fontSize: "0.84rem",
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <div style={{ position: "relative", flex: "1 1 240px", maxWidth: 380 }}>
-          <Search
-            size={17}
-            style={{
-              position: "absolute",
-              left: 12,
-              top: "50%",
-              transform: "translateY(-50%)",
-              color: "var(--text-muted)",
-            }}
-          />
+      <div className="filters-panel">
+        <div className="filters-panel__search">
+          <Search size={17} />
           <input
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
             placeholder="Buscar tutor por nombre, DNI o correo..."
-            style={{ ...inputStyle, paddingLeft: "2.4rem" }}
+            aria-label="Buscar tutores"
+          />
+        </div>
+        <div className="filters-panel__selects">
+          <CustomSelect
+            value={statusFilter}
+            onChange={setStatusFilter}
+            ariaLabel="Filtrar por estado"
+            options={[
+              { value: "ALL", label: "Todos los estados" },
+              { value: "ACTIVE", label: "Alta" },
+              { value: "INACTIVE", label: "Baja" },
+            ]}
           />
         </div>
       </div>
-      <div className="glass-panel" style={{ padding: 0, overflow: "hidden" }}>
-        <div className="table-responsive">
+      <div className="glass-panel parents-table-panel" style={{ padding: 0, overflow: "hidden" }}>
+        <div className="table-responsive parents-table-wrapper">
           <table
             style={{
               width: "100%",
@@ -482,34 +439,29 @@ const ParentsManagement: React.FC = () => {
                         {activeChildren.length} activo(s)
                       </td>
                       <td style={{ padding: "1rem 1.25rem" }}>
-                        <span
-                          style={{
-                            padding: "0.35rem 0.65rem",
-                            borderRadius: 16,
-                            background: isActive ? "#dcfce7" : "#fee2e2",
-                            color: isActive ? "#166534" : "#991b1b",
-                            fontSize: "0.75rem",
-                            fontWeight: 700,
-                          }}
-                        >
-                          {isActive ? "Alta" : "Baja"}
-                        </span>
-                        {canManageParents && (
-                          <button
-                            type="button"
-                            onClick={() => toggleStatus(parent)}
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                          <span
                             style={{
-                              marginLeft: 8,
-                              padding: "0.3rem 0.55rem",
-                              borderRadius: 6,
-                              border: "1px solid var(--border)",
-                              background: "var(--surface)",
-                              cursor: "pointer",
+                              padding: "0.35rem 0.65rem",
+                              borderRadius: 16,
+                              background: isActive ? "#dcfce7" : "#fee2e2",
+                              color: isActive ? "#166534" : "#991b1b",
+                              fontSize: "0.75rem",
+                              fontWeight: 700,
                             }}
                           >
-                            {isActive ? "Dar de baja" : "Dar de alta"}
-                          </button>
-                        )}
+                            {isActive ? "Alta" : "Baja"}
+                          </span>
+                          {canManageParents && (
+                            <button
+                              type="button"
+                              onClick={() => toggleStatus(parent)}
+                              className={`parents-status-pill ${isActive ? "is-danger" : "is-success"}`}
+                            >
+                              {isActive ? "Dar de baja" : "Dar de alta"}
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td
                         style={{ padding: "1rem 1.25rem", textAlign: "right" }}
@@ -555,6 +507,119 @@ const ParentsManagement: React.FC = () => {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Misma informaci\u00f3n en tarjetas: la tabla no cabe bajo 768px */}
+      <div className="parents-card-list">
+        {loading ? (
+          <p style={{ textAlign: "center", color: "var(--text-muted)", padding: "2rem 0" }}>
+            Cargando tutores...
+          </p>
+        ) : filtered.length === 0 ? (
+          <p style={{ textAlign: "center", color: "var(--text-muted)", padding: "2rem 0" }}>
+            No se encontraron tutores.
+          </p>
+        ) : (
+          filtered.map((parent) => {
+            const activeChildren =
+              parent.children?.filter((child) => child.status === "ACTIVE") || [];
+            const isActive = parent.status === "ACTIVE";
+            return (
+              <div key={parent.id} className="glass-panel parents-card">
+                <div className="parents-card__header">
+                  <div
+                    style={{
+                      width: 38,
+                      height: 38,
+                      borderRadius: "50%",
+                      background: "var(--primary)",
+                      color: "#ffffff",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "0.85rem",
+                      fontWeight: 700,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {getParentInitials(parent)}
+                  </div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <strong className="parents-card__name">
+                      {parent.profile?.firstName} {parent.profile?.lastName}
+                    </strong>
+                    <div className="parents-card__email">{parent.email}</div>
+                    {parent.profile?.phone && (
+                      <div style={{ color: "var(--primary)", fontSize: "0.78rem" }}>
+                        <Phone size={12} style={{ verticalAlign: "middle" }} />{" "}
+                        {parent.profile.phone}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.35rem", flexShrink: 0 }}>
+                    <span
+                      style={{
+                        padding: "0.3rem 0.6rem",
+                        borderRadius: 16,
+                        background: isActive ? "#dcfce7" : "#fee2e2",
+                        color: isActive ? "#166534" : "#991b1b",
+                        fontSize: "0.72rem",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {isActive ? "Alta" : "Baja"}
+                    </span>
+                    {canManageParents && (
+                      <button
+                        type="button"
+                        onClick={() => toggleStatus(parent)}
+                        className={`parents-status-pill ${isActive ? "is-danger" : "is-success"}`}
+                      >
+                        {isActive ? "Dar de baja" : "Dar de alta"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="parents-card__body">
+                  <Users size={14} style={{ color: "var(--text-muted)" }} />
+                  <span>{activeChildren.length} alumno(s) activo(s)</span>
+                </div>
+
+                <div className="parents-card__actions">
+                  <button
+                    type="button"
+                    title="Ver ficha"
+                    aria-label="Ver ficha"
+                    onClick={() => setViewing(parent)}
+                  >
+                    <Eye size={16} />
+                  </button>
+                  {canManageParents && (
+                    <>
+                      <button
+                        type="button"
+                        title="Editar"
+                        aria-label="Editar"
+                        onClick={() => openEdit(parent)}
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        title="Eliminar"
+                        aria-label="Eliminar"
+                        onClick={() => setDeleting(parent)}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
       {viewing && (
         <div style={modalBackdrop}>
