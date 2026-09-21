@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { UserPlus, UserMinus, Users, X, CheckSquare, Square, AlertCircle, GraduationCap, Info } from 'lucide-react';
+import CustomSelect from './CustomSelect';
 
 const PeopleTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const userRole = localStorage.getItem('userRole');
@@ -243,18 +244,21 @@ const PeopleTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   return (
     <div className="animate-fade-in">
       {/* SECCIÓN PROFESORES */}
-      <div className="glass-panel" style={{ marginBottom: '2rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-          <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0, color: 'var(--primary)' }}>
-            <GraduationCap size={22} /> Profesores de la Clase
+      <div className="glass-panel people-section" style={{ marginBottom: '2rem' }}>
+        <div className="people-section-header">
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0, color: 'var(--primary)', minWidth: 0 }}>
+            <GraduationCap size={22} style={{ flexShrink: 0 }} /> Profesores de la Clase
           </h3>
           {canAssignTeacher && !isAssignTeacherOpen && (
             <button
               onClick={handleOpenAssignTeacher}
-              className="btn-primary"
-              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.9rem', fontSize: '0.85rem' }}
+              className="btn-primary people-invite-btn"
+              title="Asignar Profesor"
+              aria-label="Asignar Profesor"
             >
-              <UserPlus size={16} /> Asignar Profesor
+              <UserPlus size={16} />
+              <span>Asignar</span>
+              <span className="people-invite-label">&nbsp;Profesor</span>
             </button>
           )}
         </div>
@@ -307,20 +311,21 @@ const PeopleTab: React.FC<{ courseId: string }> = ({ courseId }) => {
               <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, marginBottom: '0.3rem', color: 'var(--text-main)' }}>
                 Seleccionar profesor para conceder acceso a esta clase online:
               </label>
-              <select
+              <CustomSelect
                 value={selectedTeacherToAssign}
-                onChange={(e) => setSelectedTeacherToAssign(e.target.value)}
-                style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}
-              >
-                <option value="">-- Elige un profesor --</option>
-                {allTeachersList
+                onChange={(val) => setSelectedTeacherToAssign(val)}
+                placeholder="-- Elige un profesor --"
+                searchable={true}
+                searchPlaceholder="Buscar profesor por nombre o email..."
+                options={allTeachersList
                   .filter(t => t.id !== teachersData.titular?.id && !teachersData.assigned?.some(at => at.id === t.id))
-                  .map(t => (
-                    <option key={t.id} value={t.id}>
-                      {t.profile?.firstName} {t.profile?.lastName} ({t.email})
-                    </option>
-                  ))}
-              </select>
+                  .map(t => ({
+                    value: t.id,
+                    label: `${t.profile?.firstName || ''} ${t.profile?.lastName || ''} (${t.email})`.trim()
+                  }))}
+                style={{ width: '100%' }}
+                size="sm"
+              />
             </div>
             <div style={{ display: 'flex', gap: '0.5rem', alignSelf: 'flex-end' }}>
               <button
@@ -459,39 +464,44 @@ const PeopleTab: React.FC<{ courseId: string }> = ({ courseId }) => {
         </div>
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
-        <h3 style={{ color: 'var(--primary)', margin: 0 }}>
-          Alumnos Matriculados en la Clase
-        </h3>
-        <button onClick={handleOpenModal} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem' }}>
-          <Users size={18} /> Invitar Alumnos Matriculados
-        </button>
-      </div>
-      
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-        {courseStudents.map((student: any) => (
-          <div key={student.id} className="glass-panel" style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'var(--primary)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
-                {student.profile?.firstName?.[0]}{student.profile?.lastName?.[0]}
+      {/* SECCIÓN ALUMNOS */}
+      <div className="glass-panel people-section">
+        <div className="people-section-header">
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0, color: 'var(--primary)', minWidth: 0 }}>
+            <Users size={22} style={{ flexShrink: 0 }} /> Alumnos de la Clase
+          </h3>
+          <button onClick={handleOpenModal} className="btn-primary people-invite-btn" title="Invitar Alumnos" aria-label="Invitar Alumnos">
+            <UserPlus size={16} />
+            <span>Invitar</span>
+            <span className="people-invite-label">&nbsp;Alumnos</span>
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          {courseStudents.map((student: any) => (
+            <div key={student.id} className="people-student-row">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', minWidth: 0 }}>
+                <div style={{ width: '40px', height: '40px', flexShrink: 0, borderRadius: '50%', backgroundColor: 'var(--primary)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                  {student.profile?.firstName?.[0]}{student.profile?.lastName?.[0]}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ margin: 0, fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{student.profile?.firstName} {student.profile?.lastName}</p>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{student.email}</p>
+                </div>
               </div>
-              <div>
-                <p style={{ margin: 0, fontWeight: '500' }}>{student.profile?.firstName} {student.profile?.lastName}</p>
-                <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>{student.email}</p>
-              </div>
+              <button
+                type="button"
+                onClick={() => handleRemoveStudent(student.id)}
+                className="people-remove-btn"
+                title="Desmatricular alumno"
+                aria-label={`Desmatricular a ${student.profile?.firstName || student.email} de la clase`}
+              >
+                <UserMinus size={20} />
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => handleRemoveStudent(student.id)}
-              title="Quitar de la clase"
-              aria-label={`Quitar a ${student.profile?.firstName || student.email} de la clase`}
-              style={{ background: 'none', border: 'none', color: '#b91c1c', cursor: 'pointer', padding: '0.4rem' }}
-            >
-              <UserMinus size={18} />
-            </button>
-          </div>
-        ))}
-        {courseStudents.length === 0 && <p style={{ color: 'var(--text-muted)' }}>No hay alumnos en esta clase aún.</p>}
+          ))}
+          {courseStudents.length === 0 && <p style={{ color: 'var(--text-muted)', margin: 0 }}>No hay alumnos en esta clase aún.</p>}
+        </div>
       </div>
 
       {isModalOpen && createPortal(

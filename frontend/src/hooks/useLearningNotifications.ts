@@ -2,43 +2,84 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
+type PendingTask = {
+  id: string;
+  courseId: string | null;
+  updatedAt: number;
+};
+
+type ReadTasks = Record<string, number>;
+
 type LearningNotifications = {
   hasNewGrades: boolean;
   hasNewTasks: boolean;
   newTaskCourseIds: string[];
   markGradesSeen: () => void;
-  markTasksSeen: () => void;
-  markCourseTasksSeen: (courseId: string) => void;
+  markTaskAsRead: (taskId: string, updatedAt?: string | null) => void;
 };
 
-const getStorageKey = (suffix: string) => {
+const getStorageKey = (suffix: string, studentId?: string | null) => {
   const userId = localStorage.getItem('userId') || 'anonymous';
   const role = localStorage.getItem('userRole') || 'UNKNOWN';
-  return `hit_learning_notifications:${role}:${userId}:${suffix}`;
+  const scope = studentId ? `:student:${studentId}` : '';
+  return `hit_learning_notifications:${role}:${userId}${scope}:${suffix}`;
 };
 
 const readSeenAt = (suffix: string) => Number(localStorage.getItem(getStorageKey(suffix)) || 0);
 const writeSeenAt = (suffix: string, value: number) => localStorage.setItem(getStorageKey(suffix), String(value));
 const timestamp = (value?: string | null) => value ? new Date(value).getTime() || 0 : 0;
 
-const getLatestTaskData = (tasks: Array<{ courseId?: string | null; createdAt?: string; updatedAt?: string }>) => {
-  const byCourse: Record<string, number> = {};
-  let latest = 0;
+const getReadTasksKey = (studentId?: string | null) => getStorageKey('read-tasks', studentId);
 
-  tasks.forEach((task) => {
-    const taskTime = Math.max(timestamp(task.updatedAt), timestamp(task.createdAt));
-    latest = Math.max(latest, taskTime);
-    if (task.courseId) byCourse[task.courseId] = Math.max(byCourse[task.courseId] || 0, taskTime);
-  });
+const readTaskEntries = (studentId?: string | null): ReadTasks => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(getReadTasksKey(studentId)) || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+};
 
-  return { latest, byCourse };
+// Varias instancias del hook conviven (sidebar, listado, pestaña) y deben compartir el estado de lectura.
+const readTaskSubscribers = new Set<(key: string) => void>();
+
+const publishReadTasks = (key: string, entries: ReadTasks) => {
+  localStorage.setItem(key, JSON.stringify(entries));
+  readTaskSubscribers.forEach((notify) => notify(key));
+};
+
+// Una tarea sigue pendiente mientras le quede algún paso sin completar ni entregar.
+const getPendingTasks = (tasks: any[]): PendingTask[] => tasks
+  .filter((task) => (task.steps || []).some((step: any) => !step.isCompleted && !step.submission))
+  .map((task) => ({
+    id: task.id,
+    courseId: task.courseId ?? null,
+    updatedAt: Math.max(timestamp(task.updatedAt), timestamp(task.createdAt))
+  }));
+
+const prunePendingReads = (studentId: string | null | undefined, pending: PendingTask[]) => {
+  const current = readTaskEntries(studentId);
+  const pendingIds = new Set(pending.map((task) => task.id));
+  const next = Object.fromEntries(Object.entries(current).filter(([id]) => pendingIds.has(id)));
+  if (Object.keys(next).length !== Object.keys(current).length) {
+    publishReadTasks(getReadTasksKey(studentId), next);
+  }
 };
 
 export const useLearningNotifications = (targetStudentId?: string | null): LearningNotifications => {
   const [latestGrades, setLatestGrades] = useState(0);
-  const [latestTasks, setLatestTasks] = useState(0);
-  const [taskTimesByCourse, setTaskTimesByCourse] = useState<Record<string, number>>({});
+  const [pendingTasks, setPendingTasks] = useState<PendingTask[]>([]);
+  const [readTasks, setReadTasks] = useState<ReadTasks>(() => readTaskEntries(targetStudentId));
   const role = localStorage.getItem('userRole');
+
+  useEffect(() => {
+    setReadTasks(readTaskEntries(targetStudentId));
+    const handler = (key: string) => {
+      if (key === getReadTasksKey(targetStudentId)) setReadTasks(readTaskEntries(targetStudentId));
+    };
+    readTaskSubscribers.add(handler);
+    return () => { readTaskSubscribers.delete(handler); };
+  }, [targetStudentId]);
 
   const loadNotifications = useCallback(async () => {
     const token = localStorage.getItem('token');
@@ -54,10 +95,10 @@ export const useLearningNotifications = (targetStudentId?: string | null): Learn
         ]);
         const tasks = tasksResponse.ok ? await tasksResponse.json() : [];
         const grades = gradesResponse.ok ? await gradesResponse.json() : null;
-        const taskData = getLatestTaskData(tasks);
+        const pending = getPendingTasks(tasks);
         const gradeTimes = Object.values(grades?.terms || {}).map((term: any) => timestamp(term.updatedAt));
-        setLatestTasks(taskData.latest);
-        setTaskTimesByCourse(taskData.byCourse);
+        setPendingTasks(pending);
+        if (tasksResponse.ok) prunePendingReads(targetStudentId, pending);
         setLatestGrades(Math.max(0, ...gradeTimes));
       } else if (role === 'TEACHER' || role === 'ADMIN') {
         const response = await fetch(`${apiUrl}/api/assignments/teacher`, { headers });
@@ -81,25 +122,28 @@ export const useLearningNotifications = (targetStudentId?: string | null): Learn
     if (latestGrades > 0) writeSeenAt('grades', latestGrades);
   }, [latestGrades]);
 
-  const markTasksSeen = useCallback(() => {
-    if (latestTasks > 0) writeSeenAt('tasks', latestTasks);
-  }, [latestTasks]);
+  const markTaskAsRead = useCallback((taskId: string, updatedAt?: string | null) => {
+    const current = readTaskEntries(targetStudentId);
+    const readAt = timestamp(updatedAt) || Date.now();
+    if ((current[taskId] ?? 0) >= readAt) return;
+    publishReadTasks(getReadTasksKey(targetStudentId), { ...current, [taskId]: readAt });
+  }, [targetStudentId]);
 
-  const markCourseTasksSeen = useCallback((courseId: string) => {
-    const courseTime = taskTimesByCourse[courseId] || 0;
-    if (courseTime > 0) writeSeenAt(`tasks:${courseId}`, courseTime);
-  }, [taskTimesByCourse]);
+  const unreadTasks = useMemo(
+    () => pendingTasks.filter((task) => (readTasks[task.id] ?? 0) < task.updatedAt),
+    [pendingTasks, readTasks]
+  );
 
-  const newTaskCourseIds = useMemo(() => Object.entries(taskTimesByCourse)
-    .filter(([courseId, value]) => value > readSeenAt(`tasks:${courseId}`))
-    .map(([courseId]) => courseId), [taskTimesByCourse]);
+  const newTaskCourseIds = useMemo(
+    () => Array.from(new Set(unreadTasks.map((task) => task.courseId).filter((id): id is string => Boolean(id)))),
+    [unreadTasks]
+  );
 
   return {
     hasNewGrades: latestGrades > readSeenAt('grades'),
-    hasNewTasks: latestTasks > readSeenAt('tasks'),
+    hasNewTasks: unreadTasks.length > 0,
     newTaskCourseIds,
     markGradesSeen,
-    markTasksSeen,
-    markCourseTasksSeen
+    markTaskAsRead
   };
 };

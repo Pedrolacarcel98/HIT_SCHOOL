@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import TaskCard, { type TaskItem } from '../components/TaskCard';
 import MaterialViewerModal from '../components/MaterialViewerModal';
+import CustomSelect from '../components/CustomSelect';
 import { toLocalDatetimeInput, toIsoDateString, getCurrentLocalDatetimeInput } from '../utils/dateUtils';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -635,31 +636,29 @@ const TasksManagement: React.FC = () => {
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Skill CEFR:</span>
-            <select
+            <CustomSelect
               value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              style={{ padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', fontSize: '0.82rem', color: 'var(--text-main)' }}
-            >
-              <option value="ALL">Todas las Skills</option>
-              {SKILL_CATEGORIES.map((c) => (
-                <option key={c.id} value={c.id}>{c.label}</option>
-              ))}
-            </select>
+              onChange={(val) => setCategoryFilter(val)}
+              options={[
+                { value: 'ALL', label: 'Todas las Skills' },
+                ...SKILL_CATEGORIES.map((c) => ({ value: c.id, label: c.label }))
+              ]}
+              size="sm"
+            />
           </div>
 
           {activeTab === 'ASSIGNED' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Clase:</span>
-              <select
+              <CustomSelect
                 value={courseFilter}
-                onChange={(e) => setCourseFilter(e.target.value)}
-                style={{ padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', fontSize: '0.82rem', color: 'var(--text-main)' }}
-              >
-                <option value="ALL">Todas las Clases</option>
-                {courses.map((c) => (
-                  <option key={c.id} value={c.id}>{c.title}</option>
-                ))}
-              </select>
+                onChange={(val) => setCourseFilter(val)}
+                options={[
+                  { value: 'ALL', label: 'Todas las Clases' },
+                  ...courses.map((c) => ({ value: c.id, label: c.title }))
+                ]}
+                size="sm"
+              />
             </div>
           )}
         </div>
@@ -976,43 +975,38 @@ const TasksManagement: React.FC = () => {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Disciplina / Skill</label>
-                  <select
+                  <CustomSelect
                     value={taskCategory}
-                    onChange={(e) => setTaskCategory(e.target.value)}
-                    style={inputStyle}
-                  >
-                    {SKILL_CATEGORIES.map(cat => (
-                      <option key={cat.id} value={cat.id}>{cat.label}</option>
-                    ))}
-                  </select>
+                    onChange={(val) => setTaskCategory(val)}
+                    options={SKILL_CATEGORIES.map(cat => ({ value: cat.id, label: cat.label }))}
+                    style={{ width: '100%' }}
+                  />
                 </div>
 
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Trimestre</label>
-                  <select
+                  <CustomSelect<number>
                     value={taskTerm}
-                    onChange={(e) => setTaskTerm(Number(e.target.value))}
-                    style={inputStyle}
-                  >
-                    <option value={1}>1º Trimestre (Sep - Dic)</option>
-                    <option value={2}>2º Trimestre (Ene - Mar)</option>
-                    <option value={3}>3º Trimestre (Abr - Jun)</option>
-                  </select>
+                    onChange={(val) => setTaskTerm(val)}
+                    options={[
+                      { value: 1, label: '1º Trimestre (Sep - Dic)' },
+                      { value: 2, label: '2º Trimestre (Ene - Mar)' },
+                      { value: 3, label: '3º Trimestre (Abr - Jun)' }
+                    ]}
+                    style={{ width: '100%' }}
+                  />
                 </div>
 
                 {!taskIsTemplate && (
                   <div>
                     <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Clase Destinataria</label>
-                    <select
+                    <CustomSelect
                       value={taskCourseId}
-                      onChange={(e) => setTaskCourseId(e.target.value)}
-                      style={inputStyle}
-                      required
-                    >
-                      {courses.map(c => (
-                        <option key={c.id} value={c.id}>{c.title}</option>
-                      ))}
-                    </select>
+                      onChange={(val) => setTaskCourseId(val)}
+                      placeholder="Seleccionar clase..."
+                      options={courses.map(c => ({ value: c.id, label: c.title }))}
+                      style={{ width: '100%' }}
+                    />
                   </div>
                 )}
 
@@ -1306,16 +1300,13 @@ const TasksManagement: React.FC = () => {
                 <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-main)' }}>
                   Selecciona la Clase Destinataria *
                 </label>
-                <select
+                <CustomSelect
                   value={assignCourseId}
-                  onChange={(e) => setAssignCourseId(e.target.value)}
-                  style={inputStyle}
-                  required
-                >
-                  {courses.map((c) => (
-                    <option key={c.id} value={c.id}>{c.title}</option>
-                  ))}
-                </select>
+                  onChange={(val) => setAssignCourseId(val)}
+                  placeholder="Seleccionar clase..."
+                  options={courses.map((c) => ({ value: c.id, label: c.title }))}
+                  style={{ width: '100%' }}
+                />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.85rem' }}>

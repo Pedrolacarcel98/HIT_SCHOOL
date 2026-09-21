@@ -4,7 +4,8 @@ import { ArrowLeft, MessageSquare, BookOpen, Users, Copy, X, Award } from 'lucid
 import StreamTab from '../components/StreamTab';
 import ClassworkTab from '../components/ClassworkTab';
 import PeopleTab from '../components/PeopleTab';
-import GradesTab from '../components/GradesTab';
+import ClassGradesDetail from '../components/ClassGradesDetail';
+import CustomSelect from '../components/CustomSelect';
 
 const CourseView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -45,7 +46,7 @@ const CourseView: React.FC = () => {
   };
 
   useEffect(() => {
-    if (paramTab && (paramTab === 'stream' || paramTab === 'classwork' || paramTab === 'people') && paramTab !== activeTab) {
+    if (paramTab && (paramTab === 'stream' || paramTab === 'classwork' || paramTab === 'people' || paramTab === 'grades') && paramTab !== activeTab) {
       setActiveTabState(paramTab);
     }
   }, [paramTab]);
@@ -164,11 +165,17 @@ const CourseView: React.FC = () => {
       </nav>
 
       {/* Contenido Principal */}
-      <div className="page-container" style={{ maxWidth: activeTab === 'grades' ? '1200px' : '1000px' }}>
+      <div className="page-container" style={{ maxWidth: activeTab === 'grades' ? '1440px' : '1000px', width: '100%' }}>
         {activeTab === 'stream' && <StreamTab courseId={id!} />}
         {activeTab === 'classwork' && <ClassworkTab courseId={id!} />}
         {activeTab === 'people' && <PeopleTab courseId={id!} />}
-        {activeTab === 'grades' && <GradesTab courseId={id!} />}
+        {activeTab === 'grades' && (
+          <ClassGradesDetail
+            classId={id!}
+            initialCourse={course}
+            onBack={() => navigate('/teacher/courses')}
+          />
+        )}
       </div>
 
       {/* Modal Duplicar Clase */}
@@ -211,16 +218,17 @@ const CourseView: React.FC = () => {
               <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)', marginTop: '0.85rem', marginBottom: '0.35rem' }}>
                 Modalidad:
               </label>
-              <select
+              <CustomSelect<'PRESENCIAL' | 'ONLINE' | 'HIBRIDO'>
                 value={duplicateModality}
-                onChange={(e) => setDuplicateModality(e.target.value as 'PRESENCIAL' | 'ONLINE' | 'HIBRIDO')}
+                onChange={(val) => setDuplicateModality(val)}
                 disabled={isDuplicating}
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', outline: 'none' }}
-              >
-                <option value="PRESENCIAL">Presencial (Academia)</option>
-                <option value="ONLINE">Online / Particulares</option>
-                <option value="HIBRIDO">Híbrido</option>
-              </select>
+                options={[
+                  { value: 'PRESENCIAL', label: 'Presencial (Academia)' },
+                  { value: 'ONLINE', label: 'Online / Particulares' },
+                  { value: 'HIBRIDO', label: 'Híbrido' }
+                ]}
+                style={{ width: '100%' }}
+              />
 
               <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
                 <button type="button" className="btn-secondary" onClick={() => setIsDuplicateModalOpen(false)} disabled={isDuplicating}>

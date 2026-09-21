@@ -563,6 +563,9 @@ router.get('/student/:studentId', authenticateToken, async (req: AuthRequest, re
       orderBy: [{ dueDate: 'asc' }, { createdAt: 'asc' }]
     });
     const evaluableTasks = tasks.filter(hasEvaluableStructuredStep);
+    const courseTitles = new Map(
+      student.enrollments.map((enrollment) => [enrollment.courseId, enrollment.course.title])
+    );
 
     // Obtener todos los TermGrade existentes
     const termGrades = await prisma.termGrade.findMany({
@@ -627,6 +630,8 @@ router.get('/student/:studentId', authenticateToken, async (req: AuthRequest, re
 
         return {
           taskId: task.id,
+          courseId: task.courseId,
+          courseTitle: task.courseId ? courseTitles.get(task.courseId) || 'Clase' : 'Sin clase',
           title: task.title,
           category: task.category,
           dueDate: task.dueDate,

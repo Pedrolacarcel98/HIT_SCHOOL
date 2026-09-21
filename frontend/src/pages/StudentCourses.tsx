@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, CalendarDays, CheckCircle2, Clock3, ExternalLink, Eye, FileText, Link, ListChecks, Paperclip, PenTool, Send, X } from 'lucide-react';
+import { BookOpen, CalendarDays, CheckCircle2, Clock3, ExternalLink, Eye, FileText, Link, ListChecks, Paperclip, PenTool, Search, Send, X } from 'lucide-react';
 import FormPlayer from '../components/FormPlayer';
 import ExamReviewModal from '../components/ExamReviewModal';
 import AttachmentViewerModal, { isAttachmentImage } from '../components/AttachmentViewerModal';
@@ -152,6 +152,7 @@ interface StructuredTask {
 const StudentCourses: React.FC = () => {
   const navigate = useNavigate();
   const [courses, setCourses] = useState<Course[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [individualContent] = useState<IndividualContent[]>([]);
   const [assignedMaterials] = useState<AssignedMaterial[]>([]);
@@ -175,7 +176,7 @@ const StudentCourses: React.FC = () => {
   const [isSavingStructuredDelivery, setIsSavingStructuredDelivery] = useState(false);
   const [viewingAttachment, setViewingAttachment] = useState<AttachmentData | null>(null);
   const { selectedStudent, selectedStudentId } = useParent();
-  const { newTaskCourseIds, markCourseTasksSeen } = useLearningNotifications(selectedStudentId);
+  const { newTaskCourseIds } = useLearningNotifications(selectedStudentId);
   const userRole = localStorage.getItem('userRole');
 
   const activeStudentName = selectedStudent?.profile?.firstName || 'Alumno';
@@ -434,6 +435,10 @@ const StudentCourses: React.FC = () => {
 
   const assignedMaterialIds = new Set(individualContent.map(content => content.material?.id).filter(Boolean));
 
+  const filteredCourses = courses.filter(course =>
+    course.title.toLowerCase().includes(searchTerm.trim().toLowerCase())
+  );
+
   return (
     <div className="page-container animate-fade-in">
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
@@ -445,19 +450,39 @@ const StudentCourses: React.FC = () => {
         </div>
       </header>
 
+      <div className="course-search">
+        <Search size={17} className="course-search-icon" />
+        <input
+          type="search"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder="Buscar clase por nombre..."
+          aria-label="Buscar clase por nombre"
+        />
+        {searchTerm && (
+          <button
+            type="button"
+            className="course-search-clear"
+            onClick={() => setSearchTerm('')}
+            aria-label="Limpiar búsqueda"
+          >
+            <X size={16} />
+          </button>
+        )}
+      </div>
+
       {loading ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: '4rem 2rem', color: 'var(--text-muted)' }}>
           Cargando tus clases...
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '1.25rem' }}>
-          {courses.map(course => (
+          {filteredCourses.map(course => (
             <div 
               key={course.id} 
               className="glass-panel" 
               style={{ cursor: 'pointer', transition: 'all 0.2s ease', padding: '1.5rem', border: '1px solid var(--border)' }}
               onClick={() => {
-                markCourseTasksSeen(course.id);
                 navigate(`/student/course/${course.id}`);
               }}
               onMouseEnter={(e) => {
@@ -479,11 +504,13 @@ const StudentCourses: React.FC = () => {
               <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: 0 }}>Haz clic para ver el material, tareas y calificaciones →</p>
             </div>
           ))}
-          {courses.length === 0 && (
+          {filteredCourses.length === 0 && (
             <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem', gridColumn: '1 / -1' }}>
               <BookOpen size={40} style={{ color: 'var(--primary)', opacity: 0.5, marginBottom: '1rem' }} />
               <p style={{ color: 'var(--text-muted)', margin: 0 }}>
-                {userRole === 'PARENT' ? `Aún no hay clases matriculadas para ${activeStudentName}.` : 'Aún no estás matriculado en ninguna clase.'}
+                {searchTerm.trim()
+                  ? `No se encontraron clases que coincidan con "${searchTerm}".`
+                  : (userRole === 'PARENT' ? `Aún no hay clases matriculadas para ${activeStudentName}.` : 'Aún no estás matriculado en ninguna clase.')}
               </p>
             </div>
           )}

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Award, BookOpen, Users, LogOut, GraduationCap, FolderArchive, CircleDollarSign, MessageCircle, Menu, X, Settings, Home, UserRoundCog, ShieldCheck } from 'lucide-react';
+import { Award, BookOpen, Users, LogOut, GraduationCap, FolderArchive, CircleDollarSign, MessageCircle, Menu, X, Settings, Home, UserRoundCog, ShieldCheck, HelpCircle } from 'lucide-react';
 import SettingsModal from './SettingsModal';
 import { useLearningNotifications } from '../hooks/useLearningNotifications';
 
@@ -59,6 +59,12 @@ const TeacherLayout: React.FC = () => {
     const interval = setInterval(fetchUnreadChatCount, 3500);
     return () => clearInterval(interval);
   }, [location.pathname]);
+
+  useEffect(() => {
+    const handleToggle = () => setIsMobileMenuOpen((prev) => !prev);
+    window.addEventListener('hit-toggle-mobile-menu', handleToggle);
+    return () => window.removeEventListener('hit-toggle-mobile-menu', handleToggle);
+  }, []);
 
   const userRole = localStorage.getItem('userRole');
 
@@ -145,12 +151,37 @@ const TeacherLayout: React.FC = () => {
           <span style={{ fontSize: '0.72rem', color: userRole === 'ADMIN' ? '#d97706' : 'var(--primary)', fontWeight: '700', textTransform: 'uppercase', background: userRole === 'ADMIN' ? '#fef3c7' : 'var(--primary-light)', padding: '0.2rem 0.5rem', borderRadius: '6px' }}>
             {userRole === 'ADMIN' ? 'Admin' : 'Profesor'}
           </span>
+          {location.pathname === '/teacher' && (
+            <a
+              href="/Guia_Practica_de_Hitschool.pdf"
+              download="Guia Practica de Hitschool.pdf"
+              title="Descargar Guía Práctica de HitSchool"
+              aria-label="Descargar Guía Práctica de HitSchool"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '30px',
+                height: '30px',
+                borderRadius: '50%',
+                background: '#ffffff',
+                border: '1px solid #e2e8f0',
+                color: 'var(--primary)',
+                textDecoration: 'none',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                cursor: 'pointer'
+              }}
+            >
+              <HelpCircle size={17} strokeWidth={2.3} />
+            </a>
+          )}
         </div>
       </header>
 
       {/* Overlay para cerrar sidebar en móvil */}
       <div
         className={`sidebar-overlay ${isMobileMenuOpen ? 'active' : ''}`}
+        style={{ zIndex: isMobileMenuOpen ? 55 : undefined }}
         onClick={() => setIsMobileMenuOpen(false)}
       />
 
@@ -350,6 +381,7 @@ const TeacherLayout: React.FC = () => {
           }
           .sidebar-nav-container.drawer-open {
             transform: translateX(0) !important;
+            z-index: 60 !important;
           }
           .mobile-drawer-close {
             display: block !important;

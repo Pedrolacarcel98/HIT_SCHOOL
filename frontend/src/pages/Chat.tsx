@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { GraduationCap, MessageCircle, Pencil, Search, Send, Trash2, UserRound, Users, X } from 'lucide-react';
+import { ArrowLeft, GraduationCap, MessageCircle, Pencil, Search, Send, Trash2, UserRound, Users, X } from 'lucide-react';
 import { useParent } from '../context/ParentContext';
 
 type ChatRole = 'TEACHER' | 'STUDENT';
@@ -342,7 +342,7 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
         </div>
       )}
 
-      <div className="chat-layout" style={{
+      <div className={`chat-layout${(selectedContact || (!loading && contacts.length === 0)) ? ' has-active-chat' : ''}`} style={{
         display: 'grid',
         gridTemplateColumns: 'minmax(250px, 4fr) minmax(0, 8fr)',
         height: 'calc(100vh - 190px)',
@@ -354,8 +354,8 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
         boxShadow: 'var(--shadow-md)'
       }}>
         {/* Barra lateral de contactos */}
-        <aside style={{ borderRight: '1px solid var(--border)', background: 'var(--surface-alt)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          <div style={{ padding: '1rem', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+        <aside className="chat-sidebar" style={{ borderRight: '1px solid var(--border)', background: 'var(--surface-alt)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <div className="chat-search-bar" style={{ padding: '1rem', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
             <label htmlFor="chat-search" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)' }}>
               {role === 'TEACHER' ? <><Users size={16} /> Alumnos ({contacts.length})</> : <><GraduationCap size={16} /> Profesores ({contacts.length})</>}
             </label>
@@ -380,7 +380,7 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
             </div>
           </div>
 
-          <div style={{ padding: '0.5rem', flex: 1, minHeight: 0, overflowY: 'auto' }}>
+          <div className="chat-contact-list" style={{ padding: '0.5rem', flex: 1, minHeight: 0, overflowY: 'auto' }}>
             {loading ? (
               <p style={{ padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.88rem', textAlign: 'center' }}>
                 Cargando contactos...
@@ -448,9 +448,9 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
         </aside>
 
         {/* Área Principal de Conversación */}
-        <section style={{ display: 'flex', flexDirection: 'column', minWidth: 0, height: '100%', minHeight: 0, overflow: 'hidden' }}>
+        <section className="chat-conversation" style={{ display: 'flex', flexDirection: 'column', minWidth: 0, height: '100%', minHeight: 0, overflow: 'hidden' }}>
           {/* Header del Contacto Activo */}
-          <div ref={messagesViewportRef} style={{
+          <div className="chat-header-bar" style={{
             display: 'flex',
             alignItems: 'center',
             gap: '0.85rem',
@@ -461,6 +461,15 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
           }}>
             {selectedContact ? (
               <>
+                <button
+                  type="button"
+                  className="chat-back-button"
+                  onClick={() => setSelectedContactId('')}
+                  title="Volver a la lista de conversaciones"
+                  aria-label="Volver a la lista de conversaciones"
+                >
+                  <ArrowLeft size={20} />
+                </button>
                 <Avatar name={getDisplayName(selectedContact, userRole)} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
@@ -524,7 +533,7 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
           </div>
 
           {/* Historial de Mensajes */}
-          <div style={{
+          <div ref={messagesViewportRef} className="chat-messages" style={{
             flex: 1,
             minHeight: 0,
             padding: '1.5rem',
@@ -631,6 +640,7 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
           {/* Formulario de Envío de Mensaje */}
           <form
             onSubmit={handleSubmit}
+            className="chat-composer"
             style={{
               display: 'flex',
               alignItems: 'flex-end',
@@ -717,16 +727,102 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
       </div>
 
       <style>{`
+        .chat-back-button {
+          display: none;
+        }
+
         @media (max-width: 768px) {
+          /* Pantalla única estilo WhatsApp móvil: lista O conversación, nunca ambas */
           .chat-layout {
+            display: flex !important;
+            flex-direction: column;
             grid-template-columns: 1fr !important;
-            height: calc(100vh - 150px) !important;
-            min-height: 480px !important;
+            height: calc(100dvh - 150px) !important;
+            min-height: 0 !important;
           }
-          .chat-layout aside {
+
+          .chat-layout .chat-sidebar,
+          .chat-layout .chat-conversation {
+            flex: 1 1 auto;
+            width: 100%;
+            min-height: 0;
+            max-height: none;
             border-right: 0 !important;
-            border-bottom: 1px solid var(--border);
-            max-height: 180px;
+          }
+
+          /* Sin contacto seleccionado -> solo lista de contactos */
+          .chat-layout:not(.has-active-chat) .chat-conversation {
+            display: none !important;
+          }
+
+          /* Con contacto seleccionado -> solo conversación a pantalla completa */
+          .chat-layout.has-active-chat .chat-sidebar {
+            display: none !important;
+          }
+
+          .chat-layout .chat-search-bar {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: var(--surface-alt);
+            padding: 0.75rem;
+          }
+
+          .chat-layout .chat-header-bar {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            gap: 0.6rem;
+            padding: 0.7rem 0.85rem;
+          }
+
+          .chat-back-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            width: 36px;
+            height: 36px;
+            margin-left: -0.35rem;
+            padding: 0;
+            border: none;
+            border-radius: 50%;
+            background: transparent;
+            color: var(--text-main);
+            cursor: pointer;
+          }
+
+          .chat-back-button:active {
+            background: var(--surface-alt);
+          }
+
+          .chat-layout .chat-messages {
+            padding: 0.9rem 0.75rem;
+          }
+
+          .chat-layout .chat-messages > div > div {
+            max-width: 88%;
+          }
+
+          .chat-layout .chat-composer {
+            position: sticky;
+            bottom: 0;
+            z-index: 2;
+            gap: 0.5rem;
+            padding: 0.6rem 0.75rem calc(0.6rem + env(safe-area-inset-bottom));
+          }
+
+          .chat-layout .chat-composer textarea {
+            min-height: 42px;
+            max-height: 110px;
+            padding: 0.6rem 0.85rem;
+            border-radius: 20px;
+            resize: none;
+          }
+
+          .chat-layout .chat-composer button[type="submit"] {
+            border-radius: 50%;
+            width: 44px;
           }
         }
       `}</style>

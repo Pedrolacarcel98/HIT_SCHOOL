@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CalendarDays, CheckCircle2, ChevronDown, ChevronUp, Clock3, Download, Eye, FileText, Search, X, ExternalLink, Send, Link, PenTool, Check, Lock, Layers } from 'lucide-react';
+import { CalendarDays, CheckCircle2, ChevronDown, ChevronUp, Clock3, Download, Eye, FileText, Search, X, ExternalLink, Send, Link, PenTool, Check, Lock, Layers, Paperclip, UploadCloud, Trash2 } from 'lucide-react';
 import DocumentViewer from './DocumentViewer';
 import AudioPlayer from './AudioPlayer';
 import VideoPlayer from './VideoPlayer';
@@ -9,6 +9,7 @@ import ExamReviewModal from './ExamReviewModal';
 import AttachmentViewerModal, { isAttachmentImage } from './AttachmentViewerModal';
 import type { AttachmentData } from './AttachmentViewerModal';
 import { useParent } from '../context/ParentContext';
+import { useLearningNotifications } from '../hooks/useLearningNotifications';
 import type { ReviewQuestion } from './ExamReviewModal';
 
 const SKILL_CATEGORIES = [
@@ -204,10 +205,13 @@ const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, vie
   const [reviewingMaterial, setReviewingMaterial] = useState<AssignedMaterial | null>(null);
   const [viewingAttachment, setViewingAttachment] = useState<AttachmentData | null>(null);
   const { selectedStudentId } = useParent();
+  const { markTaskAsRead } = useLearningNotifications(selectedStudentId);
   const userRole = localStorage.getItem('userRole');
 
   const toggleTaskExpand = (taskId: string) => {
-    setExpandedTasks((prev) => ({ ...prev, [taskId]: !prev[taskId] }));
+    const willOpen = !expandedTasks[taskId];
+    if (willOpen && viewMode === 'PENDING') markTaskAsRead(taskId);
+    setExpandedTasks((prev) => ({ ...prev, [taskId]: willOpen }));
   };
 
   // Formulario de Entrega
@@ -215,6 +219,7 @@ const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, vie
   const [textSubmission, setTextSubmission] = useState('');
   const [urlSubmission, setUrlSubmission] = useState('');
   const [attachmentFile, setAttachmentFile] = useState<SubmissionAttachment | null>(null);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
@@ -449,17 +454,15 @@ const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, vie
     }
   };
 
-  const handleAttachmentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const handleAttachmentFile = (file: File | undefined) => {
     if (!file) {
-      setAttachmentFile(null);
       return;
     }
 
     if (file.size > 10 * 1024 * 1024) {
       setSubmitError('El archivo adjunto no puede superar 10 MB.');
       setAttachmentFile(null);
-      event.target.value = '';
+      if (attachmentInputRef.current) attachmentInputRef.current.value = '';
       return;
     }
 
@@ -474,6 +477,10 @@ const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, vie
       setSubmitError('');
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleAttachmentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    handleAttachmentFile(event.target.files?.[0]);
   };
 
   const handleFormFinish = async (score: number, total: number, answers: { [key: string]: any }) => {
@@ -533,12 +540,14 @@ const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, vie
             const isExpanded = Boolean(expandedCategories[group.id]);
             return (
             <section key={group.id} className="glass-panel" style={{ padding: '1.25rem' }}>
-              <header onClick={() => toggleCategory(group.id)} role="button" tabIndex={0} aria-expanded={isExpanded} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleCategory(group.id); } }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.65rem', cursor: 'pointer', userSelect: 'none' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              <header onClick={() => toggleCategory(group.id)} role="button" tabIndex={0} aria-expanded={isExpanded} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleCategory(group.id); } }} className="student-classwork-category-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.65rem', cursor: 'pointer', userSelect: 'none' }}>
+                <div className="student-classwork-category-title" style={{ minWidth: 0 }}>
                   <h2 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-main)' }}>{group.label}</h2>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.2rem 0.6rem', borderRadius: '12px', background: group.structuredTasks.length ? 'var(--primary-light)' : 'var(--surface-alt)', color: group.structuredTasks.length ? 'var(--primary-text)' : 'var(--text-muted)' }}>{group.structuredTasks.length} {group.structuredTasks.length === 1 ? 'tarea' : 'tareas'}</span>
                 </div>
-                {isExpanded ? <ChevronUp size={20} style={{ color: 'var(--text-muted)' }} /> : <ChevronDown size={20} style={{ color: 'var(--text-muted)' }} />}
+                <div className="student-classwork-category-actions">
+                  <span className="student-classwork-category-count" style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.2rem 0.6rem', borderRadius: '12px', background: group.structuredTasks.length ? 'var(--primary-light)' : 'var(--surface-alt)', color: group.structuredTasks.length ? 'var(--primary-text)' : 'var(--text-muted)' }}>{group.structuredTasks.length} {group.structuredTasks.length === 1 ? 'tarea' : 'tareas'}</span>
+                  {isExpanded ? <ChevronUp size={20} style={{ color: 'var(--text-muted)', flexShrink: 0 }} /> : <ChevronDown size={20} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />}
+                </div>
               </header>
               {isExpanded && <>
               <div style={{ borderTop: '1px solid var(--border)', marginTop: '0.85rem', paddingTop: '1rem' }}>
@@ -1444,7 +1453,7 @@ const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, vie
                                 {viewingMaterial.structuredStepId ? 'Breve redacción (opcional):' : 'Tu Redacción o Respuestas:'}
                               </label>
                               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                {textSubmission.length} caracteres
+                                {textSubmission.length === 1 ? '1 carácter' : `${textSubmission.length} caracteres`}
                               </span>
                             </div>
                             <textarea
@@ -1472,20 +1481,56 @@ const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, vie
 
                         {viewingMaterial.type !== 'FORM' && (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                            <label htmlFor="student-submission-file" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>
                               Archivo adjunto (opcional)
                             </label>
+                            <div
+                              className="student-file-dropzone"
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => attachmentInputRef.current?.click()}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                  event.preventDefault();
+                                  attachmentInputRef.current?.click();
+                                }
+                              }}
+                              onDragOver={(event) => event.preventDefault()}
+                              onDrop={(event) => {
+                                event.preventDefault();
+                                handleAttachmentFile(event.dataTransfer.files?.[0]);
+                              }}
+                            >
+                              <UploadCloud size={22} aria-hidden="true" />
+                              <span className="student-file-dropzone__title">
+                                {attachmentFile ? attachmentFile.name : 'Arrastra un archivo aquí o selecciónalo'}
+                              </span>
+                              <span className="student-file-dropzone__hint">PDF, DOC, imagen u otro archivo · máximo 10 MB</span>
+                            </div>
                             <input
+                              id="student-submission-file"
+                              ref={attachmentInputRef}
                               type="file"
                               onChange={handleAttachmentChange}
-                              style={{ width: '100%', padding: '0.7rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
+                              style={{ display: 'none' }}
                             />
                             {attachmentFile && (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', padding: '0.7rem 0.8rem', borderRadius: '8px', background: 'var(--primary-light)', border: '1px solid var(--primary-border)', color: 'var(--primary-text)', fontSize: '0.83rem' }}>
-                                <Check size={15} />
-                                <span>{attachmentFile.name}</span>
-                                <button type="button" onClick={() => setAttachmentFile(null)} style={{ background: 'transparent', border: 'none', color: 'var(--primary-text)', cursor: 'pointer', fontWeight: 700, padding: 0 }}>
-                                  Quitar
+                              <div className="student-file-selected">
+                                <span className="student-file-selected__name">
+                                  <Paperclip size={15} aria-hidden="true" />
+                                  {attachmentFile.name}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setAttachmentFile(null);
+                                    if (attachmentInputRef.current) attachmentInputRef.current.value = '';
+                                  }}
+                                  className="student-file-selected__remove"
+                                  aria-label={`Eliminar ${attachmentFile.name}`}
+                                  title="Eliminar archivo"
+                                >
+                                  <Trash2 size={15} />
                                 </button>
                               </div>
                             )}
@@ -1560,7 +1605,7 @@ const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, vie
                             }}
                           >
                             <Send size={16} />
-                            {isSubmitting ? 'Entregando...' : 'Entregar Tarea al Profesor'}
+                            {isSubmitting ? 'Entregando...' : 'Entregar tarea'}
                           </button>
                         </div>
                       </form>

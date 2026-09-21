@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, Plus, Trash2, Eye, Save, Music, HelpCircle, Image, Search, FileText } from 'lucide-react';
 import FormPlayer from './FormPlayer';
 import AudioPlayer from './AudioPlayer';
+import CustomSelect from './CustomSelect';
 
 interface MediaResource {
   id: string;
@@ -225,26 +226,18 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
       zIndex: 60,
       padding: '1rem'
     }}>
-      <div className="glass-panel modal-card modal-card--wide" style={{
+      <div className="glass-panel modal-card modal-card--wide form-builder__card" style={{
         width: '100%',
         maxWidth: '900px',
-        maxHeight: '92vh',
+        maxHeight: '90vh',
         display: 'flex',
         flexDirection: 'column',
         padding: 0,
+        borderRadius: '24px',
         overflow: 'hidden'
       }}>
         {/* Modal Header */}
-        <div style={{
-          padding: '1.25rem 1.5rem',
-          borderBottom: '1px solid var(--border)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          background: 'var(--surface-alt)',
-          gap: '1rem',
-          flexWrap: 'wrap'
-        }}>
+        <div className="form-builder__header">
           <div>
             <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <HelpCircle style={{ color: 'var(--primary)' }} />
@@ -282,7 +275,7 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
         </div>
 
         {/* Modal Body */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem' }}>
+        <div className="form-builder__body">
           {error && (
             <div style={{ padding: '0.75rem 1rem', background: '#fdf0f0', color: '#9e2a2b', border: '1px solid #f7caca', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
               {error}
@@ -298,63 +291,70 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
               initialAnswers={Object.fromEntries(questions.map((question) => [question.id, question.correctAnswer]))}
             />
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
               {/* Form Config Bar */}
-              <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Título del Examen / Test</label>
-                  <input
-                    type="text"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Ej. B2 First Listening Mock Exam - Part 1"
-                    style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)', fontSize: '1rem', fontWeight: 'bold' }}
-                  />
+              <div className="glass-panel form-builder__config">
+                <div className="form-builder__config-grid">
+                  <div className="form-builder__field">
+                    <label htmlFor="form-builder-title">Título del Examen / Test</label>
+                    <input
+                      id="form-builder-title"
+                      type="text"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="Ej. B2 First Listening Mock Exam - Part 1"
+                      style={{ fontWeight: 600 }}
+                    />
+                  </div>
+
+                  <div className="form-builder__field">
+                    <label htmlFor="form-builder-level">Nivel</label>
+                    <CustomSelect
+                      id="form-builder-level"
+                      value={level}
+                      onChange={(val) => setLevel(val)}
+                      options={[
+                        { value: 'A1', label: 'A1 (Beginner)' },
+                        { value: 'A2', label: 'A2 (Elementary)' },
+                        { value: 'B1', label: 'B1 (Intermediate)' },
+                        { value: 'B2', label: 'B2 (Upper-Intermediate)' },
+                        { value: 'C1', label: 'C1 (Advanced)' },
+                        { value: 'C2', label: 'C2 (Proficiency)' },
+                        { value: 'GENERAL', label: 'General' }
+                      ]}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+
+                  <div className="form-builder__field">
+                    <label htmlFor="form-builder-skill">Pilar (Skill)</label>
+                    <CustomSelect
+                      id="form-builder-skill"
+                      value={category}
+                      onChange={(val) => setCategory(val)}
+                      options={[
+                        { value: 'MOCK_EXAM', label: 'Mock Exams' },
+                        { value: 'LISTENING', label: 'Listening' },
+                        { value: 'READING', label: 'Reading' },
+                        { value: 'GRAMMAR_VOCABULARY', label: 'Grammar and Vocabulary' },
+                        { value: 'WRITING', label: 'Writing' },
+                        { value: 'SPEAKING', label: 'Speaking' }
+                      ]}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Instrucciones / Descripción</label>
+                <div className="form-builder__field">
+                  <label htmlFor="form-builder-description">Instrucciones / Descripción</label>
                   <textarea
+                    id="form-builder-description"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Instrucciones para el alumno..."
-                    style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)', minHeight: '60px', resize: 'vertical' }}
+                    rows={2}
+                    style={{ resize: 'vertical' }}
                   />
-                </div>
-
-                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                  <div style={{ flex: 1, minWidth: '180px' }}>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Nivel</label>
-                    <select
-                      value={level}
-                      onChange={(e) => setLevel(e.target.value)}
-                      style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }}
-                    >
-                      <option value="A1">A1 (Beginner)</option>
-                      <option value="A2">A2 (Elementary)</option>
-                      <option value="B1">B1 (Intermediate)</option>
-                      <option value="B2">B2 (Upper-Intermediate)</option>
-                      <option value="C1">C1 (Advanced)</option>
-                      <option value="C2">C2 (Proficiency)</option>
-                      <option value="GENERAL">General</option>
-                    </select>
-                  </div>
-
-                  <div style={{ flex: 1, minWidth: '180px' }}>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Pilar (Skill)</label>
-                    <select
-                      value={category}
-                      onChange={(e) => setCategory(e.target.value)}
-                      style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }}
-                    >
-                      <option value="MOCK_EXAM">Mock Exams</option>
-                      <option value="LISTENING">Listening</option>
-                      <option value="READING">Reading</option>
-                      <option value="GRAMMAR_VOCABULARY">Grammar and Vocabulary</option>
-                      <option value="WRITING">Writing</option>
-                      <option value="SPEAKING">Speaking</option>
-                    </select>
-                  </div>
                 </div>
               </div>
 
@@ -436,10 +436,9 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
                       <div style={{ display: 'flex', gap: '1rem' }}>
                         <div style={{ flex: 1 }}>
                           <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Tipo de Pregunta</label>
-                          <select
+                          <CustomSelect
                             value={q.type}
-                            onChange={(e: any) => {
-                              const newType = e.target.value;
+                            onChange={(newType: any) => {
                               let newOptions = q.options;
                               if (newType === 'TRUE_FALSE') {
                                 newOptions = ['True', 'False'];
@@ -453,14 +452,15 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
                                 blankText: newType === 'FILL_IN_THE_BLANKS' && !q.blankText ? 'Hola me llamo (Carlos) y tengo (12) años.' : q.blankText
                               });
                             }}
-                            style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }}
-                          >
-                            <option value="MULTIPLE_CHOICE">Opción Múltiple (Test)</option>
-                            <option value="TRUE_FALSE">Verdadero / Falso</option>
-                            <option value="SHORT_ANSWER">Respuesta Corta</option>
-                            <option value="FILL_IN_THE_BLANKS">Completar espacios (Fill in the Blanks)</option>
-                            <option value="OPEN_TEXT">Texto Libre / Redacción</option>
-                          </select>
+                            options={[
+                              { value: 'MULTIPLE_CHOICE', label: 'Opción Múltiple (Test)' },
+                              { value: 'TRUE_FALSE', label: 'Verdadero / Falso' },
+                              { value: 'SHORT_ANSWER', label: 'Respuesta Corta' },
+                              { value: 'FILL_IN_THE_BLANKS', label: 'Completar espacios (Fill in the Blanks)' },
+                              { value: 'OPEN_TEXT', label: 'Texto Libre / Redacción' }
+                            ]}
+                            style={{ width: '100%' }}
+                          />
                         </div>
 
                         <div style={{ width: '120px' }}>
@@ -664,19 +664,12 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
         </div>
 
         {/* Modal Footer */}
-        <div style={{
-          padding: '1.25rem 2rem',
-          borderTop: '1px solid var(--border)',
-          display: 'flex',
-          justifyContent: 'flex-end',
-          gap: '1rem',
-          background: 'rgba(255,255,255,0.02)'
-        }}>
+        <div className="form-builder__footer">
           <button
             type="button"
             onClick={onClose}
             style={{
-              padding: '0.75rem 1.5rem',
+              padding: '0.65rem 1.25rem',
               borderRadius: '8px',
               border: '1px solid var(--border)',
               background: 'transparent',
@@ -691,7 +684,7 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
             onClick={handleSave}
             disabled={saving}
             className="btn-primary"
-            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.75rem' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.65rem 1.5rem' }}
           >
             <Save size={18} /> {saving ? 'Guardando...' : 'Guardar Formulario'}
           </button>
