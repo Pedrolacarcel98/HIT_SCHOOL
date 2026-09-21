@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { CheckCircle2, FileText, XCircle, CalendarDays } from 'lucide-react';
 import { useParent } from '../context/ParentContext';
+import CustomSelect from '../components/CustomSelect';
 import { generateInvoicePDF, generateStatementPDF } from '../utils/invoice';
 import { getPaymentVisualStatus } from '../utils/paymentStatus';
 
@@ -254,33 +255,22 @@ const StudentPayments: React.FC = () => {
           </h1>
         </div>
         {groupedPayments.length > 0 && (
-          <div className="payments-toolbar">
-            <div className="payments-year-field">
+          <div className="payments-toolbar" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <div className="payments-year-field" style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
               <label htmlFor="student-statement-year" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>
                 Año:
               </label>
-              <select
+              <CustomSelect
                 id="student-statement-year"
                 value={statementYear}
-                onChange={(e) => setStatementYear(e.target.value)}
-                style={{
-                  padding: '0.5rem 0.75rem',
-                  borderRadius: '8px',
-                  border: '1px solid var(--border)',
-                  background: 'var(--surface)',
-                  color: 'var(--text-main)',
-                  fontSize: '0.88rem',
-                  fontWeight: 500,
-                  cursor: 'pointer'
-                }}
-              >
-                <option value="ALL">Todos los años</option>
-                {availableYears.map((yr) => (
-                  <option key={yr} value={yr}>
-                    Año {yr}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setStatementYear(val)}
+                options={[
+                  { value: 'ALL', label: 'Todos los años' },
+                  ...availableYears.map((yr) => ({ value: String(yr), label: `Año ${yr}` }))
+                ]}
+                size="sm"
+                triggerStyle={{ minWidth: '135px' }}
+              />
             </div>
 
             <button

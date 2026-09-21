@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useParent } from '../context/ParentContext';
+import CustomSelect from '../components/CustomSelect';
 import { generateFamilyMonthlyInvoicePDF, generateFamilyStatementPDF } from '../utils/invoice';
 
 interface DashboardStudentData {
@@ -735,27 +736,18 @@ const DashboardStudent: React.FC = () => {
               </button>
 
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap' }}>
-                <select
+                <CustomSelect
                   value={familyMonthKey}
-                  onChange={(event) => setFamilyMonthKey(event.target.value)}
+                  onChange={(val) => setFamilyMonthKey(val)}
                   disabled={familyMonthOptions.length === 0}
-                  aria-label="Mes de factura mensual conjunta"
-                  style={{ 
-                    padding: '0.65rem 0.95rem', 
-                    borderRadius: '8px', 
-                    border: '1px solid var(--border)', 
-                    background: '#ffffff', 
-                    color: 'var(--text-main)', 
-                    fontWeight: 600,
-                    fontSize: '0.86rem' 
-                  }}
-                >
-                  {familyMonthOptions.length === 0 ? (
-                    <option value="">Sin mensualidades pagadas</option>
-                  ) : familyMonthOptions.map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
+                  ariaLabel="Mes de factura mensual conjunta"
+                  placeholder={familyMonthOptions.length === 0 ? 'Sin mensualidades pagadas' : 'Seleccionar mes'}
+                  options={familyMonthOptions.map(([value, label]) => ({
+                    value,
+                    label
+                  }))}
+                  triggerStyle={{ minWidth: '170px' }}
+                />
 
                 <button
                   type="button"

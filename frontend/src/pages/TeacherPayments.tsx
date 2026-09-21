@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, ArrowLeft, CalendarDays, Check, ChevronRight, CircleDollarSign, Clock3, FileText, LoaderCircle, Search, Users, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CalendarDays, Check, ChevronRight, CircleDollarSign, Clock3, FileText, LoaderCircle, Menu, Search, Users, X } from 'lucide-react';
 import ModalityBadge from '../components/ModalityBadge';
+import CustomSelect from '../components/CustomSelect';
 import { generateInvoicePDF, generateStatementPDF } from '../utils/invoice';
 import { getPaymentVisualStatus } from '../utils/paymentStatus';
 
@@ -525,18 +526,62 @@ const TeacherPayments: React.FC = () => {
       </div>
 
       {selectedStudent && createPortal(
-        <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: isMobile ? 0 : '260px', zIndex: 50, minHeight: '100vh', overflowY: 'auto', background: '#fce7f3', padding: isMobile ? '1rem 0.85rem 3rem' : '2rem' }}>
-          <div className="animate-fade-in" style={{ maxWidth: '1024px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            <div>
+        <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: isMobile ? 0 : '260px', zIndex: 50, minHeight: '100vh', overflowY: 'auto', background: '#fce7f3' }}>
+          {/* Header Superior Móvil (Exacto al de Control de Pagos / Layout) */}
+          <header
+            style={{
+              display: 'none',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '0.75rem 1.25rem',
+              background: '#ffffff',
+              borderBottom: '1px solid #e2e8f0',
+              position: 'sticky',
+              top: 0,
+              zIndex: 30,
+            }}
+            className="mobile-header-bar"
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <button
-                type="button"
-                onClick={() => setSelectedStudentPaymentId(null)}
-                className="btn-secondary"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}
+                onClick={() => window.dispatchEvent(new CustomEvent('hit-toggle-mobile-menu'))}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-main)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '4px'
+                }}
+                aria-label="Abrir menú"
               >
-                <ArrowLeft size={16} /> Volver a Control de Pagos
+                <Menu size={24} />
               </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <img src="/logo.webp" alt="HitSchool" style={{ width: '28px', height: '28px', borderRadius: '6px' }} />
+                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 'bold', color: 'var(--text)' }}>HitSchool</h3>
+              </div>
             </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontSize: '0.72rem', color: (localStorage.getItem('userRole') || 'ADMIN') === 'ADMIN' ? '#d97706' : 'var(--primary)', fontWeight: '700', textTransform: 'uppercase', background: (localStorage.getItem('userRole') || 'ADMIN') === 'ADMIN' ? '#fef3c7' : 'var(--primary-light)', padding: '0.2rem 0.5rem', borderRadius: '6px' }}>
+                {(localStorage.getItem('userRole') || 'ADMIN') === 'ADMIN' ? 'Admin' : 'Profesor'}
+              </span>
+            </div>
+          </header>
+
+          <div style={{ padding: isMobile ? '1rem 0.85rem 3rem' : '2rem' }}>
+            <div className="animate-fade-in" style={{ maxWidth: '1024px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedStudentPaymentId(null)}
+                  className="btn-secondary"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}
+                >
+                  <ArrowLeft size={16} /> Volver a Control de Pagos
+                </button>
+              </div>
 
             {/* HEADER EN ESCRITORIO (hidden md:flex) - 100% IDÉNTICO */}
             <header className="hidden md:flex" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
@@ -555,28 +600,17 @@ const TeacherPayments: React.FC = () => {
                     <label htmlFor="teacher-statement-year" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>
                       Año:
                     </label>
-                    <select
+                    <CustomSelect
                       id="teacher-statement-year"
                       value={statementYear}
-                      onChange={(e) => setStatementYear(e.target.value)}
-                      style={{
-                        padding: '0.5rem 0.75rem',
-                        borderRadius: '8px',
-                        border: '1px solid var(--border)',
-                        background: 'var(--surface)',
-                        color: 'var(--text-main)',
-                        fontSize: '0.88rem',
-                        fontWeight: 500,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <option value="ALL">Todos los años</option>
-                      {availableStatementYears.map((yr) => (
-                        <option key={yr} value={yr}>
-                          Año {yr}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(val) => setStatementYear(val)}
+                      options={[
+                        { value: 'ALL', label: 'Todos los años' },
+                        ...availableStatementYears.map((yr) => ({ value: String(yr), label: `Año ${yr}` }))
+                      ]}
+                      size="sm"
+                      triggerStyle={{ minWidth: '135px' }}
+                    />
                   </div>
 
                   <button
@@ -619,28 +653,19 @@ const TeacherPayments: React.FC = () => {
                     <label htmlFor="teacher-statement-year-mob" style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-muted)' }}>
                       Año fiscal:
                     </label>
-                    <select
-                      id="teacher-statement-year-mob"
-                      value={statementYear}
-                      onChange={(e) => setStatementYear(e.target.value)}
-                      style={{
-                        flex: 1,
-                        padding: '0.45rem 0.65rem',
-                        borderRadius: '8px',
-                        border: '1px solid var(--border)',
-                        background: 'var(--surface)',
-                        color: 'var(--text-main)',
-                        fontSize: '0.85rem',
-                        fontWeight: 500
-                      }}
-                    >
-                      <option value="ALL">Todos los años</option>
-                      {availableStatementYears.map((yr) => (
-                        <option key={yr} value={yr}>
-                          Año {yr}
-                        </option>
-                      ))}
-                    </select>
+                    <div style={{ flex: 1 }}>
+                      <CustomSelect
+                        id="teacher-statement-year-mob"
+                        value={statementYear}
+                        onChange={(val) => setStatementYear(val)}
+                        options={[
+                          { value: 'ALL', label: 'Todos los años' },
+                          ...availableStatementYears.map((yr) => ({ value: String(yr), label: `Año ${yr}` }))
+                        ]}
+                        size="sm"
+                        style={{ width: '100%' }}
+                      />
+                    </div>
                   </div>
 
                   <button
@@ -931,9 +956,10 @@ const TeacherPayments: React.FC = () => {
               </div>
             </div>
           </div>
-        </div>,
-        document.body
-      )}
+        </div>
+      </div>,
+      document.body
+    )}
     </div>
   );
 };

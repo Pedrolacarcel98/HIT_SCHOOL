@@ -927,10 +927,19 @@ const MaterialsManagement: React.FC = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '0.75rem', marginTop: '1rem' }}>
               <div>
                   <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Clase destinataria</label>
-                  <select required value={structuredTaskCourseId} onChange={(event) => { setStructuredTaskCourseId(event.target.value); setAssignedStudentIds([]); }} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}>
-                    <option value="">Selecciona una clase</option>
-                    {courses.map((course) => <option key={course.id} value={course.id}>{course.title}</option>)}
-                  </select>
+                  <CustomSelect
+                    value={structuredTaskCourseId}
+                    onChange={(val) => {
+                      setStructuredTaskCourseId(val);
+                      setAssignedStudentIds([]);
+                    }}
+                    placeholder="Selecciona una clase"
+                    options={courses.map((course) => ({
+                      value: course.id,
+                      label: course.title
+                    }))}
+                    style={{ width: '100%' }}
+                  />
               </div>
               <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '0.3rem' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>
@@ -1206,53 +1215,56 @@ const MaterialsManagement: React.FC = () => {
                 />
               </div>
 
-              <div style={{ display: 'flex', gap: '1rem' }}>
-                <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: '180px' }}>
                   <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Tipo de Recurso</label>
-                  <select
+                  <CustomSelect
                     value={resType}
-                    onChange={(e: any) => setResType(e.target.value)}
-                    style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }}
-                  >
-                    <option value="DOCUMENT">📄 Documento (PDF / Guía)</option>
-                    <option value="AUDIO">🎧 Pista de Audio (Listening)</option>
-                    <option value="VIDEO">🎥 Vídeo (YouTube / Vimeo / MP4)</option>
-                    <option value="IMAGE">🖼️ Imagen / Infografía</option>
-                  </select>
+                    onChange={(val: any) => setResType(val)}
+                    options={[
+                      { value: 'DOCUMENT', label: '📄 Documento (PDF / Guía)' },
+                      { value: 'AUDIO', label: '🎧 Pista de Audio (Listening)' },
+                      { value: 'VIDEO', label: '🎥 Vídeo (YouTube / Vimeo / MP4)' },
+                      { value: 'IMAGE', label: '🖼️ Imagen / Infografía' }
+                    ]}
+                    style={{ width: '100%' }}
+                  />
                 </div>
 
-                <div style={{ width: '120px' }}>
+                <div style={{ width: '130px' }}>
                   <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Nivel</label>
-                  <select
+                  <CustomSelect
                     value={resLevel}
-                    onChange={(e) => setResLevel(e.target.value)}
-                    style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }}
-                  >
-                    <option value="A1">A1</option>
-                    <option value="A2">A2</option>
-                    <option value="B1">B1</option>
-                    <option value="B2">B2</option>
-                    <option value="C1">C1</option>
-                    <option value="C2">C2</option>
-                    <option value="GENERAL">General</option>
-                  </select>
+                    onChange={(val) => setResLevel(val)}
+                    options={[
+                      { value: 'A1', label: 'A1' },
+                      { value: 'A2', label: 'A2' },
+                      { value: 'B1', label: 'B1' },
+                      { value: 'B2', label: 'B2' },
+                      { value: 'C1', label: 'C1' },
+                      { value: 'C2', label: 'C2' },
+                      { value: 'GENERAL', label: 'General' }
+                    ]}
+                    style={{ width: '100%' }}
+                  />
                 </div>
               </div>
 
               <div>
                 <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Skill (Pilar Core)</label>
-                <select
+                <CustomSelect
                   value={resCategory}
-                  onChange={(e) => setResCategory(e.target.value)}
-                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }}
-                >
-                  <option value="LISTENING">Listening</option>
-                  <option value="READING">Reading</option>
-                  <option value="GRAMMAR_VOCABULARY">Grammar and Vocabulary</option>
-                  <option value="WRITING">Writing</option>
-                  <option value="SPEAKING">Speaking</option>
-                  <option value="MOCK_EXAM">Mock Exams</option>
-                </select>
+                  onChange={(val) => setResCategory(val)}
+                  options={[
+                    { value: 'LISTENING', label: 'Listening' },
+                    { value: 'READING', label: 'Reading' },
+                    { value: 'GRAMMAR_VOCABULARY', label: 'Grammar and Vocabulary' },
+                    { value: 'WRITING', label: 'Writing' },
+                    { value: 'SPEAKING', label: 'Speaking' },
+                    { value: 'MOCK_EXAM', label: 'Mock Exams' }
+                  ]}
+                  style={{ width: '100%' }}
+                />
               </div>
 
               <div>

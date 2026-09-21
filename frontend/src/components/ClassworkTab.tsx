@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import MaterialViewerModal, { type ViewerMaterial } from './MaterialViewerModal';
 import TaskCard, { type TaskItem } from './TaskCard';
+import CustomSelect from './CustomSelect';
 import { toLocalDatetimeInput, toIsoDateString, getCurrentLocalDatetimeInput } from '../utils/dateUtils';
 
 const SKILL_CATEGORIES = [
@@ -622,28 +623,26 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Disciplina / Skill</label>
-                  <select
+                  <CustomSelect
                     value={taskCategory}
-                    onChange={(e) => setTaskCategory(e.target.value)}
-                    style={inputStyle}
-                  >
-                    {SKILL_CATEGORIES.map(cat => (
-                      <option key={cat.id} value={cat.id}>{cat.label}</option>
-                    ))}
-                  </select>
+                    onChange={(val) => setTaskCategory(val)}
+                    options={SKILL_CATEGORIES.map(cat => ({ value: cat.id, label: cat.label }))}
+                    style={{ width: '100%' }}
+                  />
                 </div>
 
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600 }}>Trimestre</label>
-                  <select
+                  <CustomSelect<number>
                     value={taskTerm}
-                    onChange={(e) => setTaskTerm(Number(e.target.value))}
-                    style={inputStyle}
-                  >
-                    <option value={1}>1º Trimestre (Sep - Dic)</option>
-                    <option value={2}>2º Trimestre (Ene - Mar)</option>
-                    <option value={3}>3º Trimestre (Abr - Jun)</option>
-                  </select>
+                    onChange={(val) => setTaskTerm(val)}
+                    options={[
+                      { value: 1, label: '1º Trimestre (Sep - Dic)' },
+                      { value: 2, label: '2º Trimestre (Ene - Mar)' },
+                      { value: 3, label: '3º Trimestre (Abr - Jun)' }
+                    ]}
+                    style={{ width: '100%' }}
+                  />
                 </div>
 
                 <div>

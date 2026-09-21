@@ -3,6 +3,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Award, BookOpen, CircleDollarSign, GraduationCap, LogOut, MessageCircle, Menu, X, Users, Settings, Home } from 'lucide-react';
 import { useParent } from '../context/ParentContext';
 import SettingsModal from './SettingsModal';
+import CustomSelect from './CustomSelect';
 import { useLearningNotifications } from '../hooks/useLearningNotifications';
 
 const StudentLayout: React.FC = () => {
@@ -271,36 +272,25 @@ const StudentLayout: React.FC = () => {
 
             {userRole === 'PARENT' && childrenList.length > 0 && (
               <div style={{ padding: '0 0.25rem' }}>
-                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
                   Alumno / Hijo activo:
                 </label>
-                <select
+                <CustomSelect
                   value={selectedStudentId}
-                  onChange={(e) => setSelectedStudentId(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '0.45rem 0.5rem',
-                    borderRadius: '8px',
-                    border: '1px solid var(--border)',
-                    background: 'var(--surface-alt)',
-                    color: 'var(--text-main)',
-                    fontSize: '0.85rem',
-                    fontWeight: 600,
-                    outline: 'none',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {childrenList.map((child) => {
+                  onChange={(val) => setSelectedStudentId(val)}
+                  options={childrenList.map((child) => {
                     const childName = child.profile?.firstName || child.profile?.lastName
                       ? `${child.profile?.firstName || ''} ${child.profile?.lastName || ''}`.trim()
                       : child.email;
-                    return (
-                      <option key={child.id} value={child.id}>
-                        🎓 {childName}
-                      </option>
-                    );
+                    return {
+                      value: child.id,
+                      label: `🎓 ${childName}`
+                    };
                   })}
-                </select>
+                  size="sm"
+                  variant="subtle"
+                  style={{ width: '100%' }}
+                />
               </div>
             )}
 

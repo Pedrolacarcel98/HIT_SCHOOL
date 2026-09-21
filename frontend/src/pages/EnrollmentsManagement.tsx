@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import CustomSelect from '../components/CustomSelect';
 
 interface Student {
   id: string;
@@ -397,10 +398,16 @@ const EnrollmentsManagement: React.FC = () => {
               <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 130px', gap: '0.75rem' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Periodicidad</label>
-                  <select value={newBillingPeriod} onChange={(e) => setNewBillingPeriod(e.target.value as 'MONTHLY' | 'QUARTERLY')} style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}>
-                    <option value="MONTHLY">Mensual</option>
-                    <option value="QUARTERLY">Trimestral</option>
-                  </select>
+                  <CustomSelect<'MONTHLY' | 'QUARTERLY'>
+                    value={newBillingPeriod}
+                    onChange={(val) => setNewBillingPeriod(val)}
+                    options={[
+                      { value: 'MONTHLY', label: 'Mensual' },
+                      { value: 'QUARTERLY', label: 'Trimestral' }
+                    ]}
+                    variant="subtle"
+                    style={{ width: '100%' }}
+                  />
                 </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Importe (€)</label>

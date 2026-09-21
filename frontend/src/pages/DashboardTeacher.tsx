@@ -13,7 +13,8 @@ import {
   FileText,
   Calendar,
   FolderArchive,
-  CircleDollarSign
+  CircleDollarSign,
+  HelpCircle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -135,6 +136,30 @@ const DashboardTeacher: React.FC = () => {
 
   const greeting = getTimeGreeting(accountName);
 
+  const handleDownloadGuide = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    try {
+      const response = await fetch('/Guia_Practica_de_Hitschool.pdf');
+      if (!response.ok) throw new Error('Error al descargar archivo');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'Guia Practica de Hitschool.pdf';
+      document.body.appendChild(link);
+      link.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+    } catch {
+      const link = document.createElement('a');
+      link.href = '/Guia_Practica_de_Hitschool.pdf';
+      link.download = 'Guia Practica de Hitschool.pdf';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
   return (
     <div className="page-container animate-fade-in">
       {/* Hero Bar Contextual */}
@@ -189,6 +214,44 @@ const DashboardTeacher: React.FC = () => {
             <Calendar size={14} color="var(--primary)" />
             {currentDateLabel}
           </div>
+
+          <a
+            href="/Guia_Practica_de_Hitschool.pdf"
+            download="Guia Practica de Hitschool.pdf"
+            onClick={handleDownloadGuide}
+            title="Descargar Guía Práctica de HitSchool"
+            aria-label="Descargar Guía Práctica de HitSchool"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              background: '#ffffff',
+              border: '1px solid var(--border)',
+              color: 'var(--primary)',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+              cursor: 'pointer',
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              textDecoration: 'none',
+              flexShrink: 0
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-1px) scale(1.08)';
+              e.currentTarget.style.color = '#15803d';
+              e.currentTarget.style.borderColor = 'var(--primary)';
+              e.currentTarget.style.boxShadow = '0 4px 10px rgba(16, 185, 129, 0.25)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0) scale(1)';
+              e.currentTarget.style.color = 'var(--primary)';
+              e.currentTarget.style.borderColor = 'var(--border)';
+              e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.06)';
+            }}
+          >
+            <HelpCircle size={20} strokeWidth={2.3} />
+          </a>
         </div>
       </section>
 

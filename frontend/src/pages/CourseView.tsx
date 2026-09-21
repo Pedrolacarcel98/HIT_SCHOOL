@@ -5,6 +5,7 @@ import StreamTab from '../components/StreamTab';
 import ClassworkTab from '../components/ClassworkTab';
 import PeopleTab from '../components/PeopleTab';
 import ClassGradesDetail from '../components/ClassGradesDetail';
+import CustomSelect from '../components/CustomSelect';
 
 const CourseView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -217,16 +218,17 @@ const CourseView: React.FC = () => {
               <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)', marginTop: '0.85rem', marginBottom: '0.35rem' }}>
                 Modalidad:
               </label>
-              <select
+              <CustomSelect<'PRESENCIAL' | 'ONLINE' | 'HIBRIDO'>
                 value={duplicateModality}
-                onChange={(e) => setDuplicateModality(e.target.value as 'PRESENCIAL' | 'ONLINE' | 'HIBRIDO')}
+                onChange={(val) => setDuplicateModality(val)}
                 disabled={isDuplicating}
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', outline: 'none' }}
-              >
-                <option value="PRESENCIAL">Presencial (Academia)</option>
-                <option value="ONLINE">Online / Particulares</option>
-                <option value="HIBRIDO">Híbrido</option>
-              </select>
+                options={[
+                  { value: 'PRESENCIAL', label: 'Presencial (Academia)' },
+                  { value: 'ONLINE', label: 'Online / Particulares' },
+                  { value: 'HIBRIDO', label: 'Híbrido' }
+                ]}
+                style={{ width: '100%' }}
+              />
 
               <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
                 <button type="button" className="btn-secondary" onClick={() => setIsDuplicateModalOpen(false)} disabled={isDuplicating}>

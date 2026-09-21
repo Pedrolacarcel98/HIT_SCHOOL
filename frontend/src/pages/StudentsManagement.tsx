@@ -1339,16 +1339,17 @@ const StudentsManagement: React.FC = () => {
               <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
                 <div style={{ flex: 1 }}>
                   <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Modalidad</label>
-                  <select
-                    required
+                  <CustomSelect<'PRESENCIAL' | 'ONLINE' | 'HIBRIDO'>
                     value={newModality}
-                    onChange={(e) => setNewModality(e.target.value as 'PRESENCIAL' | 'ONLINE' | 'HIBRIDO')}
-                    style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
-                  >
-                    <option value="PRESENCIAL">Presencial</option>
-                    <option value="ONLINE">Online</option>
-                    <option value="HIBRIDO">Híbrido</option>
-                  </select>
+                    onChange={(val) => setNewModality(val)}
+                    options={[
+                      { value: 'PRESENCIAL', label: 'Presencial' },
+                      { value: 'ONLINE', label: 'Online' },
+                      { value: 'HIBRIDO', label: 'Híbrido' }
+                    ]}
+                    variant="subtle"
+                    style={{ width: '100%' }}
+                  />
                 </div>
               </div>
 
@@ -1377,13 +1378,13 @@ const StudentsManagement: React.FC = () => {
 
               <div>
                 <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Autorización Imagen</label>
-                <select
+                <CustomSelect<ImageAuthorizationOption>
                   value={newAutorizacionImagen}
-                  onChange={(e) => setNewAutorizacionImagen(e.target.value as ImageAuthorizationOption)}
-                  style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
-                >
-                  {IMAGE_AUTHORIZATION_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
-                </select>
+                  onChange={(val) => setNewAutorizacionImagen(val)}
+                  options={IMAGE_AUTHORIZATION_OPTIONS.map(opt => ({ value: opt, label: opt }))}
+                  variant="subtle"
+                  style={{ width: '100%' }}
+                />
               </div>
 
               <div>
@@ -1446,21 +1447,18 @@ const StudentsManagement: React.FC = () => {
                           placeholder="Filtrar tutor por nombre, DNI o correo..."
                           style={{ width: '100%', marginBottom: '0.5rem', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}
                         />
-                        <select
+                        <CustomSelect
                           value={selectedParentId}
-                          onChange={(e) => setSelectedParentId(e.target.value)}
-                          required={hasParent && parentOption === 'EXISTING'}
-                          style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}
-                        >
-                          <option value="">-- Seleccionar Padre/Tutor --</option>
-                          {filteredParents.length === 0 ? (
-                            <option value="" disabled>No hay tutores activos que coincidan</option>
-                          ) : filteredParents.map(p => (
-                            <option key={p.id} value={p.id}>
-                              {p.profile?.firstName} {p.profile?.lastName} ({p.email}) - {p.children?.length || 0} hijos
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(val) => setSelectedParentId(val)}
+                          placeholder="-- Seleccionar Padre/Tutor --"
+                          searchable={true}
+                          searchPlaceholder="Buscar tutor por nombre, DNI o correo..."
+                          options={filteredParents.map(p => ({
+                            value: p.id,
+                            label: `${p.profile?.firstName || ''} ${p.profile?.lastName || ''} (${p.email}) - ${p.children?.length || 0} hijos`.trim()
+                          }))}
+                          style={{ width: '100%' }}
+                        />
                       </div>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -1641,35 +1639,38 @@ const StudentsManagement: React.FC = () => {
                   placeholder="Filtrar tutor por nombre, DNI o correo..."
                   style={{ width: '100%', marginBottom: '0.5rem', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
                 />
-                <select
+                <CustomSelect
                   value={editParentId}
-                  onChange={(e) => setEditParentId(e.target.value)}
-                  style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
-                >
-                  <option value="">-- Sin tutor asignado (Alumno Independiente) --</option>
-                  {filteredParents.length === 0 ? (
-                    <option value="" disabled>No hay tutores activos que coincidan</option>
-                  ) : filteredParents.map(p => (
-                    <option key={p.id} value={p.id}>
-                      👨‍👧 {p.profile?.firstName} {p.profile?.lastName} ({p.email})
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setEditParentId(val)}
+                  placeholder="-- Sin tutor asignado (Alumno Independiente) --"
+                  searchable={true}
+                  searchPlaceholder="Buscar tutor por nombre, DNI o correo..."
+                  options={[
+                    { value: '', label: '-- Sin tutor asignado (Alumno Independiente) --' },
+                    ...filteredParents.map(p => ({
+                      value: p.id,
+                      label: `👨‍👧 ${p.profile?.firstName || ''} ${p.profile?.lastName || ''} (${p.email})`.trim()
+                    }))
+                  ]}
+                  variant="subtle"
+                  style={{ width: '100%' }}
+                />
               </div>
 
               <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
                 <div style={{ flex: 1 }}>
                   <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Modalidad</label>
-                  <select
-                    required
+                  <CustomSelect<'PRESENCIAL' | 'ONLINE' | 'HIBRIDO'>
                     value={editModality}
-                    onChange={(e) => setEditModality(e.target.value as 'PRESENCIAL' | 'ONLINE' | 'HIBRIDO')}
-                    style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
-                  >
-                    <option value="PRESENCIAL">Presencial</option>
-                    <option value="ONLINE">Online</option>
-                    <option value="HIBRIDO">Híbrido</option>
-                  </select>
+                    onChange={(val) => setEditModality(val)}
+                    options={[
+                      { value: 'PRESENCIAL', label: 'Presencial' },
+                      { value: 'ONLINE', label: 'Online' },
+                      { value: 'HIBRIDO', label: 'Híbrido' }
+                    ]}
+                    variant="subtle"
+                    style={{ width: '100%' }}
+                  />
                 </div>
               </div>
 
@@ -1698,13 +1699,13 @@ const StudentsManagement: React.FC = () => {
 
               <div>
                 <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Autorización Imagen</label>
-                <select
+                <CustomSelect<ImageAuthorizationOption>
                   value={editAutorizacionImagen}
-                  onChange={(e) => setEditAutorizacionImagen(e.target.value as ImageAuthorizationOption)}
-                  style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
-                >
-                  {IMAGE_AUTHORIZATION_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
-                </select>
+                  onChange={(val) => setEditAutorizacionImagen(val)}
+                  options={IMAGE_AUTHORIZATION_OPTIONS.map(opt => ({ value: opt, label: opt }))}
+                  variant="subtle"
+                  style={{ width: '100%' }}
+                />
               </div>
 
               <div>
@@ -1722,10 +1723,15 @@ const StudentsManagement: React.FC = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 130px', gap: '0.75rem', padding: '0.9rem', border: '1px solid var(--primary-border)', borderRadius: '8px', background: 'var(--primary-subtle)' }}>
                   <div>
                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Tipo de pago</label>
-                    <select value={editBillingPeriod} onChange={(event) => setEditBillingPeriod(event.target.value as 'MONTHLY' | 'QUARTERLY')} style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}>
-                      <option value="MONTHLY">Mensual</option>
-                      <option value="QUARTERLY">Trimestral</option>
-                    </select>
+                    <CustomSelect<'MONTHLY' | 'QUARTERLY'>
+                      value={editBillingPeriod}
+                      onChange={(val) => setEditBillingPeriod(val)}
+                      options={[
+                        { value: 'MONTHLY', label: 'Mensual' },
+                        { value: 'QUARTERLY', label: 'Trimestral' }
+                      ]}
+                      style={{ width: '100%' }}
+                    />
                   </div>
                   <div>
                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Importe (€)</label>
@@ -1823,10 +1829,16 @@ const StudentsManagement: React.FC = () => {
               <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 130px', gap: '0.75rem' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Periodicidad</label>
-                  <select value={newBillingPeriod} onChange={(e) => setNewBillingPeriod(e.target.value as 'MONTHLY' | 'QUARTERLY')} style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}>
-                    <option value="MONTHLY">Mensual</option>
-                    <option value="QUARTERLY">Trimestral</option>
-                  </select>
+                  <CustomSelect<'MONTHLY' | 'QUARTERLY'>
+                    value={newBillingPeriod}
+                    onChange={(val) => setNewBillingPeriod(val)}
+                    options={[
+                      { value: 'MONTHLY', label: 'Mensual' },
+                      { value: 'QUARTERLY', label: 'Trimestral' }
+                    ]}
+                    variant="subtle"
+                    style={{ width: '100%' }}
+                  />
                 </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Importe (€)</label>

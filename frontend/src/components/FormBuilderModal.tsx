@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, Plus, Trash2, Eye, Save, Music, HelpCircle, Image, Search, FileText } from 'lucide-react';
 import FormPlayer from './FormPlayer';
 import AudioPlayer from './AudioPlayer';
+import CustomSelect from './CustomSelect';
 
 interface MediaResource {
   id: string;
@@ -308,27 +309,39 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
 
                   <div className="form-builder__field">
                     <label htmlFor="form-builder-level">Nivel</label>
-                    <select id="form-builder-level" value={level} onChange={(e) => setLevel(e.target.value)}>
-                      <option value="A1">A1 (Beginner)</option>
-                      <option value="A2">A2 (Elementary)</option>
-                      <option value="B1">B1 (Intermediate)</option>
-                      <option value="B2">B2 (Upper-Intermediate)</option>
-                      <option value="C1">C1 (Advanced)</option>
-                      <option value="C2">C2 (Proficiency)</option>
-                      <option value="GENERAL">General</option>
-                    </select>
+                    <CustomSelect
+                      id="form-builder-level"
+                      value={level}
+                      onChange={(val) => setLevel(val)}
+                      options={[
+                        { value: 'A1', label: 'A1 (Beginner)' },
+                        { value: 'A2', label: 'A2 (Elementary)' },
+                        { value: 'B1', label: 'B1 (Intermediate)' },
+                        { value: 'B2', label: 'B2 (Upper-Intermediate)' },
+                        { value: 'C1', label: 'C1 (Advanced)' },
+                        { value: 'C2', label: 'C2 (Proficiency)' },
+                        { value: 'GENERAL', label: 'General' }
+                      ]}
+                      style={{ width: '100%' }}
+                    />
                   </div>
 
                   <div className="form-builder__field">
                     <label htmlFor="form-builder-skill">Pilar (Skill)</label>
-                    <select id="form-builder-skill" value={category} onChange={(e) => setCategory(e.target.value)}>
-                      <option value="MOCK_EXAM">Mock Exams</option>
-                      <option value="LISTENING">Listening</option>
-                      <option value="READING">Reading</option>
-                      <option value="GRAMMAR_VOCABULARY">Grammar and Vocabulary</option>
-                      <option value="WRITING">Writing</option>
-                      <option value="SPEAKING">Speaking</option>
-                    </select>
+                    <CustomSelect
+                      id="form-builder-skill"
+                      value={category}
+                      onChange={(val) => setCategory(val)}
+                      options={[
+                        { value: 'MOCK_EXAM', label: 'Mock Exams' },
+                        { value: 'LISTENING', label: 'Listening' },
+                        { value: 'READING', label: 'Reading' },
+                        { value: 'GRAMMAR_VOCABULARY', label: 'Grammar and Vocabulary' },
+                        { value: 'WRITING', label: 'Writing' },
+                        { value: 'SPEAKING', label: 'Speaking' }
+                      ]}
+                      style={{ width: '100%' }}
+                    />
                   </div>
                 </div>
 
@@ -423,10 +436,9 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
                       <div style={{ display: 'flex', gap: '1rem' }}>
                         <div style={{ flex: 1 }}>
                           <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Tipo de Pregunta</label>
-                          <select
+                          <CustomSelect
                             value={q.type}
-                            onChange={(e: any) => {
-                              const newType = e.target.value;
+                            onChange={(newType: any) => {
                               let newOptions = q.options;
                               if (newType === 'TRUE_FALSE') {
                                 newOptions = ['True', 'False'];
@@ -440,14 +452,15 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
                                 blankText: newType === 'FILL_IN_THE_BLANKS' && !q.blankText ? 'Hola me llamo (Carlos) y tengo (12) años.' : q.blankText
                               });
                             }}
-                            style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }}
-                          >
-                            <option value="MULTIPLE_CHOICE">Opción Múltiple (Test)</option>
-                            <option value="TRUE_FALSE">Verdadero / Falso</option>
-                            <option value="SHORT_ANSWER">Respuesta Corta</option>
-                            <option value="FILL_IN_THE_BLANKS">Completar espacios (Fill in the Blanks)</option>
-                            <option value="OPEN_TEXT">Texto Libre / Redacción</option>
-                          </select>
+                            options={[
+                              { value: 'MULTIPLE_CHOICE', label: 'Opción Múltiple (Test)' },
+                              { value: 'TRUE_FALSE', label: 'Verdadero / Falso' },
+                              { value: 'SHORT_ANSWER', label: 'Respuesta Corta' },
+                              { value: 'FILL_IN_THE_BLANKS', label: 'Completar espacios (Fill in the Blanks)' },
+                              { value: 'OPEN_TEXT', label: 'Texto Libre / Redacción' }
+                            ]}
+                            style={{ width: '100%' }}
+                          />
                         </div>
 
                         <div style={{ width: '120px' }}>

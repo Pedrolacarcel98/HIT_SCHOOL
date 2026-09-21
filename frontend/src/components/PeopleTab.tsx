@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { UserPlus, UserMinus, Users, X, CheckSquare, Square, AlertCircle, GraduationCap, Info } from 'lucide-react';
+import CustomSelect from './CustomSelect';
 
 const PeopleTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   const userRole = localStorage.getItem('userRole');
@@ -310,20 +311,21 @@ const PeopleTab: React.FC<{ courseId: string }> = ({ courseId }) => {
               <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, marginBottom: '0.3rem', color: 'var(--text-main)' }}>
                 Seleccionar profesor para conceder acceso a esta clase online:
               </label>
-              <select
+              <CustomSelect
                 value={selectedTeacherToAssign}
-                onChange={(e) => setSelectedTeacherToAssign(e.target.value)}
-                style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}
-              >
-                <option value="">-- Elige un profesor --</option>
-                {allTeachersList
+                onChange={(val) => setSelectedTeacherToAssign(val)}
+                placeholder="-- Elige un profesor --"
+                searchable={true}
+                searchPlaceholder="Buscar profesor por nombre o email..."
+                options={allTeachersList
                   .filter(t => t.id !== teachersData.titular?.id && !teachersData.assigned?.some(at => at.id === t.id))
-                  .map(t => (
-                    <option key={t.id} value={t.id}>
-                      {t.profile?.firstName} {t.profile?.lastName} ({t.email})
-                    </option>
-                  ))}
-              </select>
+                  .map(t => ({
+                    value: t.id,
+                    label: `${t.profile?.firstName || ''} ${t.profile?.lastName || ''} (${t.email})`.trim()
+                  }))}
+                style={{ width: '100%' }}
+                size="sm"
+              />
             </div>
             <div style={{ display: 'flex', gap: '0.5rem', alignSelf: 'flex-end' }}>
               <button

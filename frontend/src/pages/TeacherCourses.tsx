@@ -276,11 +276,17 @@ const TeacherCourses: React.FC = () => {
               style={{ flex: '1 1 240px', minWidth: 0, padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', outline: 'none' }}
               autoFocus
             />
-            <select value={newCourseModality} onChange={(e) => setNewCourseModality(e.target.value as 'PRESENCIAL' | 'ONLINE' | 'HIBRIDO')} style={{ flex: '0 1 150px', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}>
-              <option value="PRESENCIAL">Presencial</option>
-              <option value="ONLINE">Online</option>
-              <option value="HIBRIDO">Híbrido</option>
-            </select>
+            <CustomSelect<'PRESENCIAL' | 'ONLINE' | 'HIBRIDO'>
+              value={newCourseModality}
+              onChange={(val) => setNewCourseModality(val)}
+              options={[
+                { value: 'PRESENCIAL', label: 'Presencial' },
+                { value: 'ONLINE', label: 'Online' },
+                { value: 'HIBRIDO', label: 'Híbrido' }
+              ]}
+              variant="subtle"
+              style={{ flex: '0 1 150px' }}
+            />
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
               <button type="submit" className="btn-primary">Guardar</button>
               <button type="button" onClick={() => setIsCreating(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.5rem 0.75rem' }}>Cancelar</button>
@@ -596,16 +602,17 @@ const TeacherCourses: React.FC = () => {
               <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)', marginTop: '0.85rem', marginBottom: '0.35rem' }}>
                 Modalidad:
               </label>
-              <select
+              <CustomSelect<'PRESENCIAL' | 'ONLINE' | 'HIBRIDO'>
                 value={duplicateModality}
-                onChange={(e) => setDuplicateModality(e.target.value as 'PRESENCIAL' | 'ONLINE' | 'HIBRIDO')}
+                onChange={(val) => setDuplicateModality(val)}
                 disabled={isDuplicating}
-                style={inputStyle}
-              >
-                <option value="PRESENCIAL">Presencial (Academia)</option>
-                <option value="ONLINE">Online / Particulares</option>
-                <option value="HIBRIDO">Híbrido</option>
-              </select>
+                options={[
+                  { value: 'PRESENCIAL', label: 'Presencial (Academia)' },
+                  { value: 'ONLINE', label: 'Online / Particulares' },
+                  { value: 'HIBRIDO', label: 'Híbrido' }
+                ]}
+                style={{ width: '100%' }}
+              />
 
               <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
                 <button type="button" className="btn-secondary" onClick={() => setDuplicatingCourse(null)} disabled={isDuplicating}>
