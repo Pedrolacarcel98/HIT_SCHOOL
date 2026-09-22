@@ -297,6 +297,8 @@ const TeacherLayout: React.FC = () => {
                 </p>
               </div>
             </div>
+
+
             <button
               onClick={() => setIsSettingsOpen(true)}
               style={{

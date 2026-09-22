@@ -3339,3 +3339,74 @@ input, select, textarea {
   color: var(--text-muted, #687972);
 }
 
+/* ============================================================
+   PWA Installation & Tailwind Utility Support
+   ============================================================ */
+.bg-emerald-50 {
+  background-color: #ecfdf5 !important;
+}
+
+.hover\:bg-emerald-100:hover {
+  background-color: #d1fae5 !important;
+}
+
+.text-emerald-700 {
+  color: #047857 !important;
+}
+
+.border-emerald-200 {
+  border-color: #a7f3d0 !important;
+}
+
+.bg-emerald-600 {
+  background-color: #059669 !important;
+}
+
+.hover\:bg-emerald-700:hover {
+  background-color: #047857 !important;
+}
+
+.border-emerald-500 {
+  border-color: #10b981 !important;
+}
+
+.border-emerald-500\/30 {
+  border-color: rgba(16, 185, 129, 0.3) !important;
+}
+
+.rounded-full {
+  border-radius: 9999px !important;
+}
+
+.pb-28 {
+  padding-bottom: 7rem !important;
+}
+
+.bottom-6 {
+  bottom: 1.5rem !important;
+}
+
+.right-6 {
+  right: 1.5rem !important;
+}
+
+.z-40 {
+  z-index: 40 !important;
+}
+
+.active\:scale-95:active {
+  transform: scale(0.95) !important;
+}
+
+@keyframes modal-zoom-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+
