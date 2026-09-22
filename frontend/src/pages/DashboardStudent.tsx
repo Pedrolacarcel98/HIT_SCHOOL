@@ -17,6 +17,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useParent } from '../context/ParentContext';
 import CustomSelect from '../components/CustomSelect';
+import PWAInstallButton from '../components/PWAInstallButton';
 import { generateFamilyMonthlyInvoicePDF, generateFamilyStatementPDF } from '../utils/invoice';
 
 interface DashboardStudentData {
@@ -240,7 +241,7 @@ const DashboardStudent: React.FC = () => {
   const greeting = getTimeGreeting(accountName);
 
   return (
-    <div className="page-container animate-fade-in">
+    <div className="page-container animate-fade-in pb-28">
       {/* Hero Bar Contextual */}
       <section className="dashboard-hero">
         <div>
@@ -771,6 +772,9 @@ const DashboardStudent: React.FC = () => {
           </section>
         )}
       </div>
+
+      {/* Botón flotante PWA en la esquina inferior derecha de Inicio */}
+      <PWAInstallButton />
     </div>
   );
 };

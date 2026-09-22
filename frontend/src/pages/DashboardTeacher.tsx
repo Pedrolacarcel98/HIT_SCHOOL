@@ -17,6 +17,7 @@ import {
   HelpCircle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import PWAInstallButton from '../components/PWAInstallButton';
 
 interface DashboardTeacherData {
   activeStudents: number;
@@ -161,7 +162,7 @@ const DashboardTeacher: React.FC = () => {
   };
 
   return (
-    <div className="page-container animate-fade-in">
+    <div className="page-container animate-fade-in pb-28">
       {/* Hero Bar Contextual */}
       <section className="dashboard-hero">
         <div>
@@ -688,6 +689,9 @@ const DashboardTeacher: React.FC = () => {
           </div>
         )}
       </section>
+
+      {/* Botón flotante PWA en la esquina inferior derecha de Inicio */}
+      <PWAInstallButton />
     </div>
   );
 };

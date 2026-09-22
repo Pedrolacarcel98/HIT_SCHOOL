@@ -94,11 +94,17 @@ const StudentGradesTab: React.FC<{ courseId: string; courseTitle?: string }> = (
   };
 
   if (loading) {
-    return <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>Cargando calificaciones...</div>;
+    return (
+      <div className="animate-fade-in" style={{ padding: '2rem 1.5rem', maxWidth: '1200px', margin: '0 auto' }}>
+        <div className="glass-panel" style={{ textAlign: 'center', padding: '4rem 2rem', color: 'var(--text-muted)' }}>
+          Cargando calificaciones...
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="animate-fade-in" style={{ padding: '1.5rem 0', maxWidth: '1200px', margin: '0 auto' }}>
+    <div className="animate-fade-in" style={{ padding: '2rem 1.5rem', maxWidth: '1200px', margin: '0 auto' }}>
       {/* Cabecera Principal y Selector de Trimestre */}
       <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
