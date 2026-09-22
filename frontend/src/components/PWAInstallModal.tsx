@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Share, PlusSquare, Check, CheckCircle2 } from 'lucide-react';
+import { X, Share, PlusSquare, Check, CheckCircle2, MoreHorizontal } from 'lucide-react';
 
 interface PWAInstallModalProps {
   isOpen: boolean;
@@ -173,11 +173,45 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({
                 1
               </div>
               <div style={{ fontSize: '0.85rem', color: '#1e293b', fontWeight: 600 }}>
-                Pulsa el botón <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem', color: '#0284c7', background: '#e0f2fe', padding: '0.15rem 0.4rem', borderRadius: '6px' }}>"Compartir ⎋" <Share size={13} /></span> en la barra inferior de Safari.
+                Pulsa en el botón de los tres puntos <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem', color: '#0284c7', background: '#e0f2fe', padding: '0.15rem 0.45rem', borderRadius: '6px', fontWeight: 700 }}>"•••" <MoreHorizontal size={13} strokeWidth={2.5} /></span> situado en la esquina inferior derecha.
               </div>
             </div>
 
             {/* Paso 2 */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.85rem',
+                padding: '0.75rem 1rem',
+                borderRadius: '14px',
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+              }}
+            >
+              <div
+                style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '8px',
+                  background: '#f0fdf4',
+                  color: '#16a34a',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  fontWeight: 800,
+                  fontSize: '0.85rem',
+                }}
+              >
+                2
+              </div>
+              <div style={{ fontSize: '0.85rem', color: '#1e293b', fontWeight: 600 }}>
+                Selecciona la opción <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem', color: '#16a34a', background: '#f0fdf4', padding: '0.15rem 0.45rem', borderRadius: '6px', fontWeight: 700 }}>"Compartir" <Share size={13} strokeWidth={2.5} /></span> en el menú emergente.
+              </div>
+            </div>
+
+            {/* Paso 3 */}
             <div
               style={{
                 display: 'flex',
@@ -204,10 +238,10 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({
                   fontSize: '0.85rem',
                 }}
               >
-                2
+                3
               </div>
               <div style={{ fontSize: '0.85rem', color: '#1e293b', fontWeight: 600 }}>
-                Selecciona <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem', color: '#059669', background: '#ecfdf5', padding: '0.15rem 0.4rem', borderRadius: '6px' }}>"Añadir a la pantalla de inicio" <PlusSquare size={13} /></span>.
+                Toca en <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem', color: '#059669', background: '#ecfdf5', padding: '0.15rem 0.45rem', borderRadius: '6px', fontWeight: 700 }}>"Añadir a la pantalla de inicio" <PlusSquare size={13} strokeWidth={2.5} /></span>.
               </div>
             </div>
           </div>
