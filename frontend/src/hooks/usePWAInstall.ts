@@ -21,9 +21,14 @@ if (typeof window !== 'undefined') {
 
 function checkIsStandalone(): boolean {
   if (typeof window === 'undefined') return false;
-  const isWindowStandalone = window.matchMedia?.('(display-mode: standalone)')?.matches;
+  const isWindowStandalone =
+    window.matchMedia?.('(display-mode: standalone)')?.matches ||
+    window.matchMedia?.('(display-mode: fullscreen)')?.matches ||
+    window.matchMedia?.('(display-mode: minimal-ui)')?.matches ||
+    window.matchMedia?.('(display-mode: window-controls-overlay)')?.matches;
   const isNavigatorStandalone = (window.navigator as unknown as { standalone?: boolean })?.standalone === true;
-  return Boolean(isWindowStandalone || isNavigatorStandalone);
+  const isAndroidApp = typeof document !== 'undefined' && document.referrer?.includes('android-app://');
+  return Boolean(isWindowStandalone || isNavigatorStandalone || isAndroidApp);
 }
 
 function checkIsIOS(): boolean {
@@ -55,12 +60,18 @@ export function usePWAInstall() {
   const [isInstalled, setIsInstalled] = useState<boolean>(false);
 
   useEffect(() => {
-    // 1. Escuchar cambios de modo de pantalla standalone
-    const mediaQuery = window.matchMedia('(display-mode: standalone)');
-    const handleMediaChange = (e: MediaQueryListEvent) => {
-      setIsStandalone(e.matches);
+    // 1. Escuchar cambios de modo de pantalla standalone/instalada
+    const standaloneQueries = [
+      '(display-mode: standalone)',
+      '(display-mode: fullscreen)',
+      '(display-mode: minimal-ui)',
+      '(display-mode: window-controls-overlay)',
+    ];
+    const mediaQueries = standaloneQueries.map((query) => window.matchMedia(query));
+    const handleMediaChange = () => {
+      setIsStandalone(checkIsStandalone());
     };
-    mediaQuery.addEventListener('change', handleMediaChange);
+    mediaQueries.forEach((mq) => mq.addEventListener('change', handleMediaChange));
 
     // 2. Capturar el evento beforeinstallprompt (Chromium, Edge, Android)
     const handleBeforeInstallPrompt = (e: Event) => {
@@ -81,7 +92,7 @@ export function usePWAInstall() {
     window.addEventListener('appinstalled', handleAppInstalled);
 
     return () => {
-      mediaQuery.removeEventListener('change', handleMediaChange);
+      mediaQueries.forEach((mq) => mq.removeEventListener('change', handleMediaChange));
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       window.removeEventListener('appinstalled', handleAppInstalled);
     };

@@ -5,6 +5,13 @@
     display: none !important;
   }
 }
+
+/* Ocultar botón de descarga de la app cuando se ejecuta instalada (PWA standalone / modo pantalla completa) */
+@media all and (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui), (display-mode: window-controls-overlay) {
+  .pwa-install-button {
+    display: none !important;
+  }
+}
 :root {
   /* Paleta Verde Lima Pastel (Basada en el logo oficial HitSchool #82c28e) */
   --primary-hue: 131;

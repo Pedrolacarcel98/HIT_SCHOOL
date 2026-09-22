@@ -12,9 +12,14 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
   className = '',
   style = {},
 }) => {
-  const { isStandalone, isIOS, installApp } = usePWAInstall();
+  const { isStandalone, isInstalled, isIOS, installApp } = usePWAInstall();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<'ios' | 'already-installed'>('ios');
+
+  // Si la app ya está abierta desde el acceso directo instalado o descargada (standalone), no renderizar el botón
+  if (isStandalone || isInstalled) {
+    return null;
+  }
 
   const handleClick = async () => {
     // 1. Si la app ya está abierta desde el acceso directo instalado (standalone)
@@ -47,7 +52,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
       <button
         type="button"
         onClick={handleClick}
-        className={`fixed bottom-6 right-6 z-40 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 px-4 rounded-full shadow-lg border border-emerald-500/30 flex items-center gap-2 transition-all active:scale-95 ${className}`}
+        className={`pwa-install-button fixed bottom-6 right-6 z-40 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 px-4 rounded-full shadow-lg border border-emerald-500/30 flex items-center gap-2 transition-all active:scale-95 ${className}`}
         style={{
           position: 'fixed',
           bottom: '1.5rem',
