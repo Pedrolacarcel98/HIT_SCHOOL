@@ -380,7 +380,7 @@ const ParentsManagement: React.FC = () => {
                   return (
                     <tr
                       key={parent.id}
-                      style={{ borderTop: "1px solid var(--border)" }}
+                      style={{ borderTop: "1px solid var(--border)", background: isActive ? "#f0fdf4" : undefined }}
                     >
                       <td style={{ padding: "1rem 1.25rem" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>

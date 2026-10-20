@@ -58,21 +58,39 @@ export const getChildrenForParent = async (prisma: PrismaClient, parentId: strin
 };
 
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, role, accountId } = req.body;
+  const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+  const allowedRoles = ['STUDENT', 'TEACHER', 'PARENT'];
+  if (!normalizedEmail || typeof password !== 'string' || !allowedRoles.includes(role)) {
+    return res.status(400).json({ error: 'Indica un correo, contraseña y tipo de perfil válidos.' });
+  }
 
   try {
-    const user = await prisma.user.findUnique({
-      where: { email: email.trim().toLowerCase() },
-      include: {
-        profile: true
-      }
+    const roles = role === 'TEACHER' ? ['TEACHER', 'ADMIN'] : [role];
+    const candidates = await prisma.user.findMany({
+      where: { email: normalizedEmail, role: { in: roles } },
+      include: { profile: true }
     });
-    if (!user) {
-      return res.status(401).json({ error: 'Credenciales inválidas' });
+
+    const matchingUsers = (await Promise.all(candidates.map(async (candidate) => (
+      await bcrypt.compare(password, candidate.passwordHash) ? candidate : null
+    )))).filter((candidate) => candidate !== null);
+    const user = accountId
+      ? matchingUsers.find((candidate) => candidate.id === accountId)
+      : matchingUsers.length === 1 ? matchingUsers[0] : null;
+
+    if (!user && !accountId && matchingUsers.length > 1) {
+      return res.status(409).json({
+        error: 'Hay varias cuentas con esas credenciales. Selecciona una.',
+        accounts: matchingUsers.map((candidate) => ({
+          id: candidate.id,
+          role: candidate.role,
+          name: `${candidate.profile?.firstName || ''} ${candidate.profile?.lastName || ''}`.trim()
+        }))
+      });
     }
 
-    const validPassword = await bcrypt.compare(password, user.passwordHash);
-    if (!validPassword) {
+    if (!user) {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
 
@@ -109,7 +127,7 @@ router.post('/login', async (req, res) => {
 });
 
 router.post('/forgot-password', async (req, res) => {
-  const { email, role } = req.body;
+  const { email, role, firstName, lastName } = req.body;
   const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
   const allowedRoles = ['STUDENT', 'TEACHER', 'PARENT'];
 
@@ -118,13 +136,23 @@ router.post('/forgot-password', async (req, res) => {
   }
 
   try {
-    const user = await prisma.user.findUnique({
-      where: { email: normalizedEmail },
+    const candidates = await prisma.user.findMany({
+      where: { email: normalizedEmail, role, status: 'ACTIVE' },
       include: { profile: true }
     });
+    const normalizeName = (value: string) => value.trim().toLocaleLowerCase('es');
+    const matchingStudents = role === 'STUDENT' && typeof firstName === 'string' && typeof lastName === 'string'
+      ? candidates.filter((candidate) => (
+        normalizeName(candidate.profile?.firstName || '') === normalizeName(firstName) &&
+        normalizeName(candidate.profile?.lastName || '') === normalizeName(lastName)
+      ))
+      : [];
+    const user = role === 'STUDENT'
+      ? matchingStudents.length === 1 ? matchingStudents[0] : undefined
+      : candidates[0];
 
-    // Responder igual cuando el correo no existe o no corresponde al perfil elegido.
-    if (!user || user.role !== role || user.status !== 'ACTIVE') {
+    // Responder igual cuando los datos no identifican una cuenta activa.
+    if (!user) {
       return res.json({ message: 'Si los datos son válidos, recibirás un correo con tu nueva contraseña.' });
     }
 
@@ -134,7 +162,8 @@ router.post('/forgot-password', async (req, res) => {
     await sendPasswordResetEmail(
       user.email,
       user.profile?.firstName || 'usuario',
-      temporaryPassword
+      temporaryPassword,
+      user.role === 'STUDENT' ? 'alumno' : user.role === 'PARENT' ? 'tutor' : 'profesor'
     );
 
     await prisma.user.update({
@@ -228,16 +257,19 @@ router.put('/me/profile', authenticateToken, async (req: AuthRequest, res) => {
       return res.status(404).json({ error: 'La sesión ya no es válida. Vuelve a iniciar sesión.' });
     }
 
-    const duplicateEmail = await prisma.user.findFirst({
-      where: {
-        email: normalizedEmail,
-        NOT: { id: userId }
-      },
-      select: { id: true }
-    });
+    if (user.role !== 'STUDENT') {
+      const duplicateEmail = await prisma.user.findFirst({
+        where: {
+          email: normalizedEmail,
+          role: user.role,
+          NOT: { id: userId }
+        },
+        select: { id: true }
+      });
 
-    if (duplicateEmail) {
-      return res.status(400).json({ error: 'Este email ya está asociado a otra cuenta.' });
+      if (duplicateEmail) {
+        return res.status(400).json({ error: 'Este email ya está asociado a otra cuenta del mismo perfil.' });
+      }
     }
 
     const updatedUser = await prisma.user.update({

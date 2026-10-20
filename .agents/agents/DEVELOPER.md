@@ -41,7 +41,7 @@ Para lanzar el entorno en Windows sorteando las restricciones de políticas de e
 3. **Consistencia en Base de Datos y Prisma:**
 * Los campos de matrícula activa (`courseStartDate`, `monthlyFee`) pertenecen a `AcademyEnrollment`, nunca al modelo `User`.
 * No reintroducir campos deprecados ni ejecutar migraciones rotas como `backend/migrateEnrollments.ts`.
-* Mantener las tablas sincronizadas con `npx prisma db push` cuando sea requerido.
+* Sincronizar el esquema mediante `npm run schema:sync` (incluye `prisma db push` y el índice SQL parcial de email por rol) cuando sea requerido; no ejecutar `db push` aislado.
 
 
 4. **Verificación tras cada cambio:** Comprobar que los contratos API (cláusulas `include` y `select` de Prisma) devuelven exactamente los datos que el frontend consume.

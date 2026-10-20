@@ -173,81 +173,78 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
   }
 
   try {
-    let finalParentId = parentId || null;
-    let createdParentInfo: any = null;
-
-    // Si se envía información para crear un nuevo padre/tutor simultáneamente
-    if (!finalParentId && parentData && parentData.email && parentData.firstName && parentData.lastName) {
-      const parentAutoPassword = `hit${Math.floor(1000 + Math.random() * 9000)}`;
-      const parentPasswordHash = await bcrypt.hash(parentAutoPassword, 10);
-
-      // Comprobar si el tutor ya existe por email
-      let existingParent = await prisma.user.findUnique({
-        where: { email: parentData.email.trim().toLowerCase() }
-      });
-
-      if (!existingParent) {
-        existingParent = await prisma.user.create({
-          data: {
-            email: parentData.email.trim().toLowerCase(),
-            passwordHash: parentPasswordHash,
-            role: 'PARENT',
-            status: 'ACTIVE',
-            profile: {
-              create: {
-                firstName: parentData.firstName.trim(),
-                lastName: parentData.lastName.trim(),
-                dni: parentData.dni?.trim() || null,
-                phone: parentData.phone?.trim() || null,
-                address: parentData.address?.trim() || null
-              }
-            }
-          }
-        });
-        createdParentInfo = {
-          id: existingParent.id,
-          email: existingParent.email,
-          generatedPassword: parentAutoPassword,
-          name: `${parentData.firstName} ${parentData.lastName}`
-        };
-      }
-      finalParentId = existingParent.id;
-    }
-
-    // Generación de credenciales del alumno
     const autoPassword = `hit${Math.floor(1000 + Math.random() * 9000)}`;
     const passwordHash = await bcrypt.hash(autoPassword, 10);
+    const { newStudent, createdParentInfo } = await prisma.$transaction(async (transaction) => {
+      let finalParentId = parentId || null;
+      let createdParentInfo: { id: string; email: string; generatedPassword: string; name: string } | null = null;
 
-    const newStudent = await prisma.user.create({
-      data: {
-        email: email.trim().toLowerCase(),
-        passwordHash,
-        role: 'STUDENT',
-        status: 'INACTIVE',
-        modality: modality || 'PRESENCIAL',
-        parentId: finalParentId,
-        profile: {
-          create: {
-            firstName: firstName.trim(),
-            lastName: lastName.trim(),
-            dni: dni?.trim() || null,
-            phone: phone?.trim() || null,
-            birthDate: birthDate ? new Date(birthDate) : null,
-            address: address?.trim() || null,
-            schoolYear: schoolYear?.trim() || null,
-            allergies: allergies?.trim() || null,
-            imageAuthorization: typeof imageAuthorization === 'boolean' ? imageAuthorization : null,
-            imageAuthorizationScope: imageAuthorizationScope?.trim() || null,
-            observations: observations?.trim() || null
-          }
+      if (!finalParentId && parentData?.email && parentData.firstName && parentData.lastName) {
+        const parentEmail = parentData.email.trim().toLowerCase();
+        let existingParent = await transaction.user.findFirst({
+          where: { email: parentEmail, role: 'PARENT' }
+        });
+
+        if (!existingParent) {
+          const parentAutoPassword = `hit${Math.floor(1000 + Math.random() * 9000)}`;
+          existingParent = await transaction.user.create({
+            data: {
+              email: parentEmail,
+              passwordHash: await bcrypt.hash(parentAutoPassword, 10),
+              role: 'PARENT',
+              status: 'ACTIVE',
+              profile: {
+                create: {
+                  firstName: parentData.firstName.trim(),
+                  lastName: parentData.lastName.trim(),
+                  dni: parentData.dni?.trim() || null,
+                  phone: parentData.phone?.trim() || null,
+                  address: parentData.address?.trim() || null
+                }
+              }
+            }
+          });
+          createdParentInfo = {
+            id: existingParent.id,
+            email: existingParent.email,
+            generatedPassword: parentAutoPassword,
+            name: `${parentData.firstName} ${parentData.lastName}`
+          };
         }
-      },
-      include: {
-        profile: true,
-        parent: {
-          include: { profile: true }
-        }
+        finalParentId = existingParent.id;
       }
+
+      const newStudent = await transaction.user.create({
+        data: {
+          email: email.trim().toLowerCase(),
+          passwordHash,
+          role: 'STUDENT',
+          status: 'INACTIVE',
+          modality: modality || 'PRESENCIAL',
+          parentId: finalParentId,
+          profile: {
+            create: {
+              firstName: firstName.trim(),
+              lastName: lastName.trim(),
+              dni: dni?.trim() || null,
+              phone: phone?.trim() || null,
+              birthDate: birthDate ? new Date(birthDate) : null,
+              address: address?.trim() || null,
+              schoolYear: schoolYear?.trim() || null,
+              allergies: allergies?.trim() || null,
+              imageAuthorization: typeof imageAuthorization === 'boolean' ? imageAuthorization : null,
+              imageAuthorizationScope: imageAuthorizationScope?.trim() || null,
+              observations: observations?.trim() || null
+            }
+          }
+        },
+        include: {
+          profile: true,
+          parent: { include: { profile: true } }
+        }
+      });
+
+      return { newStudent, createdParentInfo };
     });
 
 
@@ -288,7 +285,7 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
     });
   } catch (error: any) {
     if (error.code === 'P2002') {
-      return res.status(400).json({ error: 'El correo ya está registrado en el sistema' });
+      return res.status(400).json({ error: 'Ya existe una cuenta con ese correo y perfil.' });
     }
     console.error('Error al crear alumno:', error);
     res.status(500).json({ error: 'Error al crear el alumno' });
@@ -377,12 +374,6 @@ router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
   }
 
   try {
-    const existingUser = await prisma.user.findFirst({
-      where: { email: email.trim().toLowerCase(), NOT: { id: studentId } }
-    });
-    if (existingUser) {
-      return res.status(400).json({ error: 'Este correo ya pertenece a otro usuario' });
-    }
     if (billingPeriod !== undefined && billingPeriod !== 'MONTHLY' && billingPeriod !== 'QUARTERLY') return res.status(400).json({ error: 'El tipo de pago no es válido.' });
     if (billingAmount !== undefined && (!Number.isFinite(Number(billingAmount)) || Number(billingAmount) <= 0)) return res.status(400).json({ error: 'El importe de pago debe ser mayor que cero.' });
 

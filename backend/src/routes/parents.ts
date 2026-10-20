@@ -59,7 +59,7 @@ router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
   const { firstName, lastName, email, dni, phone, address } = req.body;
   if (!firstName?.trim() || !lastName?.trim() || !email?.trim()) return res.status(400).json({ error: 'Nombre, apellidos y correo son obligatorios.' });
   try {
-    const duplicate = await prisma.user.findFirst({ where: { email: email.trim().toLowerCase(), NOT: { id: parentId } } });
+    const duplicate = await prisma.user.findFirst({ where: { email: email.trim().toLowerCase(), role: 'PARENT', NOT: { id: parentId } } });
     if (duplicate) return res.status(400).json({ error: 'El correo ya está registrado.' });
     const parent = await prisma.user.update({
       where: { id: parentId, role: 'PARENT' },

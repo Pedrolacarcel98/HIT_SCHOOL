@@ -2,6 +2,12 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Lock, ArrowRight, GraduationCap, Briefcase, Users, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 
+interface AccountChoice {
+  id: string;
+  role: string;
+  name: string;
+}
+
 const Login: React.FC = () => {
   const [roleMode, setRoleMode] = useState<'NONE' | 'STUDENT' | 'TEACHER' | 'PARENT'>('NONE');
   const [email, setEmail] = useState('');
@@ -10,10 +16,12 @@ const Login: React.FC = () => {
   const [error, setError] = useState('');
   const [forgotMode, setForgotMode] = useState(false);
   const [forgotMessage, setForgotMessage] = useState('');
+  const [forgotFirstName, setForgotFirstName] = useState('');
+  const [forgotLastName, setForgotLastName] = useState('');
+  const [accountChoices, setAccountChoices] = useState<AccountChoice[]>([]);
   const navigate = useNavigate();
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const authenticate = async (accountId?: string) => {
     setError('');
 
     try {
@@ -21,15 +29,22 @@ const Login: React.FC = () => {
       const res = await fetch(`${apiUrl}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, role: roleMode, accountId }),
       });
 
       const data = await res.json();
+
+      if (res.status === 409 && Array.isArray(data.accounts)) {
+        setAccountChoices(data.accounts);
+        return;
+      }
 
       if (!res.ok) {
         setError(data.error || 'Error al iniciar sesión');
         return;
       }
+
+      setAccountChoices([]);
       
       // Chequeo de seguridad: si elige un rol pero su cuenta es de otro tipo, no debería dejarle.
       // Aquí el backend devuelve el rol real. Si coincide, genial.
@@ -63,6 +78,15 @@ const Login: React.FC = () => {
     }
   };
 
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await authenticate();
+  };
+
+  const handleAccountChoice = async (accountId: string) => {
+    await authenticate(accountId);
+  };
+
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -73,7 +97,12 @@ const Login: React.FC = () => {
       const res = await fetch(`${apiUrl}/api/auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, role: roleMode }),
+        body: JSON.stringify({
+          email,
+          role: roleMode,
+          firstName: roleMode === 'STUDENT' ? forgotFirstName : undefined,
+          lastName: roleMode === 'STUDENT' ? forgotLastName : undefined,
+        }),
       });
       const data = await res.json();
 
@@ -95,7 +124,7 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="app-container">
+    <div className="app-container login-page">
       <div className="glass-panel animate-fade-in" style={{ maxWidth: '400px', width: '100%' }}>
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <img src="/logo.webp" alt="HitSchool Logo" style={{ width: '80px', height: '80px', marginBottom: '1rem' }} />
@@ -128,11 +157,39 @@ const Login: React.FC = () => {
             <h3 style={{ marginBottom: '0.5rem', color: 'var(--primary-text)', textAlign: 'center', fontWeight: '700' }}>
               Acceso {roleMode === 'TEACHER' ? 'Profesor' : roleMode === 'PARENT' ? 'Tutor / Padre' : 'Alumno'}
             </h3>
+            {accountChoices.length > 0 && !forgotMode && (
+              <div role="group" aria-label="Seleccionar cuenta" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <p style={{ margin: 0, color: 'var(--text-muted)', textAlign: 'center' }}>Selecciona tu cuenta</p>
+                {accountChoices.map((account) => (
+                  <button key={account.id} type="button" className="btn-secondary" onClick={() => handleAccountChoice(account.id)}>
+                    {account.name || (account.role === 'ADMIN' ? 'Administración' : account.role === 'TEACHER' ? 'Profesor' : 'Alumno')}
+                  </button>
+                ))}
+              </div>
+            )}
             {forgotMode ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem', textAlign: 'center' }}>
-                  Te enviaremos una nueva contraseña al correo asociado a tu cuenta.
+                  {roleMode === 'STUDENT'
+                    ? 'Indica el correo y el nombre del alumno para localizar su cuenta.'
+                    : 'Te enviaremos una nueva contraseña al correo asociado a tu cuenta.'}
                 </p>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.9rem', color: 'var(--text-main)' }}>
+                  Correo electrónico
+                  <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }} />
+                </label>
+                {roleMode === 'STUDENT' && (
+                  <>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.9rem', color: 'var(--text-main)' }}>
+                      Nombre del alumno
+                      <input type="text" value={forgotFirstName} onChange={(event) => setForgotFirstName(event.target.value)} required autoComplete="given-name" style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }} />
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.9rem', color: 'var(--text-main)' }}>
+                      Apellidos del alumno
+                      <input type="text" value={forgotLastName} onChange={(event) => setForgotLastName(event.target.value)} required autoComplete="family-name" style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }} />
+                    </label>
+                  </>
+                )}
                 {forgotMessage && <div style={{ color: 'var(--primary-text)', textAlign: 'center', fontSize: '0.9rem' }}>{forgotMessage}</div>}
                 <button type="submit" className="btn-primary" style={{ marginTop: '0.5rem', width: '100%' }}>
                   Enviar nueva contraseña <ArrowRight size={18} style={{ marginLeft: '0.5rem' }} />
@@ -149,7 +206,7 @@ const Login: React.FC = () => {
                 <input
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => { setEmail(e.target.value); setAccountChoices([]); }}
                   style={{ width: '100%', padding: '0.5rem 0.5rem 0.5rem 2.5rem', borderRadius: '8px', border: '1px solid var(--border)', outline: 'none', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
                   placeholder="ejemplo@hitschool.com"
                   required
@@ -164,7 +221,7 @@ const Login: React.FC = () => {
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => { setPassword(e.target.value); setAccountChoices([]); }}
                   style={{ width: '100%', padding: '0.5rem 2.5rem 0.5rem 2.5rem', borderRadius: '8px', border: '1px solid var(--border)', outline: 'none', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
                   placeholder="••••••••"
                   required

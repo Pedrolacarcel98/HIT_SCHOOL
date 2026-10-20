@@ -254,7 +254,7 @@ Una vez que el backend esté en ejecución, inicializaremos la estructura relaci
 
 ### 8.1 Sincronizar el esquema de Prisma con PostgreSQL
 ```bash
-docker exec hit_school_backend npx prisma db push
+docker exec hit_school_backend npm run schema:sync
 ```
 
 ### 8.2 Sembrar los datos de prueba maestros (Cursos, Alumnos, Familias y Calificaciones)
@@ -371,7 +371,7 @@ echo "=== 7. Esperando inicialización del backend (15s) ==="
 sleep 15
 
 echo "=== 8. Sincronizando Base de Datos ==="
-docker exec hit_school_backend npx prisma db push
+docker exec hit_school_backend npm run schema:sync
 docker exec hit_school_backend npx ts-node prisma/seed-test-cases.ts
 
 echo "================================================="

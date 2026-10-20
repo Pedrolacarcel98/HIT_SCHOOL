@@ -308,10 +308,10 @@ const StudentsManagement: React.FC = () => {
         })
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        showToast(data.error || 'Error al crear alumno', 'error');
+        showToast(data.error || `No se pudo crear el alumno (HTTP ${res.status}).`, 'error');
         return;
       }
 
@@ -646,9 +646,10 @@ const StudentsManagement: React.FC = () => {
           display: 'flex',
           alignItems: 'center',
           gap: '0.75rem',
-          zIndex: 100,
+          zIndex: 1200,
+          maxWidth: 'min(520px, calc(100vw - 2rem))',
           animation: 'fadeIn 0.3s ease'
-        }}>
+        }} role={notification.type === 'error' ? 'alert' : 'status'} aria-live={notification.type === 'error' ? 'assertive' : 'polite'}>
           {notification.type === 'success' ? <Check size={18} /> : <AlertTriangle size={18} />}
           <span>{notification.text}</span>
         </div>
@@ -764,7 +765,7 @@ const StudentsManagement: React.FC = () => {
                   const hasUnpaid = s.paymentStatuses?.some(p => !p.isPaid);
 
                   return (
-                    <tr key={s.id} style={{ borderBottom: '1px solid var(--border)', transition: 'background 0.2s ease' }}>
+                    <tr key={s.id} style={{ borderBottom: '1px solid var(--border)', background: isActive ? '#f0fdf4' : undefined, transition: 'background 0.2s ease' }}>
                       <td style={{ padding: '1rem 1.25rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                           <div style={{

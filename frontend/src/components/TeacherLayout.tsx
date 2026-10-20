@@ -89,7 +89,7 @@ const TeacherLayout: React.FC = () => {
     if (location.pathname === '/teacher/students') return '#ffe4e6';
     if (location.pathname === '/teacher/teachers') return '#e0e7ff';
     if (location.pathname === '/teacher/admins') return '#eef2ff';
-    if (location.pathname === '/teacher/parents') return '#e0f7f1';
+    if (location.pathname === '/teacher/parents') return '#ccebe2';
     if (location.pathname === '/teacher/enrollments') return '#ffedd5';
     if (location.pathname === '/teacher/payments') return '#fce7f3';
     if (location.pathname === '/teacher/chat') return '#ccfbf1';

@@ -94,7 +94,7 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
 
   try {
     const existingUser = await prisma.user.findFirst({
-      where: { email: email.trim().toLowerCase(), NOT: { id: teacherId } }
+      where: { email: email.trim().toLowerCase(), role: 'TEACHER', NOT: { id: teacherId } }
     });
     if (existingUser) return res.status(400).json({ error: 'Este correo ya pertenece a otro usuario' });
 

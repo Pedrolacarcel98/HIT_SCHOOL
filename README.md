@@ -15,8 +15,8 @@ Para ver la guía completa paso a paso con todos los programas necesarios (Git, 
 # 1. Levantar contenedores (PostgreSQL, Backend, Frontend, n8n)
 docker-compose up -d --build
 
-# 2. Sincronizar y poblar base de datos
-docker exec hit_school_backend npx prisma db push
+# 2. Sincronizar y poblar base de datos (incluye el índice de email por rol)
+docker exec hit_school_backend npm run schema:sync
 docker exec hit_school_backend npx prisma db seed
 ```
 

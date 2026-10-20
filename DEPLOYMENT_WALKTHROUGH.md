@@ -72,9 +72,9 @@ docker-compose up -d --build
 
 Una vez que los contenedores estén levantados, sincroniza el esquema de Prisma y genera los usuarios y materiales de demostración:
 
-### Paso 5.1: Sincronizar el esquema de tablas en PostgreSQL
+### Paso 5.1: Sincronizar el esquema y las reglas de email en PostgreSQL
 ```bash
-docker exec hit_school_backend npx prisma db push
+docker exec hit_school_backend npm run schema:sync
 ```
 
 ### Paso 5.2: Cargar datos de prueba (Profesor, Alumno y Recursos Didácticos)
@@ -86,7 +86,7 @@ docker exec hit_school_backend npx prisma db seed
 > - 💼 **Profesor:** `admin@hitschool.com` | Contraseña: `1234`
 > - 💼 **Profesor:** `profesor@hitschool.com` | Contraseña: `1234`
 > - 💼 **Profesor2:** `profesor2@hitschool.com` | Contraseña: `1234`
-> - 🎓 **Alumno:** `alumno@hitschool.com` | Contraseña: `1234`
+> - 🎓 **Alumno:** `marpargut@hitschool.com` | Contraseña: `1234`
 > - 🎓 **Tutor:** `marpargut@hitschool.com` | Contraseña: `123456`
 
 ---
@@ -209,7 +209,7 @@ docker-compose down
 ```bash
 docker-compose down -v
 docker-compose up -d --build
-docker exec hit_school_backend npx prisma db push
+docker exec hit_school_backend npm run schema:sync
 docker exec hit_school_backend npx prisma db seed
 ```
 

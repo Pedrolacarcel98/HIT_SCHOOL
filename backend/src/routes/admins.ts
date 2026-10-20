@@ -80,7 +80,7 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
     if (!admin) return res.status(404).json({ error: 'Administrador no encontrado' });
 
     const existingUser = await prisma.user.findFirst({
-      where: { email: email.trim().toLowerCase(), NOT: { id: adminId } }
+      where: { email: email.trim().toLowerCase(), role: 'ADMIN', NOT: { id: adminId } }
     });
     if (existingUser) return res.status(400).json({ error: 'Este correo ya pertenece a otro usuario' });
 
