@@ -43,9 +43,12 @@ SMTP_REJECT_UNAUTHORIZED=false
 SMTP_USER="pruebas@hitschool.example.com"
 SMTP_PASSWORD="credencial-de-prueba"
 SMTP_FROM="HitSchool <pruebas@hitschool.example.com>"
+SUPPORT_EMAIL="soporte@tudominio.com"
 ```
 
 Las credenciales anteriores son datos de prueba y no envían correos reales. Sustitúyelas por las credenciales de tu proveedor SMTP antes de probar la recuperación de contraseña. `SMTP_REJECT_UNAUTHORIZED=false` solo debe usarse en entornos locales cuando un antivirus o proxy intercepte TLS con un certificado autofirmado; en producción debe omitirse o establecerse en `true`. El backend utiliza SMTP directamente tanto para la recuperación como para el correo de bienvenida de los profesores.
+
+`SUPPORT_EMAIL` es opcional y se muestra como contacto en el pie de los correos transaccionales. Si no se configura, el mensaje indica al destinatario que contacte con la administración de su academia.
 
 ---
 

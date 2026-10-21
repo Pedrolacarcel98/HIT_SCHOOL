@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 
 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+const supportEmail = process.env.SUPPORT_EMAIL;
 
 const transporter = process.env.SMTP_HOST
   ? nodemailer.createTransport({
@@ -23,6 +24,12 @@ const escapeHtml = (value: string) => value
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#039;');
 
+const supportFooterText = () => supportEmail
+  ? `Si necesitas ayuda, escribe a ${supportEmail}.`
+  : 'Si necesitas ayuda, contacta con la administración de tu academia.';
+
+const withSupportFooter = (text: string) => `${text.trimEnd()}\n\n${supportFooterText()}`;
+
 const emailShell = (content: string) => `<!doctype html>
 <html lang="es">
   <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>HitSchool</title></head>
@@ -31,6 +38,7 @@ const emailShell = (content: string) => `<!doctype html>
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:560px;background:#ffffff;border:1px solid #e3e9e4;border-radius:10px;overflow:hidden;">
         <tr><td style="background:#4e9b75;padding:18px 24px;text-align:center;"><div style="font-size:21px;line-height:27px;font-weight:700;color:#ffffff;">HitSchool</div><div style="margin-top:2px;font-size:11px;line-height:16px;color:#e6f4eb;letter-spacing:.4px;">Plataforma Educativa</div></td></tr>
         <tr><td style="padding:24px;">${content}</td></tr>
+        <tr><td style="padding:16px 24px;border-top:1px solid #e3e9e4;color:#68756d;font-size:12px;line-height:18px;">${supportEmail ? `Para recibir ayuda, escribe a <a href="mailto:${escapeHtml(supportEmail)}" style="color:#347455;">${escapeHtml(supportEmail)}</a>.` : 'Para recibir ayuda, contacta con la administración de tu academia.'}<br>Este mensaje está relacionado con tu cuenta de HitSchool.</td></tr>
       </table>
     </td></tr></table>
   </body>
@@ -56,8 +64,8 @@ export const sendTeacherWelcomeEmail = async (email: string, firstName: string, 
   await transporter.sendMail({
     from: process.env.SMTP_FROM || process.env.SMTP_USER,
     to: email,
-    subject: 'Bienvenido a HitSchool',
-    text: [
+    subject: 'Tu acceso a HitSchool está listo',
+    text: withSupportFooter([
       `Hola ${firstName},`,
       '',
       'Tu cuenta de profesor de HitSchool ya está disponible.',
@@ -66,7 +74,7 @@ export const sendTeacherWelcomeEmail = async (email: string, firstName: string, 
       `Contraseña temporal: ${temporaryPassword}`,
       '',
       'Te recomendamos cambiar la contraseña después del primer inicio de sesión.'
-    ].join('\n'),
+    ].join('\n')),
     html: emailShell(`<h1 style="margin:0 0 12px;color:#26352e;font-size:24px;line-height:32px;">Bienvenido a HitSchool</h1><p style="margin:0 0 18px;font-size:15px;line-height:24px;">Hola ${escapeHtml(firstName)},</p><p style="margin:0 0 18px;font-size:15px;line-height:24px;">Tu cuenta de profesor ya está disponible.</p><p style="margin:0;font-size:14px;line-height:24px;"><strong>Correo:</strong> ${escapeHtml(email)}<br><strong>Contraseña temporal:</strong> ${escapeHtml(temporaryPassword)}</p>${emailButton('Iniciar Sesión en HitSchool', frontendUrl)}<p style="margin:18px 0 0;color:#748078;font-size:13px;line-height:20px;">Te recomendamos cambiar la contraseña después del primer inicio de sesión.</p>`)
   });
 
@@ -81,8 +89,8 @@ export const sendParentWelcomeEmail = async (email: string, firstName: string, t
   await transporter.sendMail({
     from: process.env.SMTP_FROM || process.env.SMTP_USER,
     to: email,
-    subject: 'Bienvenido a HitSchool, tutor',
-    text: [`Hola ${firstName},`, '', 'Tu cuenta de tutor de HitSchool ya está disponible.', `Contraseña temporal: ${temporaryPassword}`, `Acceso: ${frontendUrl}`, '', 'Te recomendamos cambiar la contraseña después del primer inicio de sesión.'].join('\n'),
+    subject: 'Tu acceso a HitSchool está listo',
+    text: withSupportFooter([`Hola ${firstName},`, '', 'Tu cuenta de tutor de HitSchool ya está disponible.', `Contraseña temporal: ${temporaryPassword}`, `Acceso: ${frontendUrl}`, '', 'Te recomendamos cambiar la contraseña después del primer inicio de sesión.'].join('\n')),
     html: emailShell(`<h1 style="margin:0 0 12px;color:#26352e;font-size:24px;line-height:32px;">Bienvenido a HitSchool</h1><p style="margin:0 0 18px;font-size:15px;line-height:24px;">Hola ${escapeHtml(firstName)},</p><p style="margin:0 0 20px;font-size:15px;line-height:24px;">Tu cuenta de tutor ya está disponible.</p><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f0f7f4;border:1px solid #4e9b75;border-radius:8px;"><tr><td style="padding:20px;text-align:center;"><div style="margin-bottom:8px;color:#527064;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;">Contraseña temporal</div><div style="color:#26352e;font-family:Consolas,'Courier New',monospace;font-size:24px;line-height:32px;font-weight:700;word-break:break-word;">${escapeHtml(temporaryPassword)}</div></td></tr></table>${emailButton('Iniciar Sesión en HitSchool', frontendUrl)}`)
   });
 };
@@ -100,8 +108,8 @@ export const sendStudentWelcomeEmail = async (
   await transporter.sendMail({
     from: process.env.SMTP_FROM || process.env.SMTP_USER,
     to: email,
-    subject: 'Bienvenido a HitSchool',
-    text: [
+    subject: 'Tu acceso a HitSchool está listo',
+    text: withSupportFooter([
       `Hola ${firstName || 'alumno'},`,
       '',
       '¡Bienvenido a HitSchool! Tu cuenta de alumno ya está disponible.',
@@ -110,7 +118,7 @@ export const sendStudentWelcomeEmail = async (
       `Contraseña temporal: ${temporaryPassword}`,
       '',
       'Te recomendamos cambiar la contraseña después del primer inicio de sesión.'
-    ].join('\n'),
+    ].join('\n')),
     html: emailShell(`
       <h1 style="margin:0 0 12px;color:#26352e;font-size:24px;line-height:32px;">Bienvenido a HitSchool</h1>
       <p style="margin:0 0 18px;font-size:15px;line-height:24px;">Hola ${escapeHtml(firstName || 'alumno')},</p>
@@ -146,15 +154,15 @@ export const sendPasswordResetEmail = async (
   await transporter.sendMail({
     from: process.env.SMTP_FROM || process.env.SMTP_USER,
     to: email,
-    subject: 'Recuperación de contraseña de HitSchool',
-    text: [
+    subject: 'Actualización de acceso a tu cuenta de HitSchool',
+    text: withSupportFooter([
       `Hola ${firstName || ''},`,
       '',
       `Hemos generado una nueva contraseña temporal para tu cuenta de ${roleLabel} de HitSchool.`,
       `Contraseña temporal: ${temporaryPassword}`,
       '',
       'Te recomendamos cambiarla después de iniciar sesión.'
-    ].join('\n'),
+    ].join('\n')),
     html: emailShell(`<h1 style="margin:0 0 12px;color:#26352e;font-size:24px;line-height:32px;">Recuperación de contraseña</h1><p style="margin:0 0 18px;font-size:15px;line-height:24px;">Hola ${escapeHtml(firstName || '')},</p><p style="margin:0 0 20px;font-size:15px;line-height:24px;">Hemos generado una nueva contraseña temporal para tu cuenta de ${escapeHtml(roleLabel)} de HitSchool.</p><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f0f7f4;border:1px solid #4e9b75;border-radius:8px;"><tr><td style="padding:20px;text-align:center;"><div style="margin-bottom:8px;color:#527064;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;">Contraseña temporal</div><div style="color:#26352e;font-family:Consolas,'Courier New',monospace;font-size:24px;line-height:32px;font-weight:700;word-break:break-word;">${escapeHtml(temporaryPassword)}</div></td></tr></table>${emailButton('Iniciar Sesión en HitSchool', frontendUrl)}<p style="margin:18px 0 0;color:#748078;font-size:13px;line-height:20px;">Te recomendamos cambiarla después de iniciar sesión.</p>`)
   });
 };
@@ -172,8 +180,8 @@ export const sendAccountReactivationEmail = async (
   await transporter.sendMail({
     from: process.env.SMTP_FROM || process.env.SMTP_USER,
     to: email,
-    subject: 'Tu cuenta de HitSchool ha sido reactivada',
-    text: [
+    subject: 'Acceso a tu cuenta de HitSchool restablecido',
+    text: withSupportFooter([
       `Hola ${firstName || ''},`,
       '',
       `Tu cuenta de ${roleLabel} de HitSchool ha sido reactivada.`,
@@ -181,7 +189,7 @@ export const sendAccountReactivationEmail = async (
       `Acceso: ${frontendUrl}`,
       '',
       'Te recomendamos cambiar la contraseña después de iniciar sesión.'
-    ].join('\n'),
+    ].join('\n')),
     html: emailShell(`<h1 style="margin:0 0 12px;color:#26352e;font-size:24px;line-height:32px;">Cuenta reactivada</h1><p style="margin:0 0 18px;font-size:15px;line-height:24px;">Hola ${escapeHtml(firstName || '')},</p><p style="margin:0 0 20px;font-size:15px;line-height:24px;">Tu cuenta de ${escapeHtml(roleLabel)} de HitSchool ha sido reactivada.</p><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f0f7f4;border:1px solid #4e9b75;border-radius:8px;"><tr><td style="padding:20px;text-align:center;"><div style="margin-bottom:8px;color:#527064;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;">Nueva contraseña temporal</div><div style="color:#26352e;font-family:Consolas,'Courier New',monospace;font-size:24px;line-height:32px;font-weight:700;word-break:break-word;">${escapeHtml(temporaryPassword)}</div></td></tr></table>${emailButton('Iniciar Sesión en HitSchool', frontendUrl)}<p style="margin:18px 0 0;color:#748078;font-size:13px;line-height:20px;">Por seguridad, cambia la contraseña después de iniciar sesión.</p>`)
   });
 };
@@ -236,8 +244,8 @@ export const sendBoardPostNotification = async (
   await transporter.sendMail({
     from: process.env.SMTP_FROM || process.env.SMTP_USER,
     to: email,
-    subject: `Nuevo anuncio en ${courseTitle}`,
-    text: [
+    subject: `Anuncio nuevo en ${courseTitle}`,
+    text: withSupportFooter([
       `Hola ${firstName || ''},`,
       '',
       `Hay un nuevo anuncio en la clase ${courseTitle}.`,
@@ -248,7 +256,7 @@ export const sendBoardPostNotification = async (
       mediaLinkUrl || mediaUrl ? `Recurso multimedia: ${mediaLinkUrl || mediaUrl}` : '',
       '',
       `Accede a la clase: ${courseUrl}`
-    ].join('\n'),
+    ].join('\n')),
     html: emailShell(`<p style="margin:0 0 18px;font-size:15px;line-height:24px;">Hola ${escapeHtml(firstName || '')},</p><div style="margin-bottom:16px;">${courseBadge(courseTitle)}</div><h1 style="margin:0 0 4px;color:#26352e;font-size:23px;line-height:31px;">Nuevo anuncio en ${safeCourseTitle}</h1>${teacherIdentity(teacherName)}<div style="padding:18px;background:#f9faf9;border:1px solid #e5ebe6;border-radius:8px;color:#33443a;font-size:15px;line-height:24px;">${safeContent || 'Se ha publicado un nuevo recurso en el tablón.'}</div>${mediaPreview}${emailButton('Ir al Tablón de la Clase', courseUrl)}`),
     ...(inlineImage ? {
       attachments: [{
@@ -285,8 +293,8 @@ export const sendStructuredTaskNotification = async (
   await transporter.sendMail({
     from: process.env.SMTP_FROM || process.env.SMTP_USER,
     to: email,
-    subject: `Nueva tarea: ${taskTitle}`,
-    text: [
+    subject: `Tarea nueva: ${taskTitle}`,
+    text: withSupportFooter([
       `Hola ${firstName || ''},`,
       '',
       `Hay una nueva tarea en ${courseTitle}: ${taskTitle}.`,
@@ -296,7 +304,7 @@ export const sendStructuredTaskNotification = async (
       taskDescription || 'Hay una nueva tarea disponible.',
       '',
       `Accede a la tarea: ${taskUrl}`
-    ].join('\n'),
+    ].join('\n')),
     html: emailShell(`<p style="margin:0 0 18px;font-size:15px;line-height:24px;">Hola ${escapeHtml(firstName || '')},</p><div style="margin-bottom:16px;">${courseBadge(courseTitle)}</div><h1 style="margin:0 0 18px;color:#26352e;font-size:23px;line-height:31px;">Nueva tarea</h1><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f9fafb;border:1px solid #e6e9e7;border-radius:8px;"><tr><td style="padding:20px;"><div style="margin-bottom:8px;color:#26352e;font-size:18px;line-height:25px;font-weight:700;">${safeTaskTitle}</div><div style="margin-bottom:16px;color:#53635a;font-size:14px;line-height:22px;">${safeDescription}</div><div style="color:#53635a;font-size:13px;line-height:20px;"><strong style="color:#26352e;">Profesor:</strong> ${safeTeacherName}</div><div style="margin-top:10px;color:#53635a;font-size:13px;line-height:20px;"><strong style="color:#26352e;">Fecha límite:</strong> ${dueDateBadge(dueDateText, Boolean(dueDate))}</div></td></tr></table>${emailButton('Ver Tarea en la Plataforma', taskUrl)}`)
   });
 };
