@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -18,7 +18,8 @@ import {
   Eye,
   UserCheck,
   FileText,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Copy
 } from 'lucide-react';
 
 interface ParentData {
@@ -66,11 +67,13 @@ interface Student {
   parent?: {
     id: string;
     email: string;
+    status?: 'ACTIVE' | 'INACTIVE' | 'PENDING';
     profile?: {
       firstName: string;
       lastName: string;
       phone?: string | null;
       dni?: string | null;
+      address?: string | null;
     };
   } | null;
   enrollments?: {
@@ -101,12 +104,6 @@ const IMAGE_AUTHORIZATION_OPTIONS = [
   'Sí, Para envío personal, familias del grupo de clase y redes sociales'
 ] as const;
 
-const normalizeSearchValue = (value: string) => value
-  .normalize('NFD')
-  .replace(/[\u0300-\u036f]/g, '')
-  .toLowerCase()
-  .trim();
-
 type ImageAuthorizationOption = typeof IMAGE_AUTHORIZATION_OPTIONS[number];
 
 const getImageAuthorizationValue = (profile?: Student['profile']): ImageAuthorizationOption => {
@@ -117,18 +114,32 @@ const getImageAuthorizationValue = (profile?: Student['profile']): ImageAuthoriz
   return 'No';
 };
 
+const formatParentOptionLabel = (p: ParentData) => {
+  const fullName = `${p.profile?.firstName || ''} ${p.profile?.lastName || ''}`.trim() || 'Sin nombre';
+  const statusTag = p.status === 'PENDING' ? ' · [Pendiente de alta]' : p.status === 'INACTIVE' ? ' · [Baja]' : '';
+  return `👨‍👧 ${fullName} (${p.email})${statusTag}`;
+};
+
+const formatParentOptionDescription = (p: ParentData) => {
+  const parts: string[] = [];
+  if (p.profile?.dni) parts.push(`DNI: ${p.profile.dni}`);
+  if (p.profile?.phone) parts.push(`Tel: ${p.profile.phone}`);
+  parts.push(`${p.children?.length || 0} hijo(s)`);
+  return parts.join(' · ');
+};
+
 const StudentsManagement: React.FC = () => {
   const navigate = useNavigate();
   const userRole = localStorage.getItem('userRole');
   const canManageStudents = userRole === 'ADMIN' || userRole === 'TEACHER';
   const [students, setStudents] = useState<Student[]>([]);
   const [parents, setParents] = useState<ParentData[]>([]);
-  const [parentSearchTerm, setParentSearchTerm] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [modalityFilter, setModalityFilter] = useState<'ALL' | 'PRESENCIAL' | 'ONLINE'>('ALL');
   const [familyFilter, setFamilyFilter] = useState<'ALL' | 'WITH_PARENT' | 'INDEPENDENT'>('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   const [loading, setLoading] = useState(true);
+  const backdropMouseDownRef = useRef(false);
 
   // Modal Dar de Alta
   const [showAltaModal, setShowAltaModal] = useState(false);
@@ -164,6 +175,7 @@ const StudentsManagement: React.FC = () => {
   const [newParentEmail, setNewParentEmail] = useState('');
   const [newParentPhone, setNewParentPhone] = useState('');
   const [newParentDni, setNewParentDni] = useState('');
+  const [newParentAddress, setNewParentAddress] = useState('');
 
   // Modal Editar
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
@@ -179,6 +191,13 @@ const StudentsManagement: React.FC = () => {
   const [editAutorizacionImagen, setEditAutorizacionImagen] = useState<ImageAuthorizationOption>('No');
   const [editObservaciones, setEditObservaciones] = useState('');
   const [editParentId, setEditParentId] = useState('');
+  const [editParentOption, setEditParentOption] = useState<'EXISTING' | 'NEW'>('EXISTING');
+  const [editNewParentFirstName, setEditNewParentFirstName] = useState('');
+  const [editNewParentLastName, setEditNewParentLastName] = useState('');
+  const [editNewParentEmail, setEditNewParentEmail] = useState('');
+  const [editNewParentPhone, setEditNewParentPhone] = useState('');
+  const [editNewParentDni, setEditNewParentDni] = useState('');
+  const [editNewParentAddress, setEditNewParentAddress] = useState('');
   const [editModality, setEditModality] = useState<'PRESENCIAL' | 'ONLINE' | 'HIBRIDO'>('PRESENCIAL');
   const [editBillingPeriod, setEditBillingPeriod] = useState<'MONTHLY' | 'QUARTERLY'>('MONTHLY');
   const [editBillingAmount, setEditBillingAmount] = useState('');
@@ -192,21 +211,6 @@ const StudentsManagement: React.FC = () => {
   useEffect(() => {
     fetchStudents();
     fetchParents();
-  }, []);
-
-  useEffect(() => {
-    const closeOnOutsideClick = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (!target.closest('[style*="position: fixed"]') || target.closest('.glass-panel')) return;
-      setViewingStudent(null);
-      setEditingStudent(null);
-      setDeletingStudent(null);
-      setShowCreateModal(false);
-      setShowAltaModal(false);
-      setSelectedStudentForAlta(null);
-    };
-    document.addEventListener('click', closeOnOutsideClick);
-    return () => document.removeEventListener('click', closeOnOutsideClick);
   }, []);
 
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
@@ -261,27 +265,62 @@ const StudentsManagement: React.FC = () => {
     return age;
   };
 
+  const handleCopyStudentContactToNewParent = () => {
+    if (newEmail.trim()) setNewParentEmail(newEmail.trim());
+    if (newPhone.trim()) setNewParentPhone(newPhone.trim());
+    if (newAddress.trim()) setNewParentAddress(newAddress.trim());
+    if (!newParentLastName.trim() && newLastName.trim()) {
+      setNewParentLastName(newLastName.trim());
+    }
+    showToast('Correo, teléfono y dirección copiados a los datos del tutor.');
+  };
+
+  const handleCopyEditStudentContactToNewParent = () => {
+    if (editEmail.trim()) setEditNewParentEmail(editEmail.trim());
+    if (editPhone.trim()) setEditNewParentPhone(editPhone.trim());
+    if (editAddress.trim()) setEditNewParentAddress(editAddress.trim());
+    if (!editNewParentLastName.trim() && editLastName.trim()) {
+      setEditNewParentLastName(editLastName.trim());
+    }
+    showToast('Correo, teléfono y dirección copiados a los datos del tutor.');
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!newFirstName.trim() || !newLastName.trim() || !newEmail.trim()) {
+      showToast('Completa el nombre, apellidos y correo electrónico del alumno.', 'error');
+      return;
+    }
+
+    let parentPayload = null;
+    let finalParentId = null;
+
+    if (hasParent) {
+      if (parentOption === 'EXISTING') {
+        if (!selectedParentId) {
+          showToast('Selecciona un padre/tutor existente de la lista o elige "Crear nuevo Padre/Tutor".', 'error');
+          return;
+        }
+        finalParentId = selectedParentId;
+      } else {
+        if (!newParentFirstName.trim() || !newParentLastName.trim() || !newParentEmail.trim()) {
+          showToast('Completa el nombre, apellidos y correo electrónico del nuevo padre/tutor.', 'error');
+          return;
+        }
+        parentPayload = {
+          firstName: newParentFirstName.trim(),
+          lastName: newParentLastName.trim(),
+          email: newParentEmail.trim().toLowerCase(),
+          phone: newParentPhone.trim() || null,
+          dni: newParentDni.trim() || null,
+          address: newParentAddress.trim() || newAddress.trim() || null
+        };
+      }
+    }
+
     try {
       const token = localStorage.getItem('token');
-
-      let parentPayload = null;
-      let finalParentId = null;
-
-      if (hasParent) {
-        if (parentOption === 'EXISTING') {
-          finalParentId = selectedParentId || null;
-        } else {
-          parentPayload = {
-            firstName: newParentFirstName.trim(),
-            lastName: newParentLastName.trim(),
-            email: newParentEmail.trim().toLowerCase(),
-            phone: newParentPhone.trim() || null,
-            dni: newParentDni.trim() || null
-          };
-        }
-      }
 
       const res = await fetch(`${apiUrl}/api/students`, {
         method: 'POST',
@@ -315,7 +354,13 @@ const StudentsManagement: React.FC = () => {
         return;
       }
 
-      showToast(`${data.createdParent ? 'Tutor creado como pendiente de alta; no se ha enviado correo. ' : ''}Alumno creado con éxito (credenciales generadas: ${data.generatedPassword}).`);
+      const parentMsg = data.createdParent
+        ? 'Tutor creado (pendiente de alta). '
+        : data.linkedExistingParent
+          ? `Alumno vinculado al tutor existente (${data.linkedExistingParent.name}). `
+          : '';
+
+      showToast(`${parentMsg}Alumno guardado con éxito. Recuerda pulsar "Dar de alta" para activar su matrícula y enviar credenciales.`);
       setShowCreateModal(false);
       resetCreateForm();
       fetchStudents();
@@ -339,13 +384,14 @@ const StudentsManagement: React.FC = () => {
     setNewObservaciones('');
     setNewModality('PRESENCIAL');
     setHasParent(false);
-    setParentSearchTerm('');
+    setParentOption('EXISTING');
     setSelectedParentId('');
     setNewParentFirstName('');
     setNewParentLastName('');
     setNewParentEmail('');
     setNewParentPhone('');
     setNewParentDni('');
+    setNewParentAddress('');
   };
 
   const handleStartEdit = (student: Student) => {
@@ -365,7 +411,13 @@ const StudentsManagement: React.FC = () => {
     setEditAutorizacionImagen(getImageAuthorizationValue(student.profile));
     setEditObservaciones(student.profile?.observations || '');
     setEditParentId(student.parentId || '');
-    setParentSearchTerm('');
+    setEditParentOption('EXISTING');
+    setEditNewParentFirstName('');
+    setEditNewParentLastName('');
+    setEditNewParentEmail('');
+    setEditNewParentPhone('');
+    setEditNewParentDni('');
+    setEditNewParentAddress('');
     setEditModality(student.modality || 'PRESENCIAL');
     setEditBillingPeriod(activeEnrollment?.billingPeriod || 'MONTHLY');
     setEditBillingAmount(activeEnrollment ? String(activeEnrollment.monthlyFee) : '');
@@ -374,6 +426,31 @@ const StudentsManagement: React.FC = () => {
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingStudent) return;
+
+    if (!editFirstName.trim() || !editLastName.trim() || !editEmail.trim()) {
+      showToast('Completa el nombre, apellidos y correo electrónico del alumno.', 'error');
+      return;
+    }
+
+    let parentPayload = null;
+    let finalParentId: string | null = editParentId || null;
+
+    if (editParentOption === 'NEW') {
+      if (!editNewParentFirstName.trim() || !editNewParentLastName.trim() || !editNewParentEmail.trim()) {
+        showToast('Completa el nombre, apellidos y correo electrónico del nuevo padre/tutor.', 'error');
+        return;
+      }
+      finalParentId = null;
+      parentPayload = {
+        firstName: editNewParentFirstName.trim(),
+        lastName: editNewParentLastName.trim(),
+        email: editNewParentEmail.trim().toLowerCase(),
+        phone: editNewParentPhone.trim() || null,
+        dni: editNewParentDni.trim() || null,
+        address: editNewParentAddress.trim() || editAddress.trim() || null
+      };
+    }
+
     const hasActiveEnrollment = editingStudent.academyEnrollments?.some((enrollment) => !enrollment.endDate) || false;
     const normalizedBillingAmount = editBillingAmount.trim() ? Number(editBillingAmount) : undefined;
 
@@ -398,7 +475,8 @@ const StudentsManagement: React.FC = () => {
           imageAuthorization: editAutorizacionImagen !== 'No',
           imageAuthorizationScope: editAutorizacionImagen,
           observations: editObservaciones.trim() || null,
-          parentId: editParentId || null,
+          parentId: finalParentId,
+          parentData: parentPayload,
           modality: editModality,
           billingPeriod: hasActiveEnrollment ? editBillingPeriod : undefined,
           billingAmount: hasActiveEnrollment ? normalizedBillingAmount : undefined
@@ -412,7 +490,13 @@ const StudentsManagement: React.FC = () => {
         return;
       }
 
-      showToast('Alumno y ficha extendida actualizados correctamente.');
+      const parentMsg = data.createdParent
+        ? 'Nuevo tutor creado (pendiente de alta) y vinculado. '
+        : data.linkedExistingParent
+          ? `Vinculado al tutor existente (${data.linkedExistingParent.name}). `
+          : '';
+
+      showToast(`${parentMsg}Alumno y ficha extendida actualizados correctamente.`);
       setEditingStudent(null);
       fetchStudents();
       fetchParents();
@@ -585,19 +669,14 @@ const StudentsManagement: React.FC = () => {
     return matchesSearch;
   });
 
-  const filteredParents = parents.filter((parent) => {
-    if (parent.status !== 'ACTIVE') return false;
-    const searchableValues = [
-      parent.profile?.firstName,
-      parent.profile?.lastName,
-      parent.email,
-      parent.profile?.dni,
-      parent.profile?.phone
-    ].filter(Boolean).map((value) => normalizeSearchValue(value || ''));
-    const searchableText = searchableValues.join(' ');
-    const query = normalizeSearchValue(parentSearchTerm);
-    return !query || searchableText.includes(query);
-  });
+  // Mostrar tutores en estado ACTIVE o PENDING (y siempre incluir el tutor actualmente seleccionado/asignado aunque esté en INACTIVE)
+  const selectableParentsForCreate = parents.filter(
+    (parent) => parent.status === 'ACTIVE' || parent.status === 'PENDING' || parent.id === selectedParentId
+  );
+
+  const selectableParentsForEdit = parents.filter(
+    (parent) => parent.status === 'ACTIVE' || parent.status === 'PENDING' || parent.id === editParentId
+  );
 
   const handleExportExcel = () => {
     const valueOrDash = (value?: string | null) => value?.trim() || '-';
@@ -669,7 +748,7 @@ const StudentsManagement: React.FC = () => {
           </button>
           {canManageStudents && (
             <button
-              onClick={() => { resetCreateForm(); setShowCreateModal(true); }}
+              onClick={() => setShowCreateModal(true)}
               className="btn-primary"
               style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.25rem' }}
             >
@@ -1079,17 +1158,21 @@ const StudentsManagement: React.FC = () => {
 
       {/* Modal: Ver Ficha Completa del Alumno */}
       {viewingStudent && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0,0,0,0.65)',
-          backdropFilter: 'blur(5px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 80,
-          padding: '1rem'
-        }}>
+        <div
+          onMouseDown={(e) => { backdropMouseDownRef.current = e.target === e.currentTarget; }}
+          onClick={(e) => { if (backdropMouseDownRef.current && e.target === e.currentTarget) setViewingStudent(null); }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 80,
+            padding: '1rem'
+          }}
+        >
           <div className="glass-panel modal-card modal-card--wide" style={{ width: '100%', maxWidth: '900px', maxHeight: '90vh', overflowY: 'auto', padding: '2rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -1413,7 +1496,7 @@ const StudentsManagement: React.FC = () => {
 
                 {hasParent && (
                   <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.85rem', paddingTop: '0.85rem', borderTop: '1px dashed var(--border)' }}>
-                    <div style={{ display: 'flex', gap: '1.25rem' }}>
+                    <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap' }}>
                       <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.85rem' }}>
                         <input
                           type="radio"
@@ -1440,40 +1523,57 @@ const StudentsManagement: React.FC = () => {
 
                     {parentOption === 'EXISTING' ? (
                       <div>
-                        <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.82rem', color: 'var(--text-muted)' }}>Selecciona el tutor de la lista</label>
-                        <input
-                          type="search"
-                          value={parentSearchTerm}
-                          onChange={(e) => setParentSearchTerm(e.target.value)}
-                          placeholder="Filtrar tutor por nombre, DNI o correo..."
-                          style={{ width: '100%', marginBottom: '0.5rem', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)' }}
-                        />
+                        <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                          Selecciona el tutor de la lista (incluye tutores activos y pendientes de alta)
+                        </label>
                         <CustomSelect
                           value={selectedParentId}
                           onChange={(val) => setSelectedParentId(val)}
                           placeholder="-- Seleccionar Padre/Tutor --"
                           searchable={true}
-                          searchPlaceholder="Buscar tutor por nombre, DNI o correo..."
-                          options={filteredParents.map(p => ({
+                          searchPlaceholder="Buscar tutor por nombre, DNI, teléfono o correo..."
+                          options={selectableParentsForCreate.map(p => ({
                             value: p.id,
-                            label: `${p.profile?.firstName || ''} ${p.profile?.lastName || ''} (${p.email}) - ${p.children?.length || 0} hijos`.trim()
+                            label: formatParentOptionLabel(p),
+                            description: formatParentOptionDescription(p)
                           }))}
                           style={{ width: '100%' }}
                         />
                       </div>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                        <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-                          El tutor quedará pendiente de alta. Sus credenciales se enviarán cuando lo actives en Gestión de Tutores.
-                        </p>
-                        <div style={{ display: 'flex', gap: '0.75rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                            El tutor quedará pendiente de alta. Sus credenciales se enviarán cuando lo actives en Gestión de Tutores.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={handleCopyStudentContactToNewParent}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.35rem',
+                              padding: '0.38rem 0.75rem',
+                              borderRadius: '8px',
+                              border: '1px solid var(--primary-border)',
+                              background: 'var(--primary-light)',
+                              color: 'var(--primary-text)',
+                              fontSize: '0.78rem',
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Copy size={13} /> Usar mismo correo y datos del alumno
+                          </button>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                           <input
                             type="text"
                             placeholder="Nombre del Padre/Tutor *"
                             required={hasParent && parentOption === 'NEW'}
                             value={newParentFirstName}
                             onChange={(e) => setNewParentFirstName(e.target.value)}
-                            style={{ flex: 1, padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)', fontSize: '0.85rem' }}
+                            style={{ flex: '1 1 180px', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)', fontSize: '0.85rem' }}
                           />
                           <input
                             type="text"
@@ -1481,33 +1581,42 @@ const StudentsManagement: React.FC = () => {
                             required={hasParent && parentOption === 'NEW'}
                             value={newParentLastName}
                             onChange={(e) => setNewParentLastName(e.target.value)}
-                            style={{ flex: 1, padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)', fontSize: '0.85rem' }}
+                            style={{ flex: '1 1 180px', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)', fontSize: '0.85rem' }}
                           />
                         </div>
-                        <div style={{ display: 'flex', gap: '0.75rem' }}>
+                        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                           <input
                             type="email"
                             placeholder="Correo del Tutor (Para acceso a pagos y notas) *"
                             required={hasParent && parentOption === 'NEW'}
                             value={newParentEmail}
                             onChange={(e) => setNewParentEmail(e.target.value)}
-                            style={{ flex: 1, padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)', fontSize: '0.85rem' }}
+                            style={{ flex: '1 1 220px', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)', fontSize: '0.85rem' }}
                           />
                           <input
                             type="tel"
                             placeholder="Teléfono del Tutor"
                             value={newParentPhone}
                             onChange={(e) => setNewParentPhone(e.target.value)}
-                            style={{ width: '160px', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)', fontSize: '0.85rem' }}
+                            style={{ flex: '0 1 180px', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)', fontSize: '0.85rem' }}
                           />
                         </div>
-                        <input
-                          type="text"
-                          placeholder="DNI / NIE del Tutor (para facturas)"
-                          value={newParentDni}
-                          onChange={(e) => setNewParentDni(e.target.value)}
-                          style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)', fontSize: '0.85rem' }}
-                        />
+                        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                          <input
+                            type="text"
+                            placeholder="DNI / NIE del Tutor (para facturas)"
+                            value={newParentDni}
+                            onChange={(e) => setNewParentDni(e.target.value)}
+                            style={{ flex: '1 1 180px', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)', fontSize: '0.85rem' }}
+                          />
+                          <input
+                            type="text"
+                            placeholder="Dirección del Tutor (opcional, por defecto usa la del alumno)"
+                            value={newParentAddress}
+                            onChange={(e) => setNewParentAddress(e.target.value)}
+                            style={{ flex: '2 1 240px', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)', fontSize: '0.85rem' }}
+                          />
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1517,13 +1626,13 @@ const StudentsManagement: React.FC = () => {
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.75rem' }}>
                 <button
                   type="button"
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={() => { resetCreateForm(); setShowCreateModal(false); }}
                   style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--text-main)', padding: '0.7rem 1.25rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
                 >
                   Cancelar
                 </button>
                 <button type="submit" className="btn-primary" style={{ padding: '0.7rem 1.5rem' }}>
-                  Crear y Enviar Credenciales
+                  Guardar Alumno
                 </button>
               </div>
             </form>
@@ -1634,31 +1743,133 @@ const StudentsManagement: React.FC = () => {
                 />
               </div>
 
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>Padre / Tutor Responsable</label>
-                <input
-                  type="search"
-                  value={parentSearchTerm}
-                  onChange={(e) => setParentSearchTerm(e.target.value)}
-                  placeholder="Filtrar tutor por nombre, DNI o correo..."
-                  style={{ width: '100%', marginBottom: '0.5rem', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
-                />
-                <CustomSelect
-                  value={editParentId}
-                  onChange={(val) => setEditParentId(val)}
-                  placeholder="-- Sin tutor asignado (Alumno Independiente) --"
-                  searchable={true}
-                  searchPlaceholder="Buscar tutor por nombre, DNI o correo..."
-                  options={[
-                    { value: '', label: '-- Sin tutor asignado (Alumno Independiente) --' },
-                    ...filteredParents.map(p => ({
-                      value: p.id,
-                      label: `👨‍👧 ${p.profile?.firstName || ''} ${p.profile?.lastName || ''} (${p.email})`.trim()
-                    }))
-                  ]}
-                  variant="subtle"
-                  style={{ width: '100%' }}
-                />
+              {/* Padre / Tutor Responsable en Edición */}
+              <div style={{ padding: '1rem', background: 'var(--surface-alt)', borderRadius: '10px', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+                  <label style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-main)' }}>👨‍👧 Padre / Tutor Responsable</label>
+                  <div style={{ display: 'flex', gap: '1.15rem', flexWrap: 'wrap' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.83rem' }}>
+                      <input
+                        type="radio"
+                        name="editParentOption"
+                        value="EXISTING"
+                        checked={editParentOption === 'EXISTING'}
+                        onChange={() => setEditParentOption('EXISTING')}
+                        style={{ accentColor: 'var(--primary)' }}
+                      />
+                      Seleccionar existente / Independiente
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.83rem' }}>
+                      <input
+                        type="radio"
+                        name="editParentOption"
+                        value="NEW"
+                        checked={editParentOption === 'NEW'}
+                        onChange={() => setEditParentOption('NEW')}
+                        style={{ accentColor: 'var(--primary)' }}
+                      />
+                      Crear nuevo Padre/Tutor
+                    </label>
+                  </div>
+                </div>
+
+                {editParentOption === 'EXISTING' ? (
+                  <CustomSelect
+                    value={editParentId}
+                    onChange={(val) => setEditParentId(val)}
+                    placeholder="-- Sin tutor asignado (Alumno Independiente) --"
+                    searchable={true}
+                    searchPlaceholder="Buscar tutor por nombre, DNI, teléfono o correo..."
+                    options={[
+                      { value: '', label: '-- Sin tutor asignado (Alumno Independiente) --' },
+                      ...selectableParentsForEdit.map(p => ({
+                        value: p.id,
+                        label: formatParentOptionLabel(p),
+                        description: formatParentOptionDescription(p)
+                      }))
+                    ]}
+                    variant="subtle"
+                    style={{ width: '100%' }}
+                  />
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingTop: '0.5rem', borderTop: '1px dashed var(--border)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                        El nuevo tutor quedará pendiente de alta y se vinculará a este alumno.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleCopyEditStudentContactToNewParent}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                          padding: '0.38rem 0.75rem',
+                          borderRadius: '8px',
+                          border: '1px solid var(--primary-border)',
+                          background: 'var(--primary-light)',
+                          color: 'var(--primary-text)',
+                          fontSize: '0.78rem',
+                          fontWeight: 600,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <Copy size={13} /> Usar mismo correo y datos del alumno
+                      </button>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                      <input
+                        type="text"
+                        placeholder="Nombre del Padre/Tutor *"
+                        required={editParentOption === 'NEW'}
+                        value={editNewParentFirstName}
+                        onChange={(e) => setEditNewParentFirstName(e.target.value)}
+                        style={{ flex: '1 1 180px', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)', fontSize: '0.85rem' }}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Apellidos del Padre/Tutor *"
+                        required={editParentOption === 'NEW'}
+                        value={editNewParentLastName}
+                        onChange={(e) => setEditNewParentLastName(e.target.value)}
+                        style={{ flex: '1 1 180px', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)', fontSize: '0.85rem' }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                      <input
+                        type="email"
+                        placeholder="Correo del Tutor *"
+                        required={editParentOption === 'NEW'}
+                        value={editNewParentEmail}
+                        onChange={(e) => setEditNewParentEmail(e.target.value)}
+                        style={{ flex: '1 1 220px', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)', fontSize: '0.85rem' }}
+                      />
+                      <input
+                        type="tel"
+                        placeholder="Teléfono del Tutor"
+                        value={editNewParentPhone}
+                        onChange={(e) => setEditNewParentPhone(e.target.value)}
+                        style={{ flex: '0 1 180px', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)', fontSize: '0.85rem' }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                      <input
+                        type="text"
+                        placeholder="DNI / NIE del Tutor"
+                        value={editNewParentDni}
+                        onChange={(e) => setEditNewParentDni(e.target.value)}
+                        style={{ flex: '1 1 180px', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)', fontSize: '0.85rem' }}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Dirección del Tutor (opcional)"
+                        value={editNewParentAddress}
+                        onChange={(e) => setEditNewParentAddress(e.target.value)}
+                        style={{ flex: '2 1 240px', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-main)', fontSize: '0.85rem' }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
@@ -1763,17 +1974,22 @@ const StudentsManagement: React.FC = () => {
 
       {/* Modal: Confirmar Eliminación */}
       {deletingStudent && (
-        <div className="modal-backdrop" style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0,0,0,0.65)',
-          backdropFilter: 'blur(5px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 80,
-          padding: '1rem'
-        }}>
+        <div
+          className="modal-backdrop"
+          onMouseDown={(e) => { backdropMouseDownRef.current = e.target === e.currentTarget; }}
+          onClick={(e) => { if (backdropMouseDownRef.current && e.target === e.currentTarget) setDeletingStudent(null); }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 80,
+            padding: '1rem'
+          }}
+        >
           <div className="glass-panel modal-card" style={{ width: '100%', maxWidth: '420px', padding: '2rem', textAlign: 'center' }}>
             <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
               <Trash2 size={24} />
@@ -1805,17 +2021,27 @@ const StudentsManagement: React.FC = () => {
 
       {/* Modal: Dar de Alta Matrícula */}
       {showAltaModal && selectedStudentForAlta && (
-        <div className="modal-backdrop" style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0,0,0,0.65)',
-          backdropFilter: 'blur(5px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 80,
-          padding: '1rem'
-        }}>
+        <div
+          className="modal-backdrop"
+          onMouseDown={(e) => { backdropMouseDownRef.current = e.target === e.currentTarget; }}
+          onClick={(e) => {
+            if (backdropMouseDownRef.current && e.target === e.currentTarget) {
+              setShowAltaModal(false);
+              setSelectedStudentForAlta(null);
+            }
+          }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 80,
+            padding: '1rem'
+          }}
+        >
           <div className="glass-panel modal-card" style={{ width: '100%', maxWidth: '420px', padding: '2rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
               <h3 style={{ margin: 0, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.3rem' }}>

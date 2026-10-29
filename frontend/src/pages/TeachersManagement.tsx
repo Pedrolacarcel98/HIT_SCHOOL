@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, BookOpen, Check, Edit2, Eye, Phone, Search, Trash2, UserPlus, UserRoundCog, X } from 'lucide-react';
 import CustomSelect from '../components/CustomSelect';
 import ModalityBadge from '../components/ModalityBadge';
@@ -29,6 +29,7 @@ const TeachersManagement: React.FC = () => {
   const [deletingTeacher, setDeletingTeacher] = useState<Teacher | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [notification, setNotification] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const backdropMouseDownRef = useRef(false);
 
   // Modal Gestión de Clases Asignadas (Admin)
   const [managingCoursesTeacher, setManagingCoursesTeacher] = useState<Teacher | null>(null);
@@ -38,18 +39,6 @@ const TeachersManagement: React.FC = () => {
   const [savingCourses, setSavingCourses] = useState(false);
 
   useEffect(() => { fetchTeachers(); }, []);
-
-  useEffect(() => {
-    const closeOnOutsideClick = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (!target.closest('[style*="position: fixed"]') || target.closest('.glass-panel')) return;
-      setViewingTeacher(null);
-      setDeletingTeacher(null);
-      closeForm();
-    };
-    document.addEventListener('click', closeOnOutsideClick);
-    return () => document.removeEventListener('click', closeOnOutsideClick);
-  }, []);
 
   const authHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}` });
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
@@ -169,7 +158,7 @@ const TeachersManagement: React.FC = () => {
         </h1>
       </div>
       {userRole === 'ADMIN' && (
-        <button onClick={() => { resetForm(); setShowCreateModal(true); }} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.25rem' }}><UserPlus size={18} /> Nuevo Profesor</button>
+        <button onClick={() => { if (editingTeacher) { setEditingTeacher(null); resetForm(); } setShowCreateModal(true); }} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.25rem' }}><UserPlus size={18} /> Nuevo Profesor</button>
       )}
     </div>
 
@@ -249,9 +238,9 @@ const TeachersManagement: React.FC = () => {
       })}
     </div>
 
-    {viewingTeacher && <div style={modalBackdrop}><div className="glass-panel" style={{ width: '100%', maxWidth: 620, maxHeight: '92vh', overflowY: 'auto', padding: '2rem' }}><ModalHeader title="Ficha del Profesor" onClose={() => setViewingTeacher(null)} /><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>{[['Nombre completo', `${viewingTeacher.profile?.firstName || ''} ${viewingTeacher.profile?.lastName || ''}`], ['Correo electrónico', viewingTeacher.email], ['DNI / NIE', viewingTeacher.profile?.dni || 'No registrado'], ['Teléfono / WhatsApp', viewingTeacher.profile?.phone || 'No registrado'], ['Fecha de nacimiento', viewingTeacher.profile?.birthDate ? new Date(viewingTeacher.profile.birthDate).toLocaleDateString('es-ES') : 'No registrada'], ['Estado', viewingTeacher.status === 'ACTIVE' ? 'Alta' : 'Baja']].map(([label, value]) => <div key={label} style={{ padding: '0.85rem 1rem', background: 'var(--surface-alt)', borderRadius: 8, border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}><span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>{label}</span><strong style={{ color: 'var(--text-main)' }}>{value}</strong></div>)}</div></div></div>}
-    {(showCreateModal || editingTeacher) && <div style={modalBackdrop}><div className="glass-panel" style={{ width: '100%', maxWidth: 620, maxHeight: '92vh', overflowY: 'auto', padding: '2rem' }}><ModalHeader title={editingTeacher ? 'Editar Profesor' : 'Nuevo Profesor'} onClose={closeForm} /><form onSubmit={saveTeacher} style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>{([['firstName', 'Nombre *', 'text'], ['lastName', 'Apellidos *', 'text'], ['email', 'Correo Electrónico *', 'email'], ['dni', 'DNI / NIE', 'text'], ['phone', 'Teléfono / WhatsApp', 'text'], ['birthDate', 'Fecha de Nacimiento', 'date']] as const).map(([field, label, type]) => <label key={field} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>{label}<input type={type} required={field === 'firstName' || field === 'lastName' || field === 'email'} value={form[field]} onChange={(event) => updateForm(field, event.target.value)} style={inputStyle} /></label>)}<div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}><button type="button" onClick={closeForm} style={secondaryButton}>Cancelar</button><button type="submit" className="btn-primary">{editingTeacher ? 'Guardar cambios' : 'Crear Profesor'}</button></div></form></div></div>}
-    {deletingTeacher && <div style={modalBackdrop}><div className="glass-panel" style={{ width: '100%', maxWidth: 480, padding: '2rem' }}><ModalHeader title="Eliminar profesor" onClose={() => setDeletingTeacher(null)} /><p style={{ color: 'var(--text-main)', lineHeight: 1.5 }}>¿Seguro que quieres eliminar a <strong>{deletingTeacher.profile?.firstName} {deletingTeacher.profile?.lastName}</strong>? Esta acción no se puede deshacer.</p><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}><button onClick={() => setDeletingTeacher(null)} style={secondaryButton}>Cancelar</button><button onClick={handleDelete} style={{ ...secondaryButton, color: '#b91c1c', borderColor: '#fecaca' }}>Eliminar</button></div></div></div>}
+    {viewingTeacher && <div style={modalBackdrop} onMouseDown={(e) => { backdropMouseDownRef.current = e.target === e.currentTarget; }} onClick={(e) => { if (backdropMouseDownRef.current && e.target === e.currentTarget) setViewingTeacher(null); }}><div className="glass-panel" style={{ width: '100%', maxWidth: 620, maxHeight: '92vh', overflowY: 'auto', padding: '2rem' }}><ModalHeader title="Ficha del Profesor" onClose={() => setViewingTeacher(null)} /><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>{[['Nombre completo', `${viewingTeacher.profile?.firstName || ''} ${viewingTeacher.profile?.lastName || ''}`], ['Correo electrónico', viewingTeacher.email], ['DNI / NIE', viewingTeacher.profile?.dni || 'No registrado'], ['Teléfono / WhatsApp', viewingTeacher.profile?.phone || 'No registrado'], ['Fecha de nacimiento', viewingTeacher.profile?.birthDate ? new Date(viewingTeacher.profile.birthDate).toLocaleDateString('es-ES') : 'No registrada'], ['Estado', viewingTeacher.status === 'ACTIVE' ? 'Alta' : 'Baja']].map(([label, value]) => <div key={label} style={{ padding: '0.85rem 1rem', background: 'var(--surface-alt)', borderRadius: 8, border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}><span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>{label}</span><strong style={{ color: 'var(--text-main)' }}>{value}</strong></div>)}</div></div></div>}
+    {(showCreateModal || editingTeacher) && <div style={modalBackdrop}><div className="glass-panel" style={{ width: '100%', maxWidth: 620, maxHeight: '92vh', overflowY: 'auto', padding: '2rem' }}><ModalHeader title={editingTeacher ? 'Editar Profesor' : 'Nuevo Profesor'} onClose={() => { setShowCreateModal(false); setEditingTeacher(null); }} /><form onSubmit={saveTeacher} style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>{([['firstName', 'Nombre *', 'text'], ['lastName', 'Apellidos *', 'text'], ['email', 'Correo Electrónico *', 'email'], ['dni', 'DNI / NIE', 'text'], ['phone', 'Teléfono / WhatsApp', 'text'], ['birthDate', 'Fecha de Nacimiento', 'date']] as const).map(([field, label, type]) => <label key={field} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>{label}<input type={type} required={field === 'firstName' || field === 'lastName' || field === 'email'} value={form[field]} onChange={(event) => updateForm(field, event.target.value)} style={inputStyle} /></label>)}<div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}><button type="button" onClick={closeForm} style={secondaryButton}>Cancelar</button><button type="submit" className="btn-primary">{editingTeacher ? 'Guardar cambios' : 'Crear Profesor'}</button></div></form></div></div>}
+    {deletingTeacher && <div style={modalBackdrop} onMouseDown={(e) => { backdropMouseDownRef.current = e.target === e.currentTarget; }} onClick={(e) => { if (backdropMouseDownRef.current && e.target === e.currentTarget) setDeletingTeacher(null); }}><div className="glass-panel" style={{ width: '100%', maxWidth: 480, padding: '2rem' }}><ModalHeader title="Eliminar profesor" onClose={() => setDeletingTeacher(null)} /><p style={{ color: 'var(--text-main)', lineHeight: 1.5 }}>¿Seguro que quieres eliminar a <strong>{deletingTeacher.profile?.firstName} {deletingTeacher.profile?.lastName}</strong>? Esta acción no se puede deshacer.</p><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}><button onClick={() => setDeletingTeacher(null)} style={secondaryButton}>Cancelar</button><button onClick={handleDelete} style={{ ...secondaryButton, color: '#b91c1c', borderColor: '#fecaca' }}>Eliminar</button></div></div></div>}
 
     {managingCoursesTeacher && (
       <div style={modalBackdrop}>

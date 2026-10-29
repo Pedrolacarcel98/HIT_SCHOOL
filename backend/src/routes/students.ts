@@ -10,6 +10,13 @@ import { deactivateParentIfNoActiveChildren } from '../services/parentStatus';
 const router = Router();
 const prisma = new PrismaClient();
 
+const normalizeText = (val?: string | null) =>
+  (val || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+
 // Endpoint para listar todos los tutores/padres registrados
 router.get('/parents', authenticateToken, requireTeacher, async (req, res) => {
   try {
@@ -168,21 +175,53 @@ router.put('/:id/evaluation', authenticateToken, requireTeacher, async (req: Aut
 router.post('/', authenticateToken, requireTeacher, async (req, res) => {
   const { email, firstName, lastName, dni, phone, birthDate, address, schoolYear, allergies, imageAuthorization, imageAuthorizationScope, observations, parentId, parentData, modality } = req.body;
 
-  if (!email || !firstName || !lastName) {
+  const trimmedFirstName = firstName?.trim();
+  const trimmedLastName = lastName?.trim();
+  const trimmedEmail = email?.trim().toLowerCase();
+
+  if (!trimmedEmail || !trimmedFirstName || !trimmedLastName) {
     return res.status(400).json({ error: 'Faltan campos requeridos (email, nombre y apellidos del alumno)' });
   }
 
+  if (parentData !== null && parentData !== undefined) {
+    if (!parentData.firstName?.trim() || !parentData.lastName?.trim() || !parentData.email?.trim()) {
+      return res.status(400).json({ error: 'Faltan campos obligatorios del padre/tutor (nombre, apellidos y correo electrónico)' });
+    }
+  }
+
   try {
+    // Evitar duplicados exactos de alumno (mismo email + mismo nombre y apellidos), permitiendo hermanos con distinto nombre y mismo email familiar
+    const sameEmailStudents = await prisma.user.findMany({
+      where: { email: trimmedEmail, role: 'STUDENT' },
+      include: { profile: true }
+    });
+    const duplicateStudent = sameEmailStudents.find(
+      (s) =>
+        normalizeText(s.profile?.firstName) === normalizeText(trimmedFirstName) &&
+        normalizeText(s.profile?.lastName) === normalizeText(trimmedLastName)
+    );
+    if (duplicateStudent) {
+      return res.status(400).json({ error: 'Ya existe un alumno registrado con ese mismo nombre, apellidos y correo electrónico.' });
+    }
+
     const autoPassword = `hit${Math.floor(1000 + Math.random() * 9000)}`;
     const passwordHash = await bcrypt.hash(autoPassword, 10);
-    const { newStudent, createdParentInfo } = await prisma.$transaction(async (transaction) => {
+    const { newStudent, createdParentInfo, linkedExistingParentInfo } = await prisma.$transaction(async (transaction) => {
       let finalParentId = parentId || null;
       let createdParentInfo: { id: string; email: string; name: string } | null = null;
+      let linkedExistingParentInfo: { id: string; email: string; name: string } | null = null;
 
       if (!finalParentId && parentData?.email && parentData.firstName && parentData.lastName) {
         const parentEmail = parentData.email.trim().toLowerCase();
+        const parentFirstName = parentData.firstName.trim();
+        const parentLastName = parentData.lastName.trim();
+        const parentDni = parentData.dni?.trim() || null;
+        const parentPhone = parentData.phone?.trim() || null;
+        const parentAddress = parentData.address?.trim() || address?.trim() || null;
+
         let existingParent = await transaction.user.findFirst({
-          where: { email: parentEmail, role: 'PARENT' }
+          where: { email: parentEmail, role: 'PARENT' },
+          include: { profile: true }
         });
 
         if (!existingParent) {
@@ -194,19 +233,39 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
               status: 'PENDING',
               profile: {
                 create: {
-                  firstName: parentData.firstName.trim(),
-                  lastName: parentData.lastName.trim(),
-                  dni: parentData.dni?.trim() || null,
-                  phone: parentData.phone?.trim() || null,
-                  address: parentData.address?.trim() || null
+                  firstName: parentFirstName,
+                  lastName: parentLastName,
+                  dni: parentDni,
+                  phone: parentPhone,
+                  address: parentAddress
                 }
               }
-            }
+            },
+            include: { profile: true }
           });
           createdParentInfo = {
             id: existingParent.id,
             email: existingParent.email,
-            name: `${parentData.firstName} ${parentData.lastName}`
+            name: `${parentFirstName} ${parentLastName}`
+          };
+        } else {
+          // Si ya existía un tutor con ese correo, enriquecer campos vacíos de su perfil sin pisar los ya existentes
+          if (existingParent.profile) {
+            const profileUpdates: Record<string, string> = {};
+            if (!existingParent.profile.dni && parentDni) profileUpdates.dni = parentDni;
+            if (!existingParent.profile.phone && parentPhone) profileUpdates.phone = parentPhone;
+            if (!existingParent.profile.address && parentAddress) profileUpdates.address = parentAddress;
+            if (Object.keys(profileUpdates).length > 0) {
+              await transaction.profile.update({
+                where: { userId: existingParent.id },
+                data: profileUpdates
+              });
+            }
+          }
+          linkedExistingParentInfo = {
+            id: existingParent.id,
+            email: existingParent.email,
+            name: `${existingParent.profile?.firstName || parentFirstName} ${existingParent.profile?.lastName || parentLastName}`.trim()
           };
         }
         finalParentId = existingParent.id;
@@ -214,7 +273,7 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
 
       const newStudent = await transaction.user.create({
         data: {
-          email: email.trim().toLowerCase(),
+          email: trimmedEmail,
           passwordHash,
           role: 'STUDENT',
           status: 'INACTIVE',
@@ -222,8 +281,8 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
           parentId: finalParentId,
           profile: {
             create: {
-              firstName: firstName.trim(),
-              lastName: lastName.trim(),
+              firstName: trimmedFirstName,
+              lastName: trimmedLastName,
               dni: dni?.trim() || null,
               phone: phone?.trim() || null,
               birthDate: birthDate ? new Date(birthDate) : null,
@@ -242,10 +301,8 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
         }
       });
 
-      return { newStudent, createdParentInfo };
+      return { newStudent, createdParentInfo, linkedExistingParentInfo };
     });
-
-
 
     res.status(201).json({
       message: 'Alumno creado con éxito',
@@ -267,7 +324,8 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
         } : null
       },
       generatedPassword: autoPassword,
-      createdParent: createdParentInfo
+      createdParent: createdParentInfo,
+      linkedExistingParent: linkedExistingParentInfo
     });
   } catch (error: any) {
     if (error.code === 'P2002') {
@@ -309,12 +367,14 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
           select: {
             id: true,
             email: true,
+            status: true,
             profile: {
               select: {
                 firstName: true,
                 lastName: true,
                 phone: true,
-                dni: true
+                dni: true,
+                address: true
               }
             }
           }
@@ -353,59 +413,136 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
 // Ruta para actualizar un alumno
 router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
   const studentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const { firstName, lastName, email, dni, phone, birthDate, address, schoolYear, allergies, imageAuthorization, imageAuthorizationScope, observations, parentId, modality, billingPeriod, billingAmount } = req.body;
+  const { firstName, lastName, email, dni, phone, birthDate, address, schoolYear, allergies, imageAuthorization, imageAuthorizationScope, observations, parentId, parentData, modality, billingPeriod, billingAmount } = req.body;
 
-  if (!firstName || !lastName || !email) {
+  const trimmedFirstName = firstName?.trim();
+  const trimmedLastName = lastName?.trim();
+  const trimmedEmail = email?.trim().toLowerCase();
+
+  if (!trimmedFirstName || !trimmedLastName || !trimmedEmail) {
     return res.status(400).json({ error: 'Nombre, apellidos y email son obligatorios' });
+  }
+
+  if (parentData !== null && parentData !== undefined) {
+    if (!parentData.firstName?.trim() || !parentData.lastName?.trim() || !parentData.email?.trim()) {
+      return res.status(400).json({ error: 'Faltan campos obligatorios del padre/tutor (nombre, apellidos y correo electrónico)' });
+    }
   }
 
   try {
     if (billingPeriod !== undefined && billingPeriod !== 'MONTHLY' && billingPeriod !== 'QUARTERLY') return res.status(400).json({ error: 'El tipo de pago no es válido.' });
     if (billingAmount !== undefined && (!Number.isFinite(Number(billingAmount)) || Number(billingAmount) <= 0)) return res.status(400).json({ error: 'El importe de pago debe ser mayor que cero.' });
 
-    const updatedUser = await prisma.user.update({
-      where: { id: studentId },
-      data: {
-        email: email.trim().toLowerCase(),
-        modality: modality !== undefined ? modality : undefined,
-        parentId: parentId !== undefined ? (parentId || null) : undefined,
-        profile: {
-          upsert: {
-            create: {
-              firstName: firstName.trim(),
-              lastName: lastName.trim(),
-              dni: dni?.trim() || null,
-              phone: phone?.trim() || null,
-              birthDate: birthDate ? new Date(birthDate) : null,
-              address: address?.trim() || null,
-              schoolYear: schoolYear?.trim() || null,
-              allergies: allergies?.trim() || null,
-              imageAuthorization: typeof imageAuthorization === 'boolean' ? imageAuthorization : null,
-              imageAuthorizationScope: imageAuthorizationScope?.trim() || null,
-              observations: observations?.trim() || null
+    const { updatedUser, createdParentInfo, linkedExistingParentInfo } = await prisma.$transaction(async (transaction) => {
+      let resolvedParentId: string | null | undefined = parentId !== undefined ? (parentId || null) : undefined;
+      let createdParentInfo: { id: string; email: string; name: string } | null = null;
+      let linkedExistingParentInfo: { id: string; email: string; name: string } | null = null;
+
+      if (!resolvedParentId && parentData?.email && parentData.firstName && parentData.lastName) {
+        const parentEmail = parentData.email.trim().toLowerCase();
+        const parentFirstName = parentData.firstName.trim();
+        const parentLastName = parentData.lastName.trim();
+        const parentDni = parentData.dni?.trim() || null;
+        const parentPhone = parentData.phone?.trim() || null;
+        const parentAddress = parentData.address?.trim() || address?.trim() || null;
+
+        let existingParent = await transaction.user.findFirst({
+          where: { email: parentEmail, role: 'PARENT' },
+          include: { profile: true }
+        });
+
+        if (!existingParent) {
+          existingParent = await transaction.user.create({
+            data: {
+              email: parentEmail,
+              passwordHash: await bcrypt.hash(randomBytes(32).toString('hex'), 10),
+              role: 'PARENT',
+              status: 'PENDING',
+              profile: {
+                create: {
+                  firstName: parentFirstName,
+                  lastName: parentLastName,
+                  dni: parentDni,
+                  phone: parentPhone,
+                  address: parentAddress
+                }
+              }
             },
-            update: {
-              firstName: firstName.trim(),
-              lastName: lastName.trim(),
-              dni: dni !== undefined ? (dni?.trim() || null) : undefined,
-              phone: phone !== undefined ? (phone?.trim() || null) : undefined,
-              birthDate: birthDate !== undefined ? (birthDate ? new Date(birthDate) : null) : undefined,
-              address: address !== undefined ? (address?.trim() || null) : undefined,
-              schoolYear: schoolYear !== undefined ? (schoolYear?.trim() || null) : undefined,
-              allergies: allergies !== undefined ? (allergies?.trim() || null) : undefined,
-              imageAuthorization: typeof imageAuthorization === 'boolean' ? imageAuthorization : undefined,
-              imageAuthorizationScope: imageAuthorizationScope !== undefined ? (imageAuthorizationScope?.trim() || null) : undefined,
-              observations: observations !== undefined ? (observations?.trim() || null) : undefined
+            include: { profile: true }
+          });
+          createdParentInfo = {
+            id: existingParent.id,
+            email: existingParent.email,
+            name: `${parentFirstName} ${parentLastName}`
+          };
+        } else {
+          if (existingParent.profile) {
+            const profileUpdates: Record<string, string> = {};
+            if (!existingParent.profile.dni && parentDni) profileUpdates.dni = parentDni;
+            if (!existingParent.profile.phone && parentPhone) profileUpdates.phone = parentPhone;
+            if (!existingParent.profile.address && parentAddress) profileUpdates.address = parentAddress;
+            if (Object.keys(profileUpdates).length > 0) {
+              await transaction.profile.update({
+                where: { userId: existingParent.id },
+                data: profileUpdates
+              });
             }
           }
+          linkedExistingParentInfo = {
+            id: existingParent.id,
+            email: existingParent.email,
+            name: `${existingParent.profile?.firstName || parentFirstName} ${existingParent.profile?.lastName || parentLastName}`.trim()
+          };
         }
-      },
-      include: {
-        profile: true,
-        parent: {
-          include: { profile: true }
-        }
+        resolvedParentId = existingParent.id;
       }
+
+      const updatedUser = await transaction.user.update({
+        where: { id: studentId },
+        data: {
+          email: trimmedEmail,
+          modality: modality !== undefined ? modality : undefined,
+          parentId: resolvedParentId,
+          profile: {
+            upsert: {
+              create: {
+                firstName: trimmedFirstName,
+                lastName: trimmedLastName,
+                dni: dni?.trim() || null,
+                phone: phone?.trim() || null,
+                birthDate: birthDate ? new Date(birthDate) : null,
+                address: address?.trim() || null,
+                schoolYear: schoolYear?.trim() || null,
+                allergies: allergies?.trim() || null,
+                imageAuthorization: typeof imageAuthorization === 'boolean' ? imageAuthorization : null,
+                imageAuthorizationScope: imageAuthorizationScope?.trim() || null,
+                observations: observations?.trim() || null
+              },
+              update: {
+                firstName: trimmedFirstName,
+                lastName: trimmedLastName,
+                dni: dni !== undefined ? (dni?.trim() || null) : undefined,
+                phone: phone !== undefined ? (phone?.trim() || null) : undefined,
+                birthDate: birthDate !== undefined ? (birthDate ? new Date(birthDate) : null) : undefined,
+                address: address !== undefined ? (address?.trim() || null) : undefined,
+                schoolYear: schoolYear !== undefined ? (schoolYear?.trim() || null) : undefined,
+                allergies: allergies !== undefined ? (allergies?.trim() || null) : undefined,
+                imageAuthorization: typeof imageAuthorization === 'boolean' ? imageAuthorization : undefined,
+                imageAuthorizationScope: imageAuthorizationScope !== undefined ? (imageAuthorizationScope?.trim() || null) : undefined,
+                observations: observations !== undefined ? (observations?.trim() || null) : undefined
+              }
+            }
+          }
+        },
+        include: {
+          profile: true,
+          parent: {
+            include: { profile: true }
+          }
+        }
+      });
+
+      return { updatedUser, createdParentInfo, linkedExistingParentInfo };
     });
 
     if (billingPeriod !== undefined || billingAmount !== undefined) {
@@ -467,7 +604,9 @@ router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
           phone: updatedUser.parent.profile?.phone,
           dni: updatedUser.parent.profile?.dni
         } : null
-      }
+      },
+      createdParent: createdParentInfo,
+      linkedExistingParent: linkedExistingParentInfo
     });
   } catch (error) {
     console.error('Error al actualizar alumno:', error);

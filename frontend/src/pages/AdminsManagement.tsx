@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Check, Edit2, Eye, Phone, Search, ShieldCheck, Trash2, UserPlus, X } from 'lucide-react';
 import CustomSelect from '../components/CustomSelect';
 
@@ -31,20 +31,9 @@ const AdminsManagement: React.FC = () => {
   const [deletingAdmin, setDeletingAdmin] = useState<AdminUser | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [notification, setNotification] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const backdropMouseDownRef = useRef(false);
 
   useEffect(() => { fetchAdmins(); }, []);
-
-  useEffect(() => {
-    const closeOnOutsideClick = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (!target.closest('[style*="position: fixed"]') || target.closest('.glass-panel')) return;
-      setViewingAdmin(null);
-      setDeletingAdmin(null);
-      closeForm();
-    };
-    document.addEventListener('click', closeOnOutsideClick);
-    return () => document.removeEventListener('click', closeOnOutsideClick);
-  }, []);
 
   const authHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}` });
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
@@ -142,7 +131,7 @@ const AdminsManagement: React.FC = () => {
           <ShieldCheck style={{ color: 'var(--primary)' }} size={24} /> Administradores
         </h1>
       </div>
-      <button onClick={() => { resetForm(); setShowCreateModal(true); }} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.25rem' }}><UserPlus size={18} /> Nuevo Administrador</button>
+      <button onClick={() => { if (editingAdmin) { setEditingAdmin(null); resetForm(); } setShowCreateModal(true); }} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.25rem' }}><UserPlus size={18} /> Nuevo Administrador</button>
     </div>
 
     <div className="filters-panel">
@@ -417,9 +406,9 @@ const AdminsManagement: React.FC = () => {
       )}
     </div>
 
-    {viewingAdmin && <div style={modalBackdrop}><div className="glass-panel" style={{ width: '100%', maxWidth: 620, maxHeight: '92vh', overflowY: 'auto', padding: '2rem' }}><ModalHeader title="Ficha del Administrador" onClose={() => setViewingAdmin(null)} /><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>{[['Nombre completo', `${viewingAdmin.profile?.firstName || ''} ${viewingAdmin.profile?.lastName || ''}`], ['Correo electrónico', viewingAdmin.email], ['DNI / NIE', viewingAdmin.profile?.dni || 'No registrado'], ['Teléfono / WhatsApp', viewingAdmin.profile?.phone || 'No registrado'], ['Fecha de nacimiento', viewingAdmin.profile?.birthDate ? new Date(viewingAdmin.profile.birthDate).toLocaleDateString('es-ES') : 'No registrada'], ['Estado', viewingAdmin.status === 'ACTIVE' ? 'Alta' : 'Baja']].map(([label, value]) => <div key={label} style={{ padding: '0.85rem 1rem', background: 'var(--surface-alt)', borderRadius: 8, border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}><span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>{label}</span><strong style={{ color: 'var(--text-main)' }}>{value}</strong></div>)}</div></div></div>}
-    {(showCreateModal || editingAdmin) && <div style={modalBackdrop}><div className="glass-panel" style={{ width: '100%', maxWidth: 620, maxHeight: '92vh', overflowY: 'auto', padding: '2rem' }}><ModalHeader title={editingAdmin ? 'Editar Administrador' : 'Nuevo Administrador'} onClose={closeForm} /><form onSubmit={saveAdmin} style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>{([['firstName', 'Nombre *', 'text'], ['lastName', 'Apellidos *', 'text'], ['email', 'Correo Electrónico *', 'email'], ['dni', 'DNI / NIE', 'text'], ['phone', 'Teléfono / WhatsApp', 'text'], ['birthDate', 'Fecha de Nacimiento', 'date']] as const).map(([field, label, type]) => <label key={field} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>{label}<input type={type} required={field === 'firstName' || field === 'lastName' || field === 'email'} value={form[field]} onChange={(event) => updateForm(field, event.target.value)} style={inputStyle} /></label>)}<div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}><button type="button" onClick={closeForm} style={secondaryButton}>Cancelar</button><button type="submit" className="btn-primary">{editingAdmin ? 'Guardar cambios' : 'Crear Administrador'}</button></div></form></div></div>}
-    {deletingAdmin && <div style={modalBackdrop}><div className="glass-panel" style={{ width: '100%', maxWidth: 480, padding: '2rem' }}><ModalHeader title="Eliminar administrador" onClose={() => setDeletingAdmin(null)} /><p style={{ color: 'var(--text-main)', lineHeight: 1.5 }}>¿Seguro que quieres eliminar a <strong>{deletingAdmin.profile?.firstName} {deletingAdmin.profile?.lastName}</strong>? Esta acción no se puede deshacer.</p><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}><button onClick={() => setDeletingAdmin(null)} style={secondaryButton}>Cancelar</button><button onClick={handleDelete} style={{ ...secondaryButton, color: '#b91c1c', borderColor: '#fecaca' }}>Eliminar</button></div></div></div>}
+    {viewingAdmin && <div style={modalBackdrop} onMouseDown={(e) => { backdropMouseDownRef.current = e.target === e.currentTarget; }} onClick={(e) => { if (backdropMouseDownRef.current && e.target === e.currentTarget) setViewingAdmin(null); }}><div className="glass-panel" style={{ width: '100%', maxWidth: 620, maxHeight: '92vh', overflowY: 'auto', padding: '2rem' }}><ModalHeader title="Ficha del Administrador" onClose={() => setViewingAdmin(null)} /><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>{[['Nombre completo', `${viewingAdmin.profile?.firstName || ''} ${viewingAdmin.profile?.lastName || ''}`], ['Correo electrónico', viewingAdmin.email], ['DNI / NIE', viewingAdmin.profile?.dni || 'No registrado'], ['Teléfono / WhatsApp', viewingAdmin.profile?.phone || 'No registrado'], ['Fecha de nacimiento', viewingAdmin.profile?.birthDate ? new Date(viewingAdmin.profile.birthDate).toLocaleDateString('es-ES') : 'No registrada'], ['Estado', viewingAdmin.status === 'ACTIVE' ? 'Alta' : 'Baja']].map(([label, value]) => <div key={label} style={{ padding: '0.85rem 1rem', background: 'var(--surface-alt)', borderRadius: 8, border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}><span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>{label}</span><strong style={{ color: 'var(--text-main)' }}>{value}</strong></div>)}</div></div></div>}
+    {(showCreateModal || editingAdmin) && <div style={modalBackdrop}><div className="glass-panel" style={{ width: '100%', maxWidth: 620, maxHeight: '92vh', overflowY: 'auto', padding: '2rem' }}><ModalHeader title={editingAdmin ? 'Editar Administrador' : 'Nuevo Administrador'} onClose={() => { setShowCreateModal(false); setEditingAdmin(null); }} /><form onSubmit={saveAdmin} style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>{([['firstName', 'Nombre *', 'text'], ['lastName', 'Apellidos *', 'text'], ['email', 'Correo Electrónico *', 'email'], ['dni', 'DNI / NIE', 'text'], ['phone', 'Teléfono / WhatsApp', 'text'], ['birthDate', 'Fecha de Nacimiento', 'date']] as const).map(([field, label, type]) => <label key={field} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>{label}<input type={type} required={field === 'firstName' || field === 'lastName' || field === 'email'} value={form[field]} onChange={(event) => updateForm(field, event.target.value)} style={inputStyle} /></label>)}<div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}><button type="button" onClick={closeForm} style={secondaryButton}>Cancelar</button><button type="submit" className="btn-primary">{editingAdmin ? 'Guardar cambios' : 'Crear Administrador'}</button></div></form></div></div>}
+    {deletingAdmin && <div style={modalBackdrop} onMouseDown={(e) => { backdropMouseDownRef.current = e.target === e.currentTarget; }} onClick={(e) => { if (backdropMouseDownRef.current && e.target === e.currentTarget) setDeletingAdmin(null); }}><div className="glass-panel" style={{ width: '100%', maxWidth: 480, padding: '2rem' }}><ModalHeader title="Eliminar administrador" onClose={() => setDeletingAdmin(null)} /><p style={{ color: 'var(--text-main)', lineHeight: 1.5 }}>¿Seguro que quieres eliminar a <strong>{deletingAdmin.profile?.firstName} {deletingAdmin.profile?.lastName}</strong>? Esta acción no se puede deshacer.</p><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}><button onClick={() => setDeletingAdmin(null)} style={secondaryButton}>Cancelar</button><button onClick={handleDelete} style={{ ...secondaryButton, color: '#b91c1c', borderColor: '#fecaca' }}>Eliminar</button></div></div></div>}
   </div>;
 };
 

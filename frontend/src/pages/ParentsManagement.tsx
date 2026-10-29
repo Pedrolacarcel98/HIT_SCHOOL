@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   Check,
@@ -103,25 +103,12 @@ const ParentsManagement: React.FC = () => {
     text: string;
     type: "success" | "error";
   } | null>(null);
+  const backdropMouseDownRef = useRef(false);
 
   useEffect(() => {
     fetchParents();
   }, []);
-  useEffect(() => {
-    const closeOnOutsideClick = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (
-        !target.closest('[style*="position: fixed"]') ||
-        target.closest(".glass-panel")
-      )
-        return;
-      setViewing(null);
-      setDeleting(null);
-      closeForm();
-    };
-    document.addEventListener("click", closeOnOutsideClick);
-    return () => document.removeEventListener("click", closeOnOutsideClick);
-  }, []);
+
   const authHeaders = () => ({
     Authorization: `Bearer ${localStorage.getItem("token")}`,
   });
@@ -146,8 +133,10 @@ const ParentsManagement: React.FC = () => {
   const updateForm = (field: keyof ParentForm, value: string) =>
     setForm((current) => ({ ...current, [field]: value }));
   const openCreate = () => {
-    setEditing(null);
-    setForm(emptyForm);
+    if (editing) {
+      setEditing(null);
+      setForm(emptyForm);
+    }
     setShowForm(true);
   };
   const openEdit = (parent: Parent) => {
@@ -519,7 +508,7 @@ const ParentsManagement: React.FC = () => {
         </div>
       </div>
 
-      {/* Misma informaci\u00f3n en tarjetas: la tabla no cabe bajo 768px */}
+      {/* Misma información en tarjetas: la tabla no cabe bajo 768px */}
       <div className="parents-card-list">
         {loading ? (
           <p style={{ textAlign: "center", color: "var(--text-muted)", padding: "2rem 0" }}>
@@ -632,7 +621,11 @@ const ParentsManagement: React.FC = () => {
         )}
       </div>
       {viewing && (
-        <div style={modalBackdrop}>
+        <div
+          style={modalBackdrop}
+          onMouseDown={(e) => { backdropMouseDownRef.current = e.target === e.currentTarget; }}
+          onClick={(e) => { if (backdropMouseDownRef.current && e.target === e.currentTarget) setViewing(null); }}
+        >
           <div
             className="glass-panel"
             style={{
@@ -699,7 +692,7 @@ const ParentsManagement: React.FC = () => {
               overflowY: "auto",
             }}
           >
-            <button className="modal-close" onClick={closeForm}>
+            <button className="modal-close" onClick={() => setShowForm(false)}>
               <X size={20} />
             </button>
             <h2>{editing ? "Editar Tutor" : "Nuevo Tutor"}</h2>
@@ -760,7 +753,11 @@ const ParentsManagement: React.FC = () => {
         </div>
       )}
       {deleting && (
-        <div style={modalBackdrop}>
+        <div
+          style={modalBackdrop}
+          onMouseDown={(e) => { backdropMouseDownRef.current = e.target === e.currentTarget; }}
+          onClick={(e) => { if (backdropMouseDownRef.current && e.target === e.currentTarget) setDeleting(null); }}
+        >
           <div className="glass-panel" style={{ width: "100%", maxWidth: 480 }}>
             <button className="modal-close" onClick={() => setDeleting(null)}>
               <X size={20} />
