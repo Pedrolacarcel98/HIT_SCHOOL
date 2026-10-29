@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken, requireTeacher } from '../middleware/auth';
 import { sendAccountReactivationEmail, sendParentWelcomeEmail } from '../services/email';
@@ -29,24 +30,18 @@ router.get('/', authenticateToken, requireTeacher, async (_req, res) => {
 router.post('/', authenticateToken, requireTeacher, async (req, res) => {
   const { firstName, lastName, email, dni, phone, address } = req.body;
   if (!firstName?.trim() || !lastName?.trim() || !email?.trim()) return res.status(400).json({ error: 'Nombre, apellidos y correo son obligatorios.' });
-  const temporaryPassword = `hit${Math.floor(1000 + Math.random() * 9000)}`;
   try {
     const parent = await prisma.user.create({
       data: {
         email: email.trim().toLowerCase(),
-        passwordHash: await bcrypt.hash(temporaryPassword, 10),
+        passwordHash: await bcrypt.hash(randomBytes(32).toString('hex'), 10),
         role: 'PARENT',
-        status: 'ACTIVE',
+        status: 'PENDING',
         profile: { create: { firstName: firstName.trim(), lastName: lastName.trim(), dni: dni?.trim() || null, phone: phone?.trim() || null, address: address?.trim() || null } }
       },
       select: parentSelect
     });
-    try {
-      await sendParentWelcomeEmail(parent.email, parent.profile?.firstName || firstName, temporaryPassword);
-    } catch (mailError) {
-      console.error('El tutor fue creado, pero no se pudo enviar el correo SMTP:', mailError);
-    }
-    res.status(201).json({ message: 'Tutor creado correctamente.', parent });
+    res.status(201).json({ message: 'Tutor creado. Queda pendiente de alta; no se han enviado credenciales.', parent });
   } catch (error: any) {
     if (error.code === 'P2002') return res.status(400).json({ error: 'El correo ya está registrado.' });
     console.error('Error al crear tutor:', error);
@@ -100,12 +95,20 @@ router.patch('/:id/status', authenticateToken, requireTeacher, async (req, res) 
   try {
     const existing = await prisma.user.findFirst({ where: { id: parentId, role: 'PARENT' }, include: { profile: true } });
     if (!existing) return res.status(404).json({ error: 'Tutor no encontrado' });
+    const isFirstActivation = existing.status === 'PENDING' && status === 'ACTIVE';
     const isReactivation = existing.status === 'INACTIVE' && status === 'ACTIVE';
-    const temporaryPassword = isReactivation ? `hit${Math.floor(1000 + Math.random() * 9000)}` : null;
+    const temporaryPassword = isFirstActivation || isReactivation ? `hit${Math.floor(1000 + Math.random() * 9000)}` : null;
     const parent = await prisma.user.update({ where: { id: parentId }, data: { status, ...(temporaryPassword ? { passwordHash: await bcrypt.hash(temporaryPassword, 10) } : {}) }, select: parentSelect });
     if (temporaryPassword) {
-      try { await sendAccountReactivationEmail(parent.email, parent.profile?.firstName || 'tutor', temporaryPassword, 'tutor'); }
-      catch (mailError) { console.error('El tutor fue reactivado, pero no se pudo enviar el correo SMTP:', mailError); }
+      try {
+        if (isFirstActivation) {
+          await sendParentWelcomeEmail(parent.email, parent.profile?.firstName || 'tutor', temporaryPassword);
+        } else {
+          await sendAccountReactivationEmail(parent.email, parent.profile?.firstName || 'tutor', temporaryPassword, 'tutor');
+        }
+      } catch (mailError) {
+        console.error('El tutor fue dado de alta, pero no se pudo enviar el correo SMTP:', mailError);
+      }
     }
     res.json({ message: status === 'ACTIVE' ? 'Tutor dado de alta' : 'Tutor dado de baja', parent });
   } catch (error) {

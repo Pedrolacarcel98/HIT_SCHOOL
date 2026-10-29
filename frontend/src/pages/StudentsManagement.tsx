@@ -24,7 +24,7 @@ import {
 interface ParentData {
   id: string;
   email: string;
-  status?: 'ACTIVE' | 'INACTIVE';
+  status?: 'ACTIVE' | 'INACTIVE' | 'PENDING';
   createdAt?: string;
   profile?: {
     firstName: string;
@@ -315,7 +315,7 @@ const StudentsManagement: React.FC = () => {
         return;
       }
 
-      showToast(`Alumno creado con éxito (credenciales generadas: ${data.generatedPassword}).`);
+      showToast(`${data.createdParent ? 'Tutor creado como pendiente de alta; no se ha enviado correo. ' : ''}Alumno creado con éxito (credenciales generadas: ${data.generatedPassword}).`);
       setShowCreateModal(false);
       resetCreateForm();
       fetchStudents();
@@ -1463,6 +1463,9 @@ const StudentsManagement: React.FC = () => {
                       </div>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                          El tutor quedará pendiente de alta. Sus credenciales se enviarán cuando lo actives en Gestión de Tutores.
+                        </p>
                         <div style={{ display: 'flex', gap: '0.75rem' }}>
                           <input
                             type="text"

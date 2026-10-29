@@ -1,10 +1,10 @@
 import { Router } from 'express';
+import { randomBytes } from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import { authenticateToken, requireTeacher, AuthRequest } from '../middleware/auth';
 import { getChildrenForParent } from './auth';
 import { ensureStudentPaymentScheduleById } from '../services/payments';
-import { sendParentWelcomeEmail } from '../services/email';
 import { deactivateParentIfNoActiveChildren } from '../services/parentStatus';
 
 const router = Router();
@@ -177,7 +177,7 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
     const passwordHash = await bcrypt.hash(autoPassword, 10);
     const { newStudent, createdParentInfo } = await prisma.$transaction(async (transaction) => {
       let finalParentId = parentId || null;
-      let createdParentInfo: { id: string; email: string; generatedPassword: string; name: string } | null = null;
+      let createdParentInfo: { id: string; email: string; name: string } | null = null;
 
       if (!finalParentId && parentData?.email && parentData.firstName && parentData.lastName) {
         const parentEmail = parentData.email.trim().toLowerCase();
@@ -186,13 +186,12 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
         });
 
         if (!existingParent) {
-          const parentAutoPassword = `hit${Math.floor(1000 + Math.random() * 9000)}`;
           existingParent = await transaction.user.create({
             data: {
               email: parentEmail,
-              passwordHash: await bcrypt.hash(parentAutoPassword, 10),
+              passwordHash: await bcrypt.hash(randomBytes(32).toString('hex'), 10),
               role: 'PARENT',
-              status: 'ACTIVE',
+              status: 'PENDING',
               profile: {
                 create: {
                   firstName: parentData.firstName.trim(),
@@ -207,7 +206,6 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
           createdParentInfo = {
             id: existingParent.id,
             email: existingParent.email,
-            generatedPassword: parentAutoPassword,
             name: `${parentData.firstName} ${parentData.lastName}`
           };
         }
@@ -248,18 +246,6 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
     });
 
 
-
-    if (createdParentInfo) {
-      try {
-        await sendParentWelcomeEmail(
-          createdParentInfo.email,
-          createdParentInfo.name,
-          createdParentInfo.generatedPassword
-        );
-      } catch (mailError) {
-        console.error('El tutor fue creado, pero no se pudo enviar el correo SMTP:', mailError);
-      }
-    }
 
     res.status(201).json({
       message: 'Alumno creado con éxito',

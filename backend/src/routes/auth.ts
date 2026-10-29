@@ -94,8 +94,11 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
 
-    if (user.status === 'INACTIVE' && user.role !== 'ADMIN') {
-      return res.status(403).json({ error: 'Cuenta desactivada. Contacta con la administración.' });
+    if (user.status !== 'ACTIVE' && user.role !== 'ADMIN') {
+      const error = user.status === 'PENDING'
+        ? 'Cuenta pendiente de alta. Contacta con la administración.'
+        : 'Cuenta desactivada. Contacta con la administración.';
+      return res.status(403).json({ error });
     }
 
     const token = jwt.sign(
