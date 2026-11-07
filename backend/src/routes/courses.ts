@@ -534,8 +534,9 @@ router.post('/:id/posts', authenticateToken, requireTeacher, verifyCourseAccess,
 
     if (course) {
       const teacherName = `${course.teacher.profile?.firstName || ''} ${course.teacher.profile?.lastName || ''}`.trim() || course.teacher.email;
-      const courseUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/student/course/${course.id}`;
-      const notificationMediaLinkUrl = linkedMediaUrl || (req.file ? `${process.env.FRONTEND_URL || 'http://localhost:5173'}${post.mediaUrl}` : null);
+      const baseFrontendUrl = (process.env.FRONTEND_URL || 'https://app.hitschool.es').replace(/\/+$/, '');
+      const courseUrl = `${baseFrontendUrl}/student/course/${course.id}`;
+      const notificationMediaLinkUrl = linkedMediaUrl || (req.file ? `${baseFrontendUrl}${post.mediaUrl}` : null);
       const driveFileId = linkedMediaUrl && ['image', 'video'].includes(linkedMediaType)
         ? getDriveFileId(linkedMediaUrl)
         : null;

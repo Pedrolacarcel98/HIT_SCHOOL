@@ -2,7 +2,7 @@ import { PrismaClient, StructuredTaskAssignmentType } from '@prisma/client';
 import { sendStructuredTaskNotification } from './email';
 
 const prisma = new PrismaClient();
-const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+const frontendUrl = (process.env.FRONTEND_URL || 'https://app.hitschool.es').replace(/\/+$/, '');
 let processing = false;
 
 type Recipient = { email: string; firstName: string };
