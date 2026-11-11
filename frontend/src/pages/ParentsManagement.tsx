@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   Check,
@@ -16,7 +16,7 @@ import CustomSelect from "../components/CustomSelect";
 interface Parent {
   id: string;
   email: string;
-  status: "ACTIVE" | "INACTIVE";
+  status: "ACTIVE" | "INACTIVE" | "PENDING";
   profile?: {
     firstName: string;
     lastName: string;
@@ -76,13 +76,22 @@ const getParentInitials = (parent: Parent) => {
   return initials || parent.email.slice(0, 2).toUpperCase();
 };
 
+const getParentStatusLabel = (status: Parent["status"]) =>
+  status === "ACTIVE" ? "Alta" : status === "PENDING" ? "Pendiente" : "Baja";
+
+const getParentStatusColors = (status: Parent["status"]) => {
+  if (status === "ACTIVE") return { background: "#dcfce7", color: "#166534" };
+  if (status === "PENDING") return { background: "#fef3c7", color: "#92400e" };
+  return { background: "#fee2e2", color: "#991b1b" };
+};
+
 const ParentsManagement: React.FC = () => {
   const userRole = localStorage.getItem("userRole");
   const canManageParents = userRole === "ADMIN" || userRole === "TEACHER";
   const [parents, setParents] = useState<Parent[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<
-    "ALL" | "ACTIVE" | "INACTIVE"
+    "ALL" | "ACTIVE" | "INACTIVE" | "PENDING"
   >("ALL");
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<ParentForm>(emptyForm);
@@ -94,25 +103,12 @@ const ParentsManagement: React.FC = () => {
     text: string;
     type: "success" | "error";
   } | null>(null);
+  const backdropMouseDownRef = useRef(false);
 
   useEffect(() => {
     fetchParents();
   }, []);
-  useEffect(() => {
-    const closeOnOutsideClick = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (
-        !target.closest('[style*="position: fixed"]') ||
-        target.closest(".glass-panel")
-      )
-        return;
-      setViewing(null);
-      setDeleting(null);
-      closeForm();
-    };
-    document.addEventListener("click", closeOnOutsideClick);
-    return () => document.removeEventListener("click", closeOnOutsideClick);
-  }, []);
+
   const authHeaders = () => ({
     Authorization: `Bearer ${localStorage.getItem("token")}`,
   });
@@ -137,8 +133,10 @@ const ParentsManagement: React.FC = () => {
   const updateForm = (field: keyof ParentForm, value: string) =>
     setForm((current) => ({ ...current, [field]: value }));
   const openCreate = () => {
-    setEditing(null);
-    setForm(emptyForm);
+    if (editing) {
+      setEditing(null);
+      setForm(emptyForm);
+    }
     setShowForm(true);
   };
   const openEdit = (parent: Parent) => {
@@ -175,7 +173,7 @@ const ParentsManagement: React.FC = () => {
       toast(
         editing
           ? "Tutor actualizado correctamente."
-          : "Tutor creado. Se ha enviado su contraseña por correo.",
+          : data.message || "Tutor creado. Queda pendiente de alta; no se han enviado credenciales.",
       );
       closeForm();
       fetchParents();
@@ -313,6 +311,7 @@ const ParentsManagement: React.FC = () => {
             options={[
               { value: "ALL", label: "Todos los estados" },
               { value: "ACTIVE", label: "Alta" },
+              { value: "PENDING", label: "Pendiente de alta" },
               { value: "INACTIVE", label: "Baja" },
             ]}
           />
@@ -377,10 +376,11 @@ const ParentsManagement: React.FC = () => {
                       (child) => child.status === "ACTIVE",
                     ) || [];
                   const isActive = parent.status === "ACTIVE";
+                  const statusColors = getParentStatusColors(parent.status);
                   return (
                     <tr
                       key={parent.id}
-                      style={{ borderTop: "1px solid var(--border)" }}
+                      style={{ borderTop: "1px solid var(--border)", background: isActive ? "#f0fdf4" : undefined }}
                     >
                       <td style={{ padding: "1rem 1.25rem" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
@@ -444,13 +444,12 @@ const ParentsManagement: React.FC = () => {
                             style={{
                               padding: "0.35rem 0.65rem",
                               borderRadius: 16,
-                              background: isActive ? "#dcfce7" : "#fee2e2",
-                              color: isActive ? "#166534" : "#991b1b",
+                              ...statusColors,
                               fontSize: "0.75rem",
                               fontWeight: 700,
                             }}
                           >
-                            {isActive ? "Alta" : "Baja"}
+                            {getParentStatusLabel(parent.status)}
                           </span>
                           {canManageParents && (
                             <button
@@ -509,7 +508,7 @@ const ParentsManagement: React.FC = () => {
         </div>
       </div>
 
-      {/* Misma informaci\u00f3n en tarjetas: la tabla no cabe bajo 768px */}
+      {/* Misma información en tarjetas: la tabla no cabe bajo 768px */}
       <div className="parents-card-list">
         {loading ? (
           <p style={{ textAlign: "center", color: "var(--text-muted)", padding: "2rem 0" }}>
@@ -524,6 +523,7 @@ const ParentsManagement: React.FC = () => {
             const activeChildren =
               parent.children?.filter((child) => child.status === "ACTIVE") || [];
             const isActive = parent.status === "ACTIVE";
+            const statusColors = getParentStatusColors(parent.status);
             return (
               <div key={parent.id} className="glass-panel parents-card">
                 <div className="parents-card__header">
@@ -561,13 +561,12 @@ const ParentsManagement: React.FC = () => {
                       style={{
                         padding: "0.3rem 0.6rem",
                         borderRadius: 16,
-                        background: isActive ? "#dcfce7" : "#fee2e2",
-                        color: isActive ? "#166534" : "#991b1b",
+                        ...statusColors,
                         fontSize: "0.72rem",
                         fontWeight: 700,
                       }}
                     >
-                      {isActive ? "Alta" : "Baja"}
+                      {getParentStatusLabel(parent.status)}
                     </span>
                     {canManageParents && (
                       <button
@@ -622,7 +621,11 @@ const ParentsManagement: React.FC = () => {
         )}
       </div>
       {viewing && (
-        <div style={modalBackdrop}>
+        <div
+          style={modalBackdrop}
+          onMouseDown={(e) => { backdropMouseDownRef.current = e.target === e.currentTarget; }}
+          onClick={(e) => { if (backdropMouseDownRef.current && e.target === e.currentTarget) setViewing(null); }}
+        >
           <div
             className="glass-panel"
             style={{
@@ -654,7 +657,7 @@ const ParentsManagement: React.FC = () => {
             </p>
             <p>
               <strong>Estado:</strong>{" "}
-              {viewing.status === "ACTIVE" ? "Alta" : "Baja"}
+              {getParentStatusLabel(viewing.status)}
             </p>
             <h3 style={{ marginTop: "1.25rem" }}>Alumnos asociados</h3>
             {viewing.children?.length ? (
@@ -689,7 +692,7 @@ const ParentsManagement: React.FC = () => {
               overflowY: "auto",
             }}
           >
-            <button className="modal-close" onClick={closeForm}>
+            <button className="modal-close" onClick={() => setShowForm(false)}>
               <X size={20} />
             </button>
             <h2>{editing ? "Editar Tutor" : "Nuevo Tutor"}</h2>
@@ -750,7 +753,11 @@ const ParentsManagement: React.FC = () => {
         </div>
       )}
       {deleting && (
-        <div style={modalBackdrop}>
+        <div
+          style={modalBackdrop}
+          onMouseDown={(e) => { backdropMouseDownRef.current = e.target === e.currentTarget; }}
+          onClick={(e) => { if (backdropMouseDownRef.current && e.target === e.currentTarget) setDeleting(null); }}
+        >
           <div className="glass-panel" style={{ width: "100%", maxWidth: 480 }}>
             <button className="modal-close" onClick={() => setDeleting(null)}>
               <X size={20} />

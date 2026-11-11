@@ -1,5 +1,6 @@
 import { PrismaClient, Role, UserStatus, Modality } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import { upsertUserByEmailAndRole } from './userSeedHelpers';
 
 const prisma = new PrismaClient();
 
@@ -8,7 +9,7 @@ async function main() {
   console.log('Inserting test data...');
 
   // 1. Teacher
-  const teacher = await prisma.user.upsert({
+  const teacher = await upsertUserByEmailAndRole(prisma, {
     where: { email: 'profesor@test.com' },
     update: {},
     create: {
@@ -29,7 +30,7 @@ async function main() {
   console.log('Created teacher:', teacher.email);
 
   // 2. Parents
-  const parent1 = await prisma.user.upsert({
+  const parent1 = await upsertUserByEmailAndRole(prisma, {
     where: { email: 'padre1@test.com' },
     update: {},
     create: {
@@ -49,7 +50,7 @@ async function main() {
   });
   console.log('Created parent:', parent1.email);
 
-  const parent2 = await prisma.user.upsert({
+  const parent2 = await upsertUserByEmailAndRole(prisma, {
     where: { email: 'madre2@test.com' },
     update: {},
     create: {
@@ -70,7 +71,7 @@ async function main() {
   console.log('Created parent:', parent2.email);
 
   // 3. Students with parents
-  const studentWithParent1 = await prisma.user.upsert({
+  const studentWithParent1 = await upsertUserByEmailAndRole(prisma, {
     where: { email: 'hijo1@test.com' },
     update: {},
     create: {
@@ -97,7 +98,7 @@ async function main() {
   });
   console.log('Created student with parent:', studentWithParent1.email);
 
-  const studentWithParent2 = await prisma.user.upsert({
+  const studentWithParent2 = await upsertUserByEmailAndRole(prisma, {
     where: { email: 'hija2@test.com' },
     update: {},
     create: {
@@ -125,7 +126,7 @@ async function main() {
   console.log('Created student with parent:', studentWithParent2.email);
 
   // 4. Students without parents
-  const studentAlone1 = await prisma.user.upsert({
+  const studentAlone1 = await upsertUserByEmailAndRole(prisma, {
     where: { email: 'alumno1@test.com' },
     update: {},
     create: {
@@ -151,7 +152,7 @@ async function main() {
   });
   console.log('Created student without parent:', studentAlone1.email);
 
-  const studentAlone2 = await prisma.user.upsert({
+  const studentAlone2 = await upsertUserByEmailAndRole(prisma, {
     where: { email: 'alumno2@test.com' },
     update: {},
     create: {

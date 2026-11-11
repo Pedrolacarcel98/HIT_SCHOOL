@@ -7,7 +7,7 @@ Documento maestro de especificación de requisitos funcionales, trazabilidad y s
 
 ## 🌟 0. Requisitos de la Reunión con el Cliente (Prioridad Actual)
 
-A continuación se detallan los 11 requerimientos acordados en la última reunión con el cliente, su alcance funcional y su estado de ejecución:
+A continuación se detallan los requerimientos acordados en las reuniones con el cliente, su alcance funcional y su estado de ejecución:
 
 | # | Requisito del Cliente | Alcance Funcional Resumido | Estado |
 | :-: | :--- | :--- | :-: |
@@ -21,6 +21,8 @@ A continuación se detallan los 11 requerimientos acordados en la última reuni�
 | **8** | **Chat con visibilidad global para docentes** | Profesores/administradores pueden participar en conversaciones con alumnos/tutores; incluye indicador de no leídos y entrada sin chat preseleccionado. | `[x] Completado` |
 | **9** | **Paleta de fondos visuales y mayor contraste** | Fondos diferenciados por sección y badges cromáticos aplicados parcialmente; queda auditoría visual final. | `[/] Parcial` |
 | **10** | **Vuelco masivo de alumnos (Exportar / Importar Excel)** | Descarga de expedientes a Excel/CSV e importador masivo con vista previa y creación transaccional. | `[/] Parcial` |
+| **11** | **Emails compartidos entre cuentas** | Permitir que tutor, varios alumnos y otros roles compartan correo, manteniendo contraseñas y sesiones de cuenta independientes. | `[x] Completado` |
+| **12** | **Errores visibles al crear alumnos** | Mostrar por encima del modal el detalle y el código HTTP cuando la API rechaza el alta. | `[x] Completado` |
 
 ---
 
@@ -97,6 +99,19 @@ A continuación se detallan los 11 requerimientos acordados en la última reuni�
   - Asistente de carga de ficheros Excel/CSV con plantilla modelo descargable.
   - Mapeo automático de columnas y vista previa interactiva con validación previa de duplicados (email o DNI).
   - Creación masiva transaccional en base de datos con alta de usuarios, perfiles, generación de credenciales automáticas y disparo opcional de webhooks a n8n.
+
+### 0.11 Emails Compartidos y Acceso por Cuenta `[x]`
+- [x] Permitir el mismo email en varias cuentas `STUDENT` y en cuentas de roles distintos; mantener la unicidad de email dentro de cada rol no alumno.
+- [x] Resolver login usando email, perfil y contraseña. Si varias cuentas de alumno coinciden con las credenciales, permitir seleccionar la cuenta antes de crear sesión.
+- [x] Mantener IDs, contraseñas y JWT independientes para alumno y tutor; la asociación familiar continúa usando `parentId`.
+- [x] En recuperación, seleccionar al alumno por email, perfil, nombre y apellidos; identificar el tipo de cuenta en el mensaje enviado.
+- [x] Aplicar el índice parcial de PostgreSQL después de sincronizar Prisma mediante `npm run schema:sync`.
+- [x] Validar en PostgreSQL desechable que se aceptan varios alumnos y roles distintos con el mismo email, pero no dos tutores ni dos profesores con ese email.
+- [/] El envío del reset con coincidencia exacta no se probó con SMTP real porque este entorno no tiene SMTP configurado.
+
+### 0.12 Errores Visibles en Alta de Alumnos `[x]`
+- [x] Mostrar el aviso de error por encima del modal de alta; el CSS global eleva los fondos modales a `z-index: 100`, así que el toast usa una capa superior.
+- [x] Si la respuesta HTTP no trae JSON, mostrar un mensaje de respaldo con el estado HTTP en lugar de ocultar el motivo.
 
 ---
 
@@ -229,6 +244,8 @@ A continuación se detallan los 11 requerimientos acordados en la última reuni�
 - [x] Modal de ajustes de cuenta disponible tanto para alumnos (`STUDENT`) como para tutores (`PARENT`).
 - [x] Modal de ajustes de cuenta disponible también para `TEACHER` y `ADMIN`.
 - [x] Cambio de email, nombre, apellidos, DNI, teléfono y contraseña desde ajustes de cuenta.
+- [x] Login por email, perfil y contraseña para cuentas que comparten email; selector de cuenta cuando varias cuentas de alumno comparten también la contraseña.
+- [x] Recuperación de contraseña por perfil; para alumnos solicita nombre y apellidos para identificar la cuenta.
 - [x] Cierre automático del modal tras guardar perfil o cambiar contraseña correctamente.
 - [x] Visualización de datos administrativos solo para alumnos; no se muestra en tutores, profesores ni administradores.
 

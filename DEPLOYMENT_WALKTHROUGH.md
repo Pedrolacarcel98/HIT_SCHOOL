@@ -43,9 +43,12 @@ SMTP_REJECT_UNAUTHORIZED=false
 SMTP_USER="pruebas@hitschool.example.com"
 SMTP_PASSWORD="credencial-de-prueba"
 SMTP_FROM="HitSchool <pruebas@hitschool.example.com>"
+SUPPORT_EMAIL="soporte@tudominio.com"
 ```
 
 Las credenciales anteriores son datos de prueba y no envían correos reales. Sustitúyelas por las credenciales de tu proveedor SMTP antes de probar la recuperación de contraseña. `SMTP_REJECT_UNAUTHORIZED=false` solo debe usarse en entornos locales cuando un antivirus o proxy intercepte TLS con un certificado autofirmado; en producción debe omitirse o establecerse en `true`. El backend utiliza SMTP directamente tanto para la recuperación como para el correo de bienvenida de los profesores.
+
+`SUPPORT_EMAIL` es opcional y se muestra como contacto en el pie de los correos transaccionales. Si no se configura, el mensaje indica al destinatario que contacte con la administración de su academia.
 
 ---
 
@@ -72,9 +75,9 @@ docker-compose up -d --build
 
 Una vez que los contenedores estén levantados, sincroniza el esquema de Prisma y genera los usuarios y materiales de demostración:
 
-### Paso 5.1: Sincronizar el esquema de tablas en PostgreSQL
+### Paso 5.1: Sincronizar el esquema y las reglas de email en PostgreSQL
 ```bash
-docker exec hit_school_backend npx prisma db push
+docker exec hit_school_backend npm run schema:sync
 ```
 
 ### Paso 5.2: Cargar datos de prueba (Profesor, Alumno y Recursos Didácticos)
@@ -86,7 +89,7 @@ docker exec hit_school_backend npx prisma db seed
 > - 💼 **Profesor:** `admin@hitschool.com` | Contraseña: `1234`
 > - 💼 **Profesor:** `profesor@hitschool.com` | Contraseña: `1234`
 > - 💼 **Profesor2:** `profesor2@hitschool.com` | Contraseña: `1234`
-> - 🎓 **Alumno:** `alumno@hitschool.com` | Contraseña: `1234`
+> - 🎓 **Alumno:** `marpargut@hitschool.com` | Contraseña: `1234`
 > - 🎓 **Tutor:** `marpargut@hitschool.com` | Contraseña: `123456`
 
 ---
@@ -103,7 +106,7 @@ Las tareas estructuradas/multistep también generan notificaciones directamente 
 
 Cuando se reactiva un alumno o un profesor dado de baja, el backend genera una nueva contraseña temporal, la guarda cifrada y la envía directamente por SMTP al correo de la cuenta reactivada. La reactivación se completa aunque el correo falle; el error queda registrado en los logs y la contraseña nueva deberá comunicarse manualmente si fuera necesario.
 
-Los tutores creados desde Gestión de Alumnos reciben también sus credenciales directamente por SMTP. El tutor nuevo no se envía a n8n para evitar duplicar su notificación. Cuando un alumno se da de baja, el backend oculta ese alumno del portal del tutor y, si el tutor ya no tiene ningún alumno activo, desactiva automáticamente su cuenta. La gestión de tutores está disponible en `/teacher/parents` para listar, buscar, editar, crear, dar de baja/reactivar y eliminar tutores sin alumnos asociados.
+Los tutores creados desde Gestión de Tutores o al crear un alumno quedan pendientes de alta y no reciben correo en ese momento. Al pulsar **Dar de alta** en `/teacher/parents`, el backend activa la cuenta y envía sus credenciales por SMTP; si se trata de una cuenta dada de baja anteriormente, envía el correo de reactivación. Estas notificaciones se gestionan directamente desde el backend y no necesitan un flujo de n8n. Cuando un alumno se da de baja, el backend oculta ese alumno del portal del tutor y, si el tutor ya no tiene ningún alumno activo, desactiva automáticamente su cuenta. La gestión de tutores permite listar, buscar, editar, crear, dar de alta, dar de baja/reactivar y eliminar tutores sin alumnos asociados.
 
 ### Paso a Paso en n8n:
 1. Accede a **[http://localhost:5678](http://localhost:5678)** y crea tu cuenta de administrador local.
@@ -209,7 +212,7 @@ docker-compose down
 ```bash
 docker-compose down -v
 docker-compose up -d --build
-docker exec hit_school_backend npx prisma db push
+docker exec hit_school_backend npm run schema:sync
 docker exec hit_school_backend npx prisma db seed
 ```
 

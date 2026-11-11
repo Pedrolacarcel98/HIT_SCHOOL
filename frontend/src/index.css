@@ -533,6 +533,10 @@ th {
   min-height: 100vh;
 }
 
+.login-page input {
+  font-size: 16px;
+}
+
 /* Page container responsive */
 .page-container {
   padding: 2.5rem;
@@ -3415,5 +3419,4 @@ input, select, textarea {
     transform: scale(1);
   }
 }
-
 

@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Role } from '@prisma/client';
 import bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
@@ -6,20 +6,20 @@ const prisma = new PrismaClient();
 async function verify() {
   console.log('🔍 Verificando datos insertados en la base de datos...');
 
-  const emails = [
-    'profesor1@hitschool.com',
-    'profesor2@hitschool.com',
-    'padre.unhijo@hitschool.com',
-    'padre.doshijos@hitschool.com',
-    'hijo.unico@hitschool.com',
-    'hermano.mayor@hitschool.com',
-    'hermano.menor@hitschool.com',
-    'alumno.independiente@hitschool.com'
+  const accounts = [
+    { email: 'profesor1@hitschool.com', role: Role.TEACHER },
+    { email: 'profesor2@hitschool.com', role: Role.TEACHER },
+    { email: 'padre.unhijo@hitschool.com', role: Role.PARENT },
+    { email: 'padre.doshijos@hitschool.com', role: Role.PARENT },
+    { email: 'hijo.unico@hitschool.com', role: Role.STUDENT },
+    { email: 'hermano.mayor@hitschool.com', role: Role.STUDENT },
+    { email: 'hermano.menor@hitschool.com', role: Role.STUDENT },
+    { email: 'alumno.independiente@hitschool.com', role: Role.STUDENT }
   ];
 
-  for (const email of emails) {
-    const user = await prisma.user.findUnique({
-      where: { email },
+  for (const { email, role } of accounts) {
+    const user = await prisma.user.findFirst({
+      where: { email, role },
       include: {
         profile: true,
         parent: { select: { email: true } },

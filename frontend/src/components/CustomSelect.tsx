@@ -72,16 +72,20 @@ export function CustomSelect<T extends string | number = string>({
   // Auto-enable search if more than 8 options and not explicitly disabled
   const showSearch = searchable !== undefined ? searchable : options.length > 8;
 
+  const normalizeSearch = (str: string) =>
+    str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
   // Filtered options based on search term
   const filteredOptions = showSearch && searchTerm.trim() !== ''
     ? options.filter((opt) => {
+        const query = normalizeSearch(searchTerm);
         const text = typeof opt.label === 'string' 
           ? opt.label 
           : typeof opt.value === 'string' 
             ? opt.value 
             : String(opt.value);
-        return text.toLowerCase().includes(searchTerm.toLowerCase()) || 
-          (opt.description && opt.description.toLowerCase().includes(searchTerm.toLowerCase()));
+        return normalizeSearch(text).includes(query) || 
+          (opt.description && normalizeSearch(opt.description).includes(query));
       })
     : options;
 
