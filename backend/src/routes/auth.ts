@@ -2,30 +2,115 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import { randomInt } from 'crypto';
+import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { sendPasswordResetEmail } from '../services/email';
 
 const router = Router();
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 
+// Helper para obtener todos los hijos (alumnos) asociados a un tutor por parentId o email
+export const getChildrenForParent = async (prisma: PrismaClient, parentId: string, parentEmail: string) => {
+  const children = await prisma.user.findMany({
+    where: {
+      role: 'STUDENT',
+      status: 'ACTIVE',
+      OR: [
+        { parentId },
+        { parent: { email: { equals: parentEmail.trim().toLowerCase(), mode: 'insensitive' } } }
+      ]
+    },
+    select: {
+      id: true,
+      email: true,
+      role: true,
+      status: true,
+      createdAt: true,
+      profile: true,
+      parentId: true,
+      enrollments: {
+        select: {
+          courseId: true,
+          course: {
+            select: {
+              id: true,
+              title: true
+            }
+          }
+        }
+      }
+    },
+    orderBy: { createdAt: 'desc' }
+  });
+
+  // Asegurar la sincronización de parentId en la base de datos si faltaba
+  for (const child of children) {
+    if (!child.parentId) {
+      await prisma.user.update({
+        where: { id: child.id },
+        data: { parentId }
+      }).catch(() => {});
+    }
+  }
+
+  return children;
+};
+
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, role, accountId } = req.body;
+  const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+  const allowedRoles = ['STUDENT', 'TEACHER', 'PARENT'];
+  if (!normalizedEmail || typeof password !== 'string' || !allowedRoles.includes(role)) {
+    return res.status(400).json({ error: 'Indica un correo, contraseña y tipo de perfil válidos.' });
+  }
 
   try {
-    const user = await prisma.user.findUnique({ where: { email } });
+    const roles = role === 'TEACHER' ? ['TEACHER', 'ADMIN'] : [role];
+    const candidates = await prisma.user.findMany({
+      where: { email: normalizedEmail, role: { in: roles } },
+      include: { profile: true }
+    });
+
+    const matchingUsers = (await Promise.all(candidates.map(async (candidate) => (
+      await bcrypt.compare(password, candidate.passwordHash) ? candidate : null
+    )))).filter((candidate) => candidate !== null);
+    const user = accountId
+      ? matchingUsers.find((candidate) => candidate.id === accountId)
+      : matchingUsers.length === 1 ? matchingUsers[0] : null;
+
+    if (!user && !accountId && matchingUsers.length > 1) {
+      return res.status(409).json({
+        error: 'Hay varias cuentas con esas credenciales. Selecciona una.',
+        accounts: matchingUsers.map((candidate) => ({
+          id: candidate.id,
+          role: candidate.role,
+          name: `${candidate.profile?.firstName || ''} ${candidate.profile?.lastName || ''}`.trim()
+        }))
+      });
+    }
+
     if (!user) {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
 
-    const validPassword = await bcrypt.compare(password, user.passwordHash);
-    if (!validPassword) {
-      return res.status(401).json({ error: 'Credenciales inválidas' });
+    if (user.status !== 'ACTIVE' && user.role !== 'ADMIN') {
+      const error = user.status === 'PENDING'
+        ? 'Cuenta pendiente de alta. Contacta con la administración.'
+        : 'Cuenta desactivada. Contacta con la administración.';
+      return res.status(403).json({ error });
     }
 
     const token = jwt.sign(
-      { id: user.id, role: user.role },
+      { id: user.id, role: user.role, email: user.email },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
+
+    let children: any[] = [];
+    if (user.role === 'PARENT') {
+      children = await getChildrenForParent(prisma, user.id, user.email);
+    }
 
     res.json({
       token,
@@ -33,11 +118,234 @@ router.post('/login', async (req, res) => {
         id: user.id,
         email: user.email,
         role: user.role,
+        profile: user.profile,
+        parentId: user.parentId,
+        children
       }
     });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Error del servidor al iniciar sesión' });
+  }
+});
+
+router.post('/forgot-password', async (req, res) => {
+  const { email, role, firstName, lastName } = req.body;
+  const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+  const allowedRoles = ['STUDENT', 'TEACHER', 'PARENT'];
+
+  if (!normalizedEmail || !allowedRoles.includes(role)) {
+    return res.status(400).json({ error: 'Indica un correo y un tipo de perfil válido.' });
+  }
+
+  try {
+    const candidates = await prisma.user.findMany({
+      where: { email: normalizedEmail, role, status: 'ACTIVE' },
+      include: { profile: true }
+    });
+    const normalizeName = (value: string) => value.trim().toLocaleLowerCase('es');
+    const matchingStudents = role === 'STUDENT' && typeof firstName === 'string' && typeof lastName === 'string'
+      ? candidates.filter((candidate) => (
+        normalizeName(candidate.profile?.firstName || '') === normalizeName(firstName) &&
+        normalizeName(candidate.profile?.lastName || '') === normalizeName(lastName)
+      ))
+      : [];
+    const user = role === 'STUDENT'
+      ? matchingStudents.length === 1 ? matchingStudents[0] : undefined
+      : candidates[0];
+
+    // Responder igual cuando los datos no identifican una cuenta activa.
+    if (!user) {
+      return res.json({ message: 'Si los datos son válidos, recibirás un correo con tu nueva contraseña.' });
+    }
+
+    const temporaryPassword = `hit${randomInt(100000, 1000000)}`;
+    const passwordHash = await bcrypt.hash(temporaryPassword, 10);
+
+    await sendPasswordResetEmail(
+      user.email,
+      user.profile?.firstName || 'usuario',
+      temporaryPassword,
+      user.role === 'STUDENT' ? 'alumno' : user.role === 'PARENT' ? 'tutor' : 'profesor'
+    );
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash }
+    });
+
+    res.json({ message: 'Si los datos son válidos, recibirás un correo con tu nueva contraseña.' });
+  } catch (error) {
+    console.error('Error al recuperar la contraseña:', error);
+    res.status(502).json({ error: 'No se pudo enviar el correo de recuperación. Inténtalo de nuevo más tarde.' });
+  }
+});
+
+// Obtener perfil actual del usuario logueado
+router.get('/me', authenticateToken, async (req: AuthRequest, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: 'No autenticado' });
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        status: true,
+        modality: true,
+        profile: true,
+        parentId: true,
+        parent: {
+          select: {
+            id: true,
+            email: true,
+            profile: true
+          }
+        },
+        academyEnrollments: {
+          select: {
+            monthlyFee: true,
+            startDate: true,
+            endDate: true
+          },
+          orderBy: { startDate: 'desc' },
+          take: 1
+        }
+      }
+    });
+
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+    let children: any[] = [];
+    if (user.role === 'PARENT') {
+      children = await getChildrenForParent(prisma, user.id, user.email);
+    }
+
+    const activeEnrollment = (user as any).academyEnrollments?.[0];
+    const monthlyFee = activeEnrollment ? activeEnrollment.monthlyFee : null;
+    const courseStartDate = activeEnrollment ? activeEnrollment.startDate : null;
+
+    res.json({
+      ...user,
+      monthlyFee,
+      courseStartDate,
+      children
+    });
+  } catch (error) {
+    console.error('Error al obtener perfil:', error);
+    res.status(500).json({ error: 'Error al obtener perfil de usuario' });
+  }
+});
+
+// Actualizar perfil del usuario actual
+router.put('/me/profile', authenticateToken, async (req: AuthRequest, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: 'No autenticado' });
+
+  const { firstName, lastName, email, dni, phone } = req.body;
+  const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+
+  if (!firstName || !lastName) {
+    return res.status(400).json({ error: 'Nombre y apellidos son obligatorios' });
+  }
+  if (!normalizedEmail) {
+    return res.status(400).json({ error: 'El email es obligatorio' });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return res.status(404).json({ error: 'La sesión ya no es válida. Vuelve a iniciar sesión.' });
+    }
+
+    if (user.role !== 'STUDENT') {
+      const duplicateEmail = await prisma.user.findFirst({
+        where: {
+          email: normalizedEmail,
+          role: user.role,
+          NOT: { id: userId }
+        },
+        select: { id: true }
+      });
+
+      if (duplicateEmail) {
+        return res.status(400).json({ error: 'Este email ya está asociado a otra cuenta del mismo perfil.' });
+      }
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        email: normalizedEmail,
+        profile: {
+          upsert: {
+            create: {
+              firstName: firstName.trim(),
+              lastName: lastName.trim(),
+              dni: dni?.trim() || null,
+              phone: phone?.trim() || null
+            },
+            update: {
+              firstName: firstName.trim(),
+              lastName: lastName.trim(),
+              dni: dni !== undefined ? (dni?.trim() || null) : undefined,
+              phone: phone !== undefined ? (phone?.trim() || null) : undefined
+            }
+          }
+        }
+      },
+      include: {
+        profile: true
+      }
+    });
+
+    res.json({ success: true, email: updatedUser.email, profile: updatedUser.profile });
+  } catch (error) {
+    console.error('Error al actualizar perfil:', error);
+    res.status(500).json({ error: 'Error del servidor al actualizar perfil' });
+  }
+});
+
+// Cambiar contraseña (para cambiar la contraseña temporal generada por n8n o actualizarla)
+router.put('/change-password', authenticateToken, async (req: AuthRequest, res) => {
+  const userId = req.user?.id;
+  const { currentPassword, newPassword } = req.body;
+
+  if (!userId) {
+    return res.status(401).json({ error: 'No autenticado' });
+  }
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Debes indicar la contraseña actual y la nueva contraseña.' });
+  }
+
+  if (typeof newPassword !== 'string' || newPassword.trim().length < 6) {
+    return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 6 caracteres.' });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    const isValid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!isValid) {
+      return res.status(400).json({ error: 'La contraseña actual no es correcta.' });
+    }
+
+    const newHash = await bcrypt.hash(newPassword.trim(), 10);
+    await prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: newHash }
+    });
+
+    res.json({ success: true, message: 'Contraseña actualizada correctamente.' });
+  } catch (error) {
+    console.error('Error al cambiar contraseña:', error);
+    res.status(500).json({ error: 'Error del servidor al cambiar la contraseña.' });
   }
 });
 

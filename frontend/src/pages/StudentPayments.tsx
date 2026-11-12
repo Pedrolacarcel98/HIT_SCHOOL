@@ -1,5 +1,16 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Clock3, XCircle } from 'lucide-react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { CheckCircle2, FileText, XCircle, CalendarDays } from 'lucide-react';
+import { useParent } from '../context/ParentContext';
+import CustomSelect from '../components/CustomSelect';
+import { generateInvoicePDF, generateStatementPDF } from '../utils/invoice';
+import { getPaymentVisualStatus } from '../utils/paymentStatus';
+
+interface AcademyEnrollment {
+  id: string;
+  monthlyFee: number;
+  startDate: string;
+  endDate: string | null;
+}
 
 interface StudentPaymentResponse {
   month: number;
@@ -19,13 +30,19 @@ interface StudentPaymentResponse {
     profile?: {
       firstName: string;
       lastName: string;
+      dni?: string | null;
+      address?: string | null;
     };
+    enrollments?: AcademyEnrollment[];
+    parent?: {
+      profile?: {
+        firstName: string;
+        lastName: string;
+        dni?: string | null;
+        address?: string | null;
+      } | null;
+    } | null;
   };
-}
-
-interface MonthTarget {
-  month: number;
-  year: number;
 }
 
 interface MonthlyPaymentCard {
@@ -36,20 +53,42 @@ interface MonthlyPaymentCard {
   error: string;
 }
 
-const StudentPayments: React.FC = () => {
-  const [payments, setPayments] = useState<MonthlyPaymentCard[]>([]);
-  const [loading, setLoading] = useState(true);
+interface EnrollmentGroup {
+  enrollment: AcademyEnrollment;
+  payments: MonthlyPaymentCard[];
+}
 
-  const monthsToShow = useMemo<MonthTarget[]>(() => {
-    const now = new Date();
-    return [0, 1, 2].map((offset) => {
-      const date = new Date(now.getFullYear(), now.getMonth() - offset, 1);
-      return {
-        month: date.getMonth() + 1,
-        year: date.getFullYear()
-      };
+const StudentPayments: React.FC = () => {
+  const [groupedPayments, setGroupedPayments] = useState<EnrollmentGroup[]>([]);
+  const [statementYear, setStatementYear] = useState<string>('ALL');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [loading, setLoading] = useState(true);
+  const { selectedStudentId, selectedStudent } = useParent();
+
+  useEffect(() => {
+    setStatementYear('ALL');
+  }, [selectedStudentId]);
+
+  const availableYears = useMemo(() => {
+    const yearSet = new Set<number>();
+    groupedPayments.forEach((g) => {
+      g.payments.forEach((p) => {
+        if (p.year) yearSet.add(p.year);
+      });
     });
-  }, []);
+    return Array.from(yearSet).sort((a, b) => b - a);
+  }, [groupedPayments]);
+
+  const displayedGroups = useMemo(() => {
+    if (statementYear === 'ALL') return groupedPayments;
+    const targetYear = Number(statementYear);
+    return groupedPayments
+      .map((g) => ({
+        ...g,
+        payments: g.payments.filter((p) => p.year === targetYear)
+      }))
+      .filter((g) => g.payments.length > 0);
+  }, [groupedPayments, statementYear]);
 
   const getMonthLabel = (month: number, year: number) => {
     const date = new Date(year, month - 1, 1);
@@ -61,138 +100,305 @@ const StudentPayments: React.FC = () => {
     const fetchPayments = async () => {
       try {
         setLoading(true);
+        setErrorMsg('');
         const token = localStorage.getItem('token');
         const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+        const studentParam = selectedStudentId ? `&studentId=${selectedStudentId}` : '';
 
-        const results = await Promise.all(
-          monthsToShow.map(async ({ month, year }) => {
-            try {
-              const res = await fetch(`${apiUrl}/api/payments/me?month=${month}&year=${year}`, {
-                headers: { Authorization: `Bearer ${token}` }
-              });
+        const res = await fetch(`${apiUrl}/api/payments/me?all=true${studentParam}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        if (!res.ok) {
+          const body = await res.json();
+          setErrorMsg(body.error || 'No se pudo cargar tu estado de pago.');
+          return;
+        }
 
-              const body = await res.json();
-              if (!res.ok) {
-                return {
-                  month,
-                  year,
-                  label: getMonthLabel(month, year),
-                  data: null,
-                  error: body.error || 'No se pudo cargar tu estado de pago.'
-                } as MonthlyPaymentCard;
-              }
+        const body: StudentPaymentResponse[] = await res.json();
+        
+        if (body.length === 0) {
+          setGroupedPayments([]);
+          return;
+        }
 
-              return {
-                month,
-                year,
-                label: getMonthLabel(month, year),
-                data: body as StudentPaymentResponse,
-                error: ''
-              } as MonthlyPaymentCard;
-            } catch (fetchError) {
-              console.error(fetchError);
-              return {
-                month,
-                year,
-                label: getMonthLabel(month, year),
-                data: null,
-                error: 'No se pudo conectar con el servidor.'
-              } as MonthlyPaymentCard;
-            }
-          })
-        );
+        const enrollments = body[0].student.enrollments || [];
+        
+        const cards = body.map(paymentData => ({
+          month: paymentData.month,
+          year: paymentData.year,
+          label: getMonthLabel(paymentData.month, paymentData.year),
+          data: paymentData,
+          error: ''
+        }));
 
-        setPayments(results);
+        const groups: EnrollmentGroup[] = enrollments.map(enr => ({
+          enrollment: enr,
+          payments: []
+        }));
+
+        cards.forEach(card => {
+           const cardDate = new Date(card.year, card.month - 1, 1);
+           const enrMatch = groups.find(g => {
+             const sd = new Date(g.enrollment.startDate);
+             const sdMonth = new Date(sd.getFullYear(), sd.getMonth(), 1);
+             let edMonth = new Date(3000, 0, 1);
+             if (g.enrollment.endDate) {
+               const ed = new Date(g.enrollment.endDate);
+               edMonth = new Date(ed.getFullYear(), ed.getMonth(), 1);
+             }
+             return cardDate.getTime() >= sdMonth.getTime() && cardDate.getTime() <= edMonth.getTime();
+           });
+
+           if (enrMatch) {
+             enrMatch.payments.push(card);
+           }
+        });
+
+        groups.forEach(g => {
+          g.payments.sort((a, b) => {
+            if (a.year !== b.year) return b.year - a.year;
+            return b.month - a.month;
+          });
+        });
+        
+        // Sort enrollments descending by start date
+        groups.sort((a, b) => new Date(b.enrollment.startDate).getTime() - new Date(a.enrollment.startDate).getTime());
+
+        setGroupedPayments(groups);
+      } catch (fetchError) {
+        console.error(fetchError);
+        setErrorMsg('No se pudo conectar con el servidor.');
       } finally {
         setLoading(false);
       }
     };
 
     fetchPayments();
-  }, [monthsToShow]);
+  }, [selectedStudentId]);
+
+  const handleDownloadInvoice = (card: MonthlyPaymentCard) => {
+    if (!card.data) return;
+    const firstName = card.data.student.profile?.firstName || 'Alumno';
+    const lastName = card.data.student.profile?.lastName || '';
+    const studentName = `${firstName} ${lastName}`.trim();
+
+    const billedName = card.data.student.parent?.profile 
+      ? `${card.data.student.parent.profile.firstName} ${card.data.student.parent.profile.lastName}`.trim()
+      : studentName;
+    const billedDni = card.data.student.parent?.profile?.dni || card.data.student.profile?.dni || null;
+    const billedAddress = card.data.student.parent?.profile?.address || card.data.student.profile?.address || null;
+
+    generateInvoicePDF({
+      studentName: billedName,
+      studentDni: billedDni,
+      studentEmail: card.data.student.email,
+      studentAddress: billedAddress,
+      month: card.month,
+      year: card.year,
+      monthLabel: card.label,
+      amount: card.data.amount || 35,
+      paidAt: card.data.paidAt
+    });
+  };
+
+  const handleDownloadStatement = (yearFilter: string = 'ALL') => {
+    if (groupedPayments.length === 0) return;
+    const firstGroup = groupedPayments[0];
+    const student = firstGroup.payments[0]?.data?.student;
+    if (!student) return;
+
+    const studentName = `${student.profile?.firstName || 'Alumno'} ${student.profile?.lastName || ''}`.trim();
+    
+    // Flatten all payments from all groups, applying yearFilter
+    const allPayments = groupedPayments.flatMap((g) => 
+      g.payments
+        .filter((p) => yearFilter === 'ALL' || p.year === Number(yearFilter))
+        .map((p) => ({
+          monthLabel: p.label,
+          amount: p.data?.amount || g.enrollment.monthlyFee || 35,
+          isPaid: p.data?.isPaid || false,
+          paidAt: p.data?.paidAt,
+          year: p.year
+        }))
+    );
+
+    if (allPayments.length === 0) return;
+
+    const billedName = student.parent?.profile 
+      ? `${student.parent.profile.firstName} ${student.parent.profile.lastName}`.trim()
+      : studentName;
+    const billedDni = student.parent?.profile?.dni || student.profile?.dni || null;
+    const billedAddress = student.parent?.profile?.address || student.profile?.address || null;
+
+    generateStatementPDF({
+      studentName: billedName,
+      studentDni: billedDni,
+      studentEmail: student.email,
+      studentAddress: billedAddress,
+      year: yearFilter === 'ALL' ? null : yearFilter,
+      payments: allPayments
+    });
+  };
+
+  const isParent = !!selectedStudentId;
+  const childName = selectedStudent?.profile 
+    ? `${selectedStudent.profile.firstName || ''} ${selectedStudent.profile.lastName || ''}`.trim()
+    : 'tu hijo';
 
   return (
-    <div style={{ padding: '2.5rem', maxWidth: '1100px', margin: '0 auto' }}>
-      <header style={{ marginBottom: '2rem' }}>
-        <h1 style={{ margin: 0, fontSize: '1.8rem', color: 'var(--text-main)' }}>Mis Pagos</h1>
-        <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)' }}>
-          Consulta si tu mensualidad esta al dia.
-        </p>
-      </header>
+    <div className="page-container">
+      <header style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: '1.6rem', color: 'var(--text-main)' }}>
+            {isParent ? `Pagos de ${childName}` : 'Mis Pagos'}
+          </h1>
+        </div>
+        {groupedPayments.length > 0 && (
+          <div className="payments-toolbar" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <div className="payments-year-field" style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+              <label htmlFor="student-statement-year" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                Año:
+              </label>
+              <CustomSelect
+                id="student-statement-year"
+                value={statementYear}
+                onChange={(val) => setStatementYear(val)}
+                options={[
+                  { value: 'ALL', label: 'Todos los años' },
+                  ...availableYears.map((yr) => ({ value: String(yr), label: `Año ${yr}` }))
+                ]}
+                size="sm"
+                triggerStyle={{ minWidth: '135px' }}
+              />
+            </div>
 
-      <div className="glass-panel" style={{ padding: '2rem' }}>
-        {loading && (
-          <p style={{ color: 'var(--text-muted)', margin: 0 }}>Cargando estado de pago...</p>
-        )}
-
-        {!loading && (
-          <div style={{ display: 'grid', gap: '1rem' }}>
-            {payments.map((payment) => (
-              <div
-                key={`${payment.year}-${payment.month}`}
-                style={{
-                  border: '1px solid var(--border)',
-                  borderRadius: '14px',
-                  background: 'var(--surface)',
-                  padding: '1.5rem'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.9rem' }}>
-                  <h2 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--text-main)' }}>{payment.label}</h2>
-                  <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <Clock3 size={14} /> Actualizado automaticamente
-                  </span>
-                </div>
-
-                {payment.error ? (
-                  <div style={{ borderRadius: '10px', border: '1px solid #ef4444', background: '#fee2e2', color: '#991b1b', padding: '1rem' }}>
-                    {payment.error}
-                  </div>
-                ) : payment.data ? (
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '1rem',
-                      flexWrap: 'wrap'
-                    }}
-                  >
-                    <div>
-                      <p style={{ margin: 0, color: 'var(--text-main)', fontWeight: 600, fontSize: '1.05rem' }}>
-                        {payment.data.student.profile?.firstName || 'Alumno'} {payment.data.student.profile?.lastName || ''}
-                      </p>
-                      <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)', fontSize: '0.92rem' }}>
-                        {payment.data.student.email}
-                      </p>
-                      <p style={{ margin: '0.45rem 0 0', color: 'var(--text-main)', fontSize: '0.95rem', fontWeight: 600 }}>
-                        {payment.data.amount ? `${payment.data.amount} €` : 'Importe no disponible'}
-                      </p>
-                    </div>
-
-                    {payment.data.visualStatus === 'PAID' ? (
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#15803d', fontWeight: 700 }}>
-                        <CheckCircle2 size={22} />
-                        Pagado
-                      </div>
-                    ) : payment.data.visualStatus === 'OVERDUE' ? (
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#b91c1c', fontWeight: 700 }}>
-                        <XCircle size={22} />
-                        Impago
-                      </div>
-                    ) : (
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#a16207', fontWeight: 700 }}>
-                        <XCircle size={22} />
-                        Pendiente
-                      </div>
-                    )}
-                  </div>
-                ) : null}
-              </div>
-            ))}
+            <button
+              onClick={() => handleDownloadStatement(statementYear)}
+              className="payments-statement-btn"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                padding: '0.55rem 0.95rem',
+                fontSize: '0.9rem',
+                borderRadius: '8px',
+                background: 'var(--surface)',
+                border: '1px solid var(--border)',
+                color: 'var(--text-main)',
+                cursor: 'pointer',
+                fontWeight: 600
+              }}
+            >
+              <FileText size={16} /> Descargar Extracto {statementYear === 'ALL' ? 'Completo' : `(${statementYear})`}
+            </button>
           </div>
         )}
-      </div>
+      </header>
+
+      {errorMsg && (
+        <div style={{ borderRadius: '10px', border: '1px solid #f7caca', background: '#fdf0f0', color: '#9e2a2b', padding: '1rem', marginBottom: '1rem' }}>
+          {errorMsg}
+        </div>
+      )}
+
+      {loading ? (
+        <p style={{ color: 'var(--text-muted)' }}>Cargando estado de pago...</p>
+      ) : groupedPayments.length === 0 ? (
+        <p style={{ color: 'var(--text-muted)' }}>No tienes periodos de matrícula registrados.</p>
+      ) : displayedGroups.length === 0 ? (
+        <p style={{ color: 'var(--text-muted)' }}>No tienes mensualidades registradas para el año {statementYear}.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+          {displayedGroups.map((group) => (
+            <div key={group.enrollment.id} className="glass-panel" style={{ padding: '1.5rem' }}>
+              <div className="enrollment-period-header">
+                <CalendarDays size={20} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                <h2 className="enrollment-period-title">
+                  Periodo de Matrícula: {new Date(group.enrollment.startDate).toLocaleDateString()} {group.enrollment.endDate ? `- ${new Date(group.enrollment.endDate).toLocaleDateString()}` : '(Activa)'}
+                </h2>
+                <span className="enrollment-period-fee" style={{ background: '#fef9c3', border: '1px solid #fde68a', color: '#854d0e', padding: '0.25rem 0.75rem', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 600 }}>
+                  {group.enrollment.monthlyFee} € / mes
+                </span>
+              </div>
+
+              {group.payments.length === 0 ? (
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>No hay pagos generados para este periodo.</p>
+              ) : (
+                <div style={{ display: 'grid', gap: '1rem' }}>
+                  {group.payments.map((payment) => (
+                    <div
+                      key={`${payment.year}-${payment.month}`}
+                      style={{
+                        border: '1px solid var(--border)',
+                        borderRadius: '12px',
+                        background: '#fffdf0',
+                        padding: '1.25rem'
+                      }}
+                    >
+                      {(() => {
+                        const visualStatus = payment.data
+                          ? getPaymentVisualStatus(payment.data.isPaid, payment.month, payment.year)
+                          : null;
+                        const isPaid = visualStatus === 'PAID';
+                        const badge = visualStatus === 'PAID'
+                          ? { label: 'Pagado', icon: <CheckCircle2 size={16} />, color: '#047857', background: '#d1fae5' }
+                          : visualStatus === 'OVERDUE'
+                            ? { label: 'Impago', icon: <XCircle size={16} />, color: '#b91c1c', background: '#fee2e2' }
+                            : { label: 'Pendiente', icon: <XCircle size={16} />, color: '#b45309', background: '#fef3c7' };
+
+                        return (
+                          <>
+                            <div className="payment-card-header">
+                              <div style={{ minWidth: 0 }}>
+                                <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-main)' }}>{payment.label}</h3>
+                              </div>
+
+                              {visualStatus && (
+                                <span className="payment-status-badge" style={{ color: badge.color, background: badge.background }}>
+                                  {badge.icon} {badge.label}
+                                </span>
+                              )}
+                            </div>
+
+                            {payment.data && (
+                              <div className="payment-card-footer">
+                                <span className="payment-card-amount">
+                                  {payment.data.amount ? `${payment.data.amount} €` : 'Importe no disponible'}
+                                </span>
+
+                                <button
+                                  type="button"
+                                  disabled={!isPaid}
+                                  onClick={() => isPaid && handleDownloadInvoice(payment)}
+                                  className="btn-secondary payment-invoice-btn"
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.45rem',
+                                    padding: '0.5rem 0.9rem',
+                                    fontSize: '0.85rem',
+                                    borderRadius: '8px',
+                                    opacity: isPaid ? 1 : 0.5,
+                                    cursor: isPaid ? 'pointer' : 'not-allowed'
+                                  }}
+                                  title={isPaid ? 'Descargar Factura Oficial en PDF' : 'Factura disponible únicamente tras registrar el pago'}
+                                >
+                                  <FileText size={16} /> Factura PDF
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

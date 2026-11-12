@@ -7,6 +7,7 @@ export interface AuthRequest extends Request {
   user?: {
     id: string;
     role: string;
+    email?: string;
   };
 }
 
@@ -33,3 +34,11 @@ export const requireTeacher = (req: AuthRequest, res: Response, next: NextFuncti
   }
   next();
 };
+
+export const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
+  if (req.user?.role !== 'ADMIN') {
+    return res.status(403).json({ error: 'Acceso denegado. Se requieren permisos de administrador.' });
+  }
+  next();
+};
+

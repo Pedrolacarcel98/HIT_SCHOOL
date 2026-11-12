@@ -1,23 +1,189 @@
 import { Router, Response } from 'express';
-import { PrismaClient, SkillCategory } from '@prisma/client';
-import { authenticateToken, requireTeacher, AuthRequest } from '../middleware/auth';
+import { Prisma, PrismaClient, SkillCategory, Modality } from '@prisma/client';
+import { authenticateToken, requireTeacher, requireAdmin, AuthRequest } from '../middleware/auth';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { sendBoardPostNotification } from '../services/email';
 
 const router = Router();
 const prisma = new PrismaClient();
+const postUploadsDirectory = path.join(process.cwd(), 'uploads', 'posts');
+fs.mkdirSync(postUploadsDirectory, { recursive: true });
 
-// Listar todos los cursos del usuario
+const postUpload = multer({
+  storage: multer.diskStorage({
+    destination: postUploadsDirectory,
+    filename: (_req: any, file: any, callback: any) => {
+      const extension = path.extname(file.originalname);
+      callback(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${extension}`);
+    }
+  }),
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (_req: any, file: any, callback: any) => {
+    callback(null, file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/'));
+  }
+});
+
+const getDriveFileId = (rawUrl: string) => {
+  try {
+    const parsedUrl = new URL(rawUrl);
+    if (['drive.google.com', 'docs.google.com'].includes(parsedUrl.hostname)) {
+      return parsedUrl.pathname.match(/\/file\/d\/([^/]+)/)?.[1] || parsedUrl.searchParams.get('id');
+    }
+    if (parsedUrl.hostname === 'lh3.googleusercontent.com') {
+      return parsedUrl.pathname.match(/\/d\/([^/=]+)/)?.[1] || null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+router.get('/media/drive', async (req: AuthRequest, res: Response) => {
+  const rawUrl = typeof req.query.url === 'string' ? req.query.url : '';
+  const fileId = getDriveFileId(rawUrl);
+  if (!fileId) return res.status(400).json({ error: 'URL de Google Drive no válida.' });
+
+  try {
+    const driveResponse = await fetch(`https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w1600`);
+    if (!driveResponse.ok) return res.status(502).json({ error: 'No se pudo obtener la imagen de Google Drive.' });
+
+    const contentType = driveResponse.headers.get('content-type') || 'image/jpeg';
+    if (!contentType.startsWith('image/')) return res.status(502).json({ error: 'El recurso de Drive no es una imagen.' });
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.send(Buffer.from(await driveResponse.arrayBuffer()));
+  } catch (error) {
+    console.error('Error al obtener imagen de Google Drive:', error);
+    res.status(502).json({ error: 'No se pudo obtener la imagen de Google Drive.' });
+  }
+});
+
+// Listar todos los cursos del usuario (incluyendo datos del profesor para el alumno/tutor)
 router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.id;
     const role = req.user!.role;
 
-    if (role === 'TEACHER') {
-      const courses = await prisma.course.findMany({ where: { teacherId: userId } });
-      res.json(courses);
+    if (role === 'TEACHER' || role === 'ADMIN') {
+      const whereCondition: Prisma.CourseWhereInput = role === 'ADMIN'
+        ? {}
+        : {
+            OR: [
+              { modality: 'PRESENCIAL' },
+              { teacherId: userId },
+              { assignedTeachers: { some: { teacherId: userId } } }
+            ]
+          };
+      const courses = await prisma.course.findMany({
+        where: whereCondition,
+        include: {
+          teacher: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } },
+          assignedTeachers: {
+            select: {
+              teacherId: true,
+              teacher: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } }
+            }
+          },
+          enrollments: { select: { studentId: true } },
+          structuredTasks: {
+            where: { isTemplate: false },
+            select: {
+              id: true,
+              deliveries: { select: { studentId: true, grade: true } },
+              steps: {
+                select: {
+                  assignment: {
+                    select: {
+                      submissions: { select: { studentId: true, grade: true } }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        orderBy: { title: 'asc' }
+      });
+
+      const enrichedCourses = courses.map((course) => {
+        const studentIds = new Set(course.enrollments.map((e) => e.studentId));
+        const studentsCount = studentIds.size;
+        const pendingStudentsSet = new Set<string>();
+
+        for (const task of course.structuredTasks) {
+          for (const delivery of task.deliveries) {
+            if (delivery.grade === null) {
+              pendingStudentsSet.add(delivery.studentId);
+            }
+          }
+          for (const step of task.steps) {
+            for (const sub of step.assignment?.submissions || []) {
+              if (sub.grade === null) {
+                pendingStudentsSet.add(sub.studentId);
+              }
+            }
+          }
+        }
+
+        return {
+          id: course.id,
+          title: course.title,
+          modality: course.modality,
+          teacherId: course.teacherId,
+          teacher: course.teacher,
+          assignedTeachers: course.assignedTeachers,
+          studentsCount,
+          tasksCount: course.structuredTasks.length,
+          pendingStudentsCount: pendingStudentsSet.size
+        };
+      });
+
+      res.json(enrichedCourses);
     } else {
+      let targetStudentId = userId;
+      if (role === 'PARENT') {
+        const userEmail = (req.user as any)?.email || '';
+        const requestedStudentId = req.query.studentId as string;
+        if (requestedStudentId) {
+          const child = await prisma.user.findFirst({
+            where: {
+              id: requestedStudentId,
+              role: 'STUDENT',
+              status: 'ACTIVE',
+              OR: [
+                { parentId: userId },
+                { parent: { email: { equals: userEmail, mode: 'insensitive' } } }
+              ]
+            }
+          });
+          if (child) targetStudentId = child.id;
+        } else {
+          const child = await prisma.user.findFirst({
+            where: {
+              role: 'STUDENT',
+              status: 'ACTIVE',
+              OR: [
+                { parentId: userId },
+                { parent: { email: { equals: userEmail, mode: 'insensitive' } } }
+              ]
+            }
+          });
+          if (child) targetStudentId = child.id;
+        }
+      }
+
       const enrollments = await prisma.enrollment.findMany({
-        where: { studentId: userId },
-        include: { course: true }
+        where: { studentId: targetStudentId },
+        include: {
+          course: {
+            include: {
+              teacher: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } }
+            }
+          }
+        }
       });
       res.json(enrollments.map(e => e.course));
     }
@@ -26,15 +192,72 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// Crear un nuevo curso (solo profesores)
-router.post('/', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
-  const { title } = req.body;
+// Obtener detalle de un curso específico
+router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const userId = req.user!.id;
+    const role = req.user!.role;
+
+    const course = await prisma.course.findUnique({
+      where: { id: courseId },
+      include: {
+        teacher: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true, avatarUrl: true } } } },
+        assignedTeachers: {
+          select: {
+            id: true,
+            teacherId: true,
+            teacher: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } }
+          }
+        },
+        enrollments: { select: { studentId: true } }
+      }
+    });
+
+    if (!course) return res.status(404).json({ error: 'Clase no encontrada' });
+
+    if (role === 'TEACHER') {
+      const isTitular = course.teacherId === userId;
+      const isAssigned = course.assignedTeachers.some(at => at.teacherId === userId);
+      if (course.modality !== 'PRESENCIAL' && !isTitular && !isAssigned) {
+        return res.status(403).json({ error: 'No tienes acceso a esta clase' });
+      }
+    }
+
+    if (role === 'STUDENT' && !course.enrollments.some(e => e.studentId === userId)) {
+      return res.status(403).json({ error: 'No estás matriculado en esta clase' });
+    }
+
+    if (role === 'PARENT') {
+      const userEmail = (req.user as any)?.email || '';
+      const child = await prisma.user.findFirst({
+        where: {
+          role: 'STUDENT',
+          status: 'ACTIVE',
+          OR: [{ parentId: userId }, { parent: { email: { equals: userEmail, mode: 'insensitive' } } }],
+          enrollments: { some: { courseId } }
+        }
+      });
+      if (!child) return res.status(403).json({ error: 'Ninguno de tus hijos está matriculado en esta clase' });
+    }
+
+    res.json(course);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener la clase' });
+  }
+});
+
+// Crear un nuevo curso (solo ADMIN)
+router.post('/', authenticateToken, requireAdmin, async (req: AuthRequest, res: Response) => {
+  const { title, modality = 'PRESENCIAL' } = req.body;
   if (!title) return res.status(400).json({ error: 'El título es obligatorio' });
+  if (!['PRESENCIAL', 'ONLINE', 'HIBRIDO'].includes(modality)) return res.status(400).json({ error: 'La modalidad no es válida' });
 
   try {
     const course = await prisma.course.create({
       data: {
         title,
+        modality,
         teacherId: req.user!.id
       }
     });
@@ -44,15 +267,202 @@ router.post('/', authenticateToken, requireTeacher, async (req: AuthRequest, res
   }
 });
 
+router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
+  const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const title = typeof req.body.title === 'string' ? req.body.title.trim() : '';
+  const modality = req.body.modality;
+  if (!title) return res.status(400).json({ error: 'El título es obligatorio' });
+  if (modality !== undefined && !['PRESENCIAL', 'ONLINE', 'HIBRIDO'].includes(modality)) return res.status(400).json({ error: 'La modalidad no es válida' });
+
+  try {
+    const courseWhere = req.user!.role === 'ADMIN'
+      ? { id: courseId }
+      : { id: courseId, teacherId: req.user!.id };
+    const course = await prisma.course.updateMany({
+      where: courseWhere,
+      data: { title, ...(modality !== undefined ? { modality } : {}) }
+    });
+    if (course.count === 0) return res.status(404).json({ error: 'Clase no encontrada' });
+    res.json({ message: 'Clase actualizada correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al actualizar la clase' });
+  }
+});
+
+router.delete('/:id', authenticateToken, requireAdmin, async (req: AuthRequest, res: Response) => {
+  const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  try {
+    const course = await prisma.course.findFirst({ where: { id: courseId } });
+    if (!course) return res.status(404).json({ error: 'Clase no encontrada' });
+    
+    // Con ON DELETE CASCADE en la base de datos, el borrado del curso elimina en cascada
+    // matrículas (Enrollment), tablón (Post), tareas (Assignment/Submission/StructuredTask) y boletines (TermGrade)
+    await prisma.course.delete({ where: { id: courseId } });
+    res.json({ message: 'Clase eliminada correctamente' });
+  } catch (error) {
+    console.error('Error al eliminar clase:', error);
+    res.status(500).json({ error: 'Error al eliminar la clase' });
+  }
+});
+
+// Duplicar curso con sus tareas estructuradas (sin alumnos y con fechas reseteadas)
+router.post('/:id/duplicate', authenticateToken, requireAdmin, async (req: AuthRequest, res: Response) => {
+  const sourceCourseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const { title, modality } = req.body;
+
+  if (!title || typeof title !== 'string' || !title.trim()) {
+    return res.status(400).json({ error: 'El nombre de la nueva clase es obligatorio.' });
+  }
+
+  try {
+    const sourceCourseWhere = req.user!.role === 'ADMIN'
+      ? { id: sourceCourseId }
+      : { id: sourceCourseId, teacherId: req.user!.id };
+
+    const sourceCourse = await prisma.course.findFirst({
+      where: sourceCourseWhere,
+      include: {
+        structuredTasks: {
+          where: { isTemplate: false },
+          include: {
+            steps: { orderBy: { order: 'asc' } }
+          }
+        },
+        assignments: {
+          where: { structuredTaskStepId: null }
+        }
+      }
+    });
+
+    if (!sourceCourse) {
+      return res.status(404).json({ error: 'Clase de origen no encontrada o sin permisos.' });
+    }
+
+    const courseModality = modality && ['PRESENCIAL', 'ONLINE', 'HIBRIDO'].includes(modality)
+      ? modality
+      : sourceCourse.modality;
+
+    const teacherId = req.user!.role === 'ADMIN' ? (sourceCourse.teacherId || req.user!.id) : req.user!.id;
+
+    const duplicatedCourse = await prisma.$transaction(async (tx) => {
+      // 1. Crear la nueva clase
+      const newCourse = await tx.course.create({
+        data: {
+          title: title.trim(),
+          modality: courseModality,
+          teacherId
+        }
+      });
+
+      // 2. Duplicar las tareas estructuradas (con pasos y reseteo de fechas)
+      for (const task of sourceCourse.structuredTasks) {
+        await tx.structuredTask.create({
+          data: {
+            title: task.title,
+            description: task.description,
+            dueDate: null, // Fecha de entrega reseteada
+            publishAt: null, // Fecha de publicación reseteada
+            notificationSentAt: null,
+            term: task.term,
+            isTemplate: false,
+            category: task.category,
+            courseId: newCourse.id,
+            teacherId,
+            assignmentType: task.assignmentType,
+            isSequential: task.isSequential,
+            assignedStudentId: null, // Sin alumnos
+            steps: {
+              create: task.steps.map((step) => ({
+                order: step.order,
+                title: step.title,
+                materialId: step.materialId,
+                requiresSubmission: step.requiresSubmission
+              }))
+            }
+          }
+        });
+      }
+
+      // 3. Duplicar asignaciones directas/independientes si las hubiera
+      for (const assignment of sourceCourse.assignments) {
+        await tx.assignment.create({
+          data: {
+            teacherId,
+            courseId: newCourse.id,
+            studentId: null, // Sin alumno
+            materialId: assignment.materialId,
+            title: assignment.title,
+            description: assignment.description,
+            dueDate: null, // Fecha reseteada
+            publishAt: null, // Fecha reseteada
+            category: assignment.category
+          }
+        });
+      }
+
+      return newCourse;
+    });
+
+    // Obtener datos completos del nuevo curso
+    const fullNewCourse = await prisma.course.findUnique({
+      where: { id: duplicatedCourse.id },
+      include: {
+        teacher: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true, avatarUrl: true } } } },
+        _count: { select: { structuredTasks: true, enrollments: true } }
+      }
+    });
+
+    res.status(201).json(fullNewCourse);
+  } catch (error) {
+    console.error('Error al duplicar clase:', error);
+    res.status(500).json({ error: 'Error al duplicar la clase.' });
+  }
+});
+
 // --- SUB-RUTAS DE CURSO ---
 
 const verifyCourseAccess = async (req: any, res: any, next: any) => {
+  if (req.user!.role === 'ADMIN') {
+    return next();
+  }
   const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const userId = req.user!.id;
   
   if (req.user!.role === 'TEACHER') {
-    const course = await prisma.course.findUnique({ where: { id: courseId } });
-    if (course?.teacherId !== userId) return res.status(403).json({ error: 'No tienes acceso a este curso' });
+    const course = await prisma.course.findUnique({
+      where: { id: courseId },
+      include: { assignedTeachers: { select: { teacherId: true } } }
+    });
+    if (!course) return res.status(404).json({ error: 'Clase no encontrada' });
+    const isTitular = course.teacherId === userId;
+    const isAssigned = course.assignedTeachers.some(at => at.teacherId === userId);
+    if (course.modality !== 'PRESENCIAL' && !isTitular && !isAssigned) {
+      return res.status(403).json({ error: 'No tienes acceso a este curso' });
+    }
+  } else if (req.user!.role === 'PARENT') {
+    const userEmail = (req.user as any)?.email || '';
+    const requestedStudentId = req.query.studentId as string;
+    let childIds: string[] = [];
+    if (requestedStudentId) {
+      childIds = [requestedStudentId];
+    } else {
+      const children = await prisma.user.findMany({
+        where: {
+          role: 'STUDENT',
+          status: 'ACTIVE',
+          OR: [
+            { parentId: userId },
+            { parent: { email: { equals: userEmail, mode: 'insensitive' } } }
+          ]
+        },
+        select: { id: true }
+      });
+      childIds = children.map(c => c.id);
+    }
+    const enrollment = await prisma.enrollment.findFirst({
+      where: { courseId, studentId: { in: childIds } }
+    });
+    if (!enrollment) return res.status(403).json({ error: 'No tienes acceso a este curso' });
   } else {
     const enrollment = await prisma.enrollment.findUnique({
       where: { studentId_courseId: { studentId: userId, courseId } }
@@ -61,20 +471,6 @@ const verifyCourseAccess = async (req: any, res: any, next: any) => {
   }
   next();
 };
-
-// Obtener info básica del curso
-router.get('/:id', authenticateToken, verifyCourseAccess, async (req: AuthRequest, res: Response) => {
-  try {
-    const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const course = await prisma.course.findUnique({
-      where: { id: courseId },
-      include: { teacher: { include: { profile: true } } }
-    });
-    res.json(course);
-  } catch (error) {
-    res.status(500).json({ error: 'Error interno' });
-  }
-});
 
 // TABLÓN (Posts)
 router.get('/:id/posts', authenticateToken, verifyCourseAccess, async (req: AuthRequest, res: Response) => {
@@ -90,21 +486,136 @@ router.get('/:id/posts', authenticateToken, verifyCourseAccess, async (req: Auth
   }
 });
 
-router.post('/:id/posts', authenticateToken, requireTeacher, verifyCourseAccess, async (req: AuthRequest, res: Response) => {
-  const { content } = req.body;
-  if (!content) return res.status(400).json({ error: 'El contenido es obligatorio' });
+router.post('/:id/posts', authenticateToken, requireTeacher, verifyCourseAccess, postUpload.single('media'), async (req: AuthRequest & { file?: any }, res: Response) => {
+  const content = typeof req.body.content === 'string' ? req.body.content.trim() : '';
+  const linkedMediaUrl = typeof req.body.mediaUrl === 'string' ? req.body.mediaUrl.trim() : '';
+  const linkedMediaType = typeof req.body.mediaType === 'string' ? req.body.mediaType : '';
+  if (linkedMediaUrl) {
+    try {
+      const parsedUrl = new URL(linkedMediaUrl);
+      if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('invalid protocol');
+    } catch {
+      return res.status(400).json({ error: 'La URL del recurso multimedia no es válida.' });
+    }
+  }
+  if (linkedMediaUrl && !['image', 'video'].includes(linkedMediaType)) {
+    return res.status(400).json({ error: 'Indica si la URL de Drive contiene una imagen o un vídeo.' });
+  }
+  if (!content && !req.file && !linkedMediaUrl) return res.status(400).json({ error: 'Escribe un mensaje o adjunta una imagen o vídeo.' });
 
   try {
     const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const post = await prisma.post.create({
       data: {
         content,
+        courseId,
+        mediaUrl: req.file ? `/uploads/posts/${req.file.filename}` : (linkedMediaUrl || null),
+        mediaType: req.file?.mimetype || (linkedMediaUrl ? `${linkedMediaType}/*` : null),
+        mediaName: req.file?.originalname || (linkedMediaUrl ? `Recurso de Google Drive (${linkedMediaType})` : null)
+      }
+    });
+
+    const course = await prisma.course.findUnique({
+      where: { id: courseId },
+      include: {
+        teacher: { include: { profile: true } },
+        enrollments: {
+          include: {
+            student: {
+              include: {
+                profile: true,
+                parent: { include: { profile: true } }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (course) {
+      const teacherName = `${course.teacher.profile?.firstName || ''} ${course.teacher.profile?.lastName || ''}`.trim() || course.teacher.email;
+      const baseFrontendUrl = (process.env.FRONTEND_URL || 'https://app.hitschool.es').replace(/\/+$/, '');
+      const courseUrl = `${baseFrontendUrl}/student/course/${course.id}`;
+      const notificationMediaLinkUrl = linkedMediaUrl || (req.file ? `${baseFrontendUrl}${post.mediaUrl}` : null);
+      const driveFileId = linkedMediaUrl && ['image', 'video'].includes(linkedMediaType)
+        ? getDriveFileId(linkedMediaUrl)
+        : null;
+      const notificationMediaUrl = driveFileId
+        ? `https://drive.google.com/thumbnail?id=${encodeURIComponent(driveFileId)}&sz=w1200`
+        : notificationMediaLinkUrl;
+      const notificationMediaInlineUrl = driveFileId
+        ? [
+          `https://lh3.googleusercontent.com/d/${encodeURIComponent(driveFileId)}=w1200`,
+          `https://drive.google.com/thumbnail?id=${encodeURIComponent(driveFileId)}&sz=w1200`,
+          `https://drive.google.com/uc?export=download&id=${encodeURIComponent(driveFileId)}`
+        ]
+        : null;
+      const recipients = new Map<string, { email: string; firstName: string }>();
+
+      for (const enrollment of course.enrollments) {
+        const student = enrollment.student;
+        if (student.status === 'ACTIVE' && student.email !== course.teacher.email) {
+          recipients.set(student.email.toLowerCase(), {
+            email: student.email,
+            firstName: student.profile?.firstName || 'alumno'
+          });
+        }
+
+        const parent = student.parent;
+        if (parent?.status === 'ACTIVE' && parent.email !== course.teacher.email) {
+          recipients.set(parent.email.toLowerCase(), {
+            email: parent.email,
+            firstName: parent.profile?.firstName || 'tutor'
+          });
+        }
+      }
+
+      const notifications = await Promise.allSettled(
+        Array.from(recipients.values()).map(recipient => sendBoardPostNotification(
+          recipient.email,
+          recipient.firstName,
+          course.title,
+          teacherName,
+          content,
+          courseUrl,
+          notificationMediaUrl,
+          post.mediaType,
+          notificationMediaLinkUrl,
+          notificationMediaInlineUrl
+        ))
+      );
+      const failedNotifications = notifications.filter(result => result.status === 'rejected');
+      if (failedNotifications.length > 0) {
+        console.error(`No se pudieron enviar ${failedNotifications.length} notificaciones del tablón para el curso ${course.id}:`, failedNotifications.map(result => result.reason));
+      }
+    }
+
+    res.status(201).json(post);
+  } catch (error) {
+    console.error('Error al crear post:', error);
+    res.status(500).json({ error: 'Error al crear post' });
+  }
+});
+
+router.delete('/:id/posts/:postId', authenticateToken, requireTeacher, verifyCourseAccess, async (req: AuthRequest, res: Response) => {
+  try {
+    const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const postId = Array.isArray(req.params.postId) ? req.params.postId[0] : req.params.postId;
+
+    const deleted = await prisma.post.deleteMany({
+      where: {
+        id: postId,
         courseId
       }
     });
-    res.status(201).json(post);
+
+    if (deleted.count === 0) {
+      return res.status(404).json({ error: 'El anuncio no existe en este curso' });
+    }
+
+    res.json({ message: 'Anuncio eliminado correctamente' });
   } catch (error) {
-    res.status(500).json({ error: 'Error al crear post' });
+    res.status(500).json({ error: 'Error al eliminar anuncio' });
   }
 });
 
@@ -113,7 +624,14 @@ router.get('/:id/assignments', authenticateToken, verifyCourseAccess, async (req
   try {
     const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const assignments = await prisma.assignment.findMany({
-      where: { courseId },
+      where: { courseId, structuredTaskStepId: null },
+      include: {
+        material: { select: { id: true, title: true, type: true, url: true, formData: true, description: true, level: true } },
+        submissions: {
+          include: { student: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } } },
+          orderBy: { submittedAt: 'desc' }
+        }
+      },
       orderBy: { dueDate: 'asc' }
     });
     res.json(assignments);
@@ -123,23 +641,243 @@ router.get('/:id/assignments', authenticateToken, verifyCourseAccess, async (req
 });
 
 router.post('/:id/assignments', authenticateToken, requireTeacher, verifyCourseAccess, async (req: AuthRequest, res: Response) => {
-  const { title, description, category, dueDate } = req.body;
+  const { title, description, category, dueDate, materialId } = req.body;
   if (!title || !category) return res.status(400).json({ error: 'Título y categoría son obligatorios' });
+  if (!Object.values(SkillCategory).includes(category as SkillCategory)) {
+    return res.status(400).json({ error: 'La categoría seleccionada no es válida' });
+  }
 
   try {
+    const teacherId = req.user!.id;
     const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const parsedDueDate = dueDate ? new Date(dueDate) : null;
+
+    if (parsedDueDate && Number.isNaN(parsedDueDate.getTime())) {
+      return res.status(400).json({ error: 'La fecha de vencimiento no es válida' });
+    }
+
+    if (materialId) {
+      const material = await prisma.material.findFirst({
+        where: {
+          id: materialId,
+          teacherId
+        },
+        select: { id: true }
+      });
+
+      if (!material) {
+        return res.status(400).json({ error: 'El material vinculado no existe o no pertenece al profesor' });
+      }
+    }
+
     const assignment = await prisma.assignment.create({
       data: {
         title,
         description: description || '',
-        category,
-        dueDate: dueDate ? new Date(dueDate) : null,
-        courseId
+        category: category as SkillCategory,
+        dueDate: parsedDueDate,
+        materialId: materialId || null,
+        courseId,
+        teacherId
       }
     });
     res.status(201).json(assignment);
   } catch (error) {
+    console.error('Error al crear tarea en curso:', error);
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
+      return res.status(400).json({ error: 'No se pudo crear la tarea por una referencia inválida (curso o material)' });
+    }
     res.status(500).json({ error: 'Error al crear tarea' });
+  }
+});
+
+// ALUMNOS DE LA CLASE
+router.get('/:id/students', authenticateToken, verifyCourseAccess, async (req: AuthRequest, res: Response) => {
+  try {
+    const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const enrollments = await prisma.enrollment.findMany({
+      where: { courseId },
+      include: {
+        student: {
+          select: {
+            id: true,
+            email: true,
+            profile: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            }
+          }
+        }
+      }
+    });
+    // Extraer solo la info del estudiante
+    const students = enrollments.map(e => e.student);
+    res.json(students);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener los alumnos del curso' });
+  }
+});
+
+router.delete('/:id/students/:studentId', authenticateToken, requireTeacher, verifyCourseAccess, async (req: AuthRequest, res: Response) => {
+  try {
+    const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const studentId = Array.isArray(req.params.studentId) ? req.params.studentId[0] : req.params.studentId;
+    const deletedEnrollment = await prisma.enrollment.deleteMany({
+      where: { courseId, studentId }
+    });
+
+    if (deletedEnrollment.count === 0) {
+      return res.status(404).json({ error: 'El alumno no está matriculado en esta clase.' });
+    }
+
+    res.json({ message: 'Alumno retirado de la clase correctamente.' });
+  } catch (error) {
+    console.error('Error al retirar alumno de la clase:', error);
+    res.status(500).json({ error: 'Error interno al retirar al alumno.' });
+  }
+});
+
+router.post('/:id/enroll', authenticateToken, requireTeacher, verifyCourseAccess, async (req: AuthRequest, res: Response) => {
+  const { studentIds } = req.body;
+  if (!Array.isArray(studentIds) || studentIds.length === 0) {
+    return res.status(400).json({ error: 'Se requiere un array de studentIds' });
+  }
+
+  try {
+    const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    
+    // Evitar duplicados comprobando quién está ya matriculado
+    const existingEnrollments = await prisma.enrollment.findMany({
+      where: {
+        courseId,
+        studentId: { in: studentIds }
+      }
+    });
+    
+    const existingStudentIds = existingEnrollments.map(e => e.studentId);
+    const newStudentIds = studentIds.filter(id => !existingStudentIds.includes(id));
+
+    if (newStudentIds.length === 0) {
+      return res.status(400).json({ error: 'Todos los alumnos seleccionados ya están en la clase.' });
+    }
+
+    const activeStudents = await prisma.user.findMany({
+      where: { id: { in: newStudentIds }, role: 'STUDENT', status: 'ACTIVE' },
+      select: { id: true }
+    });
+    if (activeStudents.length !== newStudentIds.length) {
+      return res.status(400).json({ error: 'No se puede invitar a alumnos dados de baja.' });
+    }
+
+    const dataToInsert = newStudentIds.map(studentId => ({
+      courseId,
+      studentId
+    }));
+
+    await prisma.enrollment.createMany({
+      data: dataToInsert
+    });
+
+    res.status(201).json({ message: 'Alumnos añadidos con éxito', count: newStudentIds.length });
+  } catch (error) {
+    console.error('Error en /enroll:', error);
+    res.status(500).json({ error: 'Error interno al matricular alumnos' });
+  }
+});
+
+// Listar profesores de la clase (titular y colaboradores asignados)
+router.get('/:id/teachers', authenticateToken, verifyCourseAccess, async (req: AuthRequest, res: Response) => {
+  const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  try {
+    const course = await prisma.course.findUnique({
+      where: { id: courseId },
+      include: {
+        teacher: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } },
+        assignedTeachers: {
+          select: {
+            id: true,
+            teacherId: true,
+            createdAt: true,
+            teacher: { select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } } }
+          }
+        }
+      }
+    });
+    if (!course) return res.status(404).json({ error: 'Clase no encontrada' });
+
+    res.json({
+      titular: course.teacher,
+      assigned: course.assignedTeachers.map(at => at.teacher)
+    });
+  } catch (error) {
+    console.error('Error al obtener profesores de la clase:', error);
+    res.status(500).json({ error: 'Error al obtener profesores de la clase' });
+  }
+});
+
+// Asignar un profesor a una clase (ADMIN, titular o profesor ya asignado)
+router.post('/:id/teachers', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
+  const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const { teacherId } = req.body;
+  if (!teacherId) return res.status(400).json({ error: 'El ID del profesor es obligatorio' });
+
+  try {
+    const requestingTeacherId = req.user!.id;
+    const course = await prisma.course.findUnique({
+      where: { id: courseId },
+      select: {
+        teacherId: true,
+        assignedTeachers: { select: { teacherId: true } }
+      }
+    });
+    if (!course) return res.status(404).json({ error: 'Clase no encontrada' });
+
+    const canAssignTeacher = req.user!.role === 'ADMIN'
+      || course.teacherId === requestingTeacherId
+      || course.assignedTeachers.some(assigned => assigned.teacherId === requestingTeacherId);
+    if (!canAssignTeacher) {
+      return res.status(403).json({ error: 'Solo el profesor titular o un profesor asignado puede añadir colaboradores.' });
+    }
+
+    const teacher = await prisma.user.findFirst({
+      where: { id: teacherId, role: 'TEACHER', status: 'ACTIVE' }
+    });
+    if (!teacher) return res.status(404).json({ error: 'Profesor no encontrado o no está activo' });
+
+    if (course.teacherId === teacherId) {
+      return res.status(400).json({ error: 'Este profesor ya es el titular de la clase.' });
+    }
+
+    const assignment = await prisma.courseTeacher.upsert({
+      where: {
+        courseId_teacherId: { courseId, teacherId }
+      },
+      create: { courseId, teacherId },
+      update: {}
+    });
+
+    res.status(201).json({ message: 'Profesor asignado a la clase con éxito', assignment });
+  } catch (error) {
+    console.error('Error asignando profesor a la clase:', error);
+    res.status(500).json({ error: 'Error al asignar profesor a la clase' });
+  }
+});
+
+// Desasignar un profesor de una clase (ADMIN)
+router.delete('/:id/teachers/:teacherId', authenticateToken, requireAdmin, async (req: AuthRequest, res: Response) => {
+  const courseId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const teacherId = Array.isArray(req.params.teacherId) ? req.params.teacherId[0] : req.params.teacherId;
+
+  try {
+    await prisma.courseTeacher.deleteMany({
+      where: { courseId, teacherId }
+    });
+    res.json({ message: 'Profesor desasignado de la clase con éxito' });
+  } catch (error) {
+    console.error('Error desasignando profesor de la clase:', error);
+    res.status(500).json({ error: 'Error al desasignar profesor de la clase' });
   }
 });
 

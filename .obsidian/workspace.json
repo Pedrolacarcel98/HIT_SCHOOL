@@ -1,0 +1,200 @@
+{
+  "main": {
+    "id": "8a5c9482280a7568",
+    "type": "split",
+    "children": [
+      {
+        "id": "1a011f1e1dd9444e",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "699902c95e66130c",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "GUIA_PRACTICA_HITSCHOOL.md",
+                "mode": "preview",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "GUIA_PRACTICA_HITSCHOOL"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "a56760d25d1d375e",
+    "type": "split",
+    "children": [
+      {
+        "id": "80e54c74aa25aa94",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "3ccd17406d07f670",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Explorador de archivos"
+            }
+          },
+          {
+            "id": "1d90d8be98c07480",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Buscar"
+            }
+          },
+          {
+            "id": "d9e88cc960d78169",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-bookmark",
+              "title": "Marcadores"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "8a51336d3358841a",
+    "type": "split",
+    "children": [
+      {
+        "id": "ace4693be2d39fe1",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "1efcdc877fa3fbc3",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "DOCUMENTACION_FLUJOS_ESQUEMAS.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Enlaces entrantes"
+            }
+          },
+          {
+            "id": "940a43257e8ba754",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "DOCUMENTACION_FLUJOS_ESQUEMAS.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Enlaces salientes"
+            }
+          },
+          {
+            "id": "65c0c0a1fbf1dba8",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Etiquetas"
+            }
+          },
+          {
+            "id": "06acc2fe03b28360",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "Todas las propiedades"
+            }
+          },
+          {
+            "id": "9a03043ea5bb93be",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "DOCUMENTACION_FLUJOS_ESQUEMAS.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Esquema"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Abrir selector rápido": false,
+      "graph:Abrir vista gráfica": false,
+      "canvas:Crear nuevo lienzo": false,
+      "daily-notes:Abrir la nota de hoy": false,
+      "templates:Insertar plantilla": false,
+      "command-palette:Abrir paleta de comandos": false,
+      "bases:Crear nueva base": false
+    }
+  },
+  "active": "699902c95e66130c",
+  "lastOpenFiles": [
+    "DOCUMENTACION_FLUJOS_ESQUEMAS.md",
+    "GUIA_PRACTICA_HITSCHOOL.md",
+    "DOCUMENTACION_FLUJOS_ESQUEMAS_EXPORT.pdf",
+    "DOCUMENTACION_FLUJOS_ESQUEMAS_EXPORT.html",
+    "DEPLOYMENT_WALKTHROUGH.md",
+    "DEPLOYMENT_GCP_DEBIAN.md"
+  ]
+}

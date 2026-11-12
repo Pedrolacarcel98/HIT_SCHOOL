@@ -1,5 +1,5 @@
 import React from 'react';
-import { ExternalLink, FileText, Download } from 'lucide-react';
+import { ExternalLink, FileText } from 'lucide-react';
 
 interface DocumentViewerProps {
   url: string;
@@ -7,9 +7,30 @@ interface DocumentViewerProps {
 }
 
 const DocumentViewer: React.FC<DocumentViewerProps> = ({ url, title }) => {
-  // If it's a PDF link or external document
-  const isGoogleDrive = url.includes('drive.google.com') || url.includes('docs.google.com');
-  const embedUrl = isGoogleDrive ? url.replace('/view', '/preview') : url;
+  const getGoogleDocumentId = (sourceUrl: string) => sourceUrl.match(/docs\.google\.com\/document\/d\/([^/?]+)/)?.[1];
+  const getGoogleDriveFileId = (sourceUrl: string) => sourceUrl.match(/drive\.google\.com\/file\/d\/([^/?]+)/)?.[1]
+    || sourceUrl.match(/[?&]id=([^&/?]+)/)?.[1];
+
+  const getEmbedUrl = (sourceUrl: string) => {
+    const googleDocumentId = getGoogleDocumentId(sourceUrl);
+    if (googleDocumentId) {
+      return `https://docs.google.com/document/d/${googleDocumentId}/preview`;
+    }
+
+    const googleDriveFileId = getGoogleDriveFileId(sourceUrl);
+    return googleDriveFileId
+      ? `https://drive.google.com/file/d/${googleDriveFileId}/preview`
+      : sourceUrl;
+  };
+
+  const embedUrl = getEmbedUrl(url);
+  const googleDocumentId = getGoogleDocumentId(url);
+  const googleDriveFileId = getGoogleDriveFileId(url);
+  const externalUrl = googleDocumentId 
+    ? `https://docs.google.com/document/d/${googleDocumentId}/edit` 
+    : googleDriveFileId 
+      ? `https://drive.google.com/file/d/${googleDriveFileId}/view` 
+      : url;
 
   return (
     <div style={{
@@ -19,8 +40,8 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({ url, title }) => {
       border: '1px solid var(--border)',
       display: 'flex',
       flexDirection: 'column',
-      height: '600px',
-      boxShadow: '0 8px 24px rgba(0,0,0,0.2)'
+      height: 'min(600px, 70vh)',
+      boxShadow: 'var(--shadow-lg)'
     }}>
       {/* Header bar */}
       <div style={{
@@ -40,7 +61,7 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({ url, title }) => {
 
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <a
-            href={url}
+            href={externalUrl}
             target="_blank"
             rel="noopener noreferrer"
             style={{
@@ -67,6 +88,7 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({ url, title }) => {
           src={embedUrl}
           title={title || 'Visor de Documento'}
           style={{ width: '100%', height: '100%', border: 'none' }}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
         />
       </div>
     </div>

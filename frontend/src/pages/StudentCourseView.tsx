@@ -1,0 +1,168 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, MessageSquare, BookOpen, CheckCircle2, Award, Users } from 'lucide-react';
+import StudentStreamTab from '../components/StudentStreamTab';
+import StudentClassworkTab from '../components/StudentClassworkTab';
+import StudentGradesTab from '../components/StudentGradesTab';
+import StudentPeopleTab from '../components/StudentPeopleTab';
+import { useParent } from '../context/ParentContext';
+
+type CourseTab = 'stream' | 'classwork' | 'completed' | 'grades' | 'people';
+
+const StudentCourseView: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { selectedStudentId } = useParent();
+
+  const userRole = (localStorage.getItem('userRole') || '').toUpperCase();
+  const canViewPeople = userRole === 'TEACHER' || userRole === 'ADMIN';
+
+  const courseTabs = useMemo<{ id: CourseTab; label: string; icon: React.ReactNode }[]>(() => [
+    { id: 'stream', label: 'Tablón', icon: <MessageSquare size={18} /> },
+    { id: 'classwork', label: 'Tareas de clase', icon: <BookOpen size={18} /> },
+    { id: 'completed', label: 'Tareas completadas', icon: <CheckCircle2 size={18} /> },
+    { id: 'grades', label: 'Mis Calificaciones', icon: <Award size={18} /> },
+    ...(canViewPeople ? [{ id: 'people' as CourseTab, label: 'Compañeros', icon: <Users size={18} /> }] : [])
+  ], [canViewPeople]);
+
+  const validTabs: CourseTab[] = useMemo(() => courseTabs.map(tab => tab.id), [courseTabs]);
+  const paramTab = searchParams.get('tab') as CourseTab | null;
+  const savedTab = id ? sessionStorage.getItem(`hit_student_course_tab_${id}`) as CourseTab | null : null;
+  const initialTab: CourseTab = 
+    (paramTab && validTabs.includes(paramTab))
+      ? paramTab
+      : (savedTab && validTabs.includes(savedTab) ? savedTab : 'stream');
+
+  const [activeTab, setActiveTabState] = useState<CourseTab>(initialTab);
+  const [course, setCourse] = useState<any>(null);
+
+  const setActiveTab = (tab: CourseTab) => {
+    setActiveTabState(tab);
+    if (id) {
+      sessionStorage.setItem(`hit_student_course_tab_${id}`, tab);
+    }
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (tab === 'stream') {
+        next.delete('tab');
+      } else {
+        next.set('tab', tab);
+      }
+      return next;
+    }, { replace: true });
+  };
+
+  useEffect(() => {
+    if (paramTab && validTabs.includes(paramTab) && paramTab !== activeTab) {
+      setActiveTabState(paramTab);
+    }
+  }, [paramTab]);
+
+  // La pestaña pudo quedar persistida en sessionStorage antes de restringirla por rol
+  useEffect(() => {
+    if (!validTabs.includes(activeTab)) {
+      setActiveTab('stream');
+    }
+  }, [activeTab, validTabs]);
+
+  useEffect(() => {
+    const fetchCourseDetails = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+        const studentParam = selectedStudentId ? `?studentId=${selectedStudentId}` : '';
+        const res = await fetch(`${apiUrl}/api/courses${studentParam}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const courses = await res.json();
+          const current = courses.find((c: any) => c.id === id);
+          if (current) setCourse(current);
+        }
+      } catch (err) {
+        console.error('Error al obtener datos del curso', err);
+      }
+    };
+    fetchCourseDetails();
+  }, [id, selectedStudentId]);
+
+  if (!course) {
+    return (
+      <div className="page-container" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
+        <p style={{ color: 'var(--text-muted)' }}>Cargando curso...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#e0f2fe' }}>
+      {/* Navbar Superior */}
+      <nav style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, zIndex: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1.5rem', borderBottom: '1px solid var(--border)', gap: '1rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', minWidth: 0 }}>
+            <button
+              onClick={() => navigate('/student/courses')}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--text-main)', padding: '4px' }}
+              aria-label="Volver a mis clases"
+            >
+              <ArrowLeft size={20} />
+            </button>
+            <h2 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {course.title}
+            </h2>
+          </div>
+        </div>
+
+        {/* Pestañas */}
+        <div className="scrollable-tabs" style={{ padding: '0 1.5rem', height: '48px', alignItems: 'center', gap: '1.5rem' }}>
+          {courseTabs.map(tab => (
+            <TabButton
+              key={tab.id}
+              active={activeTab === tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              icon={tab.icon}
+              label={tab.label}
+            />
+          ))}
+        </div>
+      </nav>
+
+      {/* Contenido Principal */}
+      <main>
+        {activeTab === 'stream' && <StudentStreamTab courseId={id!} />}
+        {activeTab === 'classwork' && <StudentClassworkTab courseId={id!} viewMode="PENDING" />}
+        {activeTab === 'completed' && <StudentClassworkTab courseId={id!} viewMode="COMPLETED" />}
+        {activeTab === 'grades' && <StudentGradesTab courseId={id!} />}
+        {activeTab === 'people' && canViewPeople && <StudentPeopleTab courseId={id!} />}
+      </main>
+    </div>
+  );
+};
+
+// Componente auxiliar para las pestañas
+const TabButton: React.FC<{ active: boolean; onClick: () => void; icon: React.ReactNode; label: string }> = ({ active, onClick, icon, label }) => (
+  <button
+    onClick={onClick}
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '0.5rem',
+      background: 'none',
+      border: 'none',
+      cursor: 'pointer',
+      padding: '0 0.5rem',
+      height: '100%',
+      color: active ? 'var(--primary)' : 'var(--text-muted)',
+      fontWeight: active ? 600 : 500,
+      borderBottom: active ? '3px solid var(--primary)' : '3px solid transparent',
+      transition: 'all 0.2s',
+      whiteSpace: 'nowrap'
+    }}
+  >
+    {icon}
+    {label}
+  </button>
+);
+
+export default StudentCourseView;

@@ -1,91 +1,308 @@
 import { Router } from 'express';
+import { randomBytes } from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
-import { authenticateToken, requireTeacher } from '../middleware/auth';
-import { ALLOWED_MONTHLY_FEES, ensureStudentPaymentSchedule } from '../services/payments';
+import { authenticateToken, requireTeacher, AuthRequest } from '../middleware/auth';
+import { getChildrenForParent } from './auth';
+import { ensureStudentPaymentScheduleById } from '../services/payments';
+import { deactivateParentIfNoActiveChildren } from '../services/parentStatus';
 
 const router = Router();
 const prisma = new PrismaClient();
 
-const parseBillingFields = (body: Record<string, unknown>) => {
-  const monthlyFee = Number(body.monthlyFee);
-  const courseDurationMonths = Number(body.courseDurationMonths);
+const normalizeText = (val?: string | null) =>
+  (val || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
 
-  if (!Number.isInteger(courseDurationMonths) || courseDurationMonths <= 0) {
-    return { error: 'La duración del curso debe ser un número entero positivo.' };
-  }
-
-  if (!ALLOWED_MONTHLY_FEES.includes(monthlyFee as 35 | 65)) {
-    return { error: 'La tarifa mensual debe ser 35 o 65 euros.' };
-  }
-
-  return { monthlyFee, courseDurationMonths };
-};
-
-// Ruta protegida: solo profesores pueden crear alumnos
-router.post('/', authenticateToken, requireTeacher, async (req, res) => {
-  const { email, firstName, lastName } = req.body;
-  const billing = parseBillingFields(req.body as Record<string, unknown>);
-
-  if (!email || !firstName || !lastName) {
-    return res.status(400).json({ error: 'Faltan campos requeridos' });
-  }
-
-  if ('error' in billing) {
-    return res.status(400).json(billing);
-  }
-
+// Endpoint para listar todos los tutores/padres registrados
+router.get('/parents', authenticateToken, requireTeacher, async (req, res) => {
   try {
-    // Generación de contraseña automática
-    const autoPassword = `hit${Math.floor(1000 + Math.random() * 9000)}`;
-    const passwordHash = await bcrypt.hash(autoPassword, 10);
-
-    const newStudent = await prisma.user.create({
-      data: {
-        email,
-        passwordHash,
-        role: 'STUDENT',
-        monthlyFee: billing.monthlyFee,
-        courseDurationMonths: billing.courseDurationMonths,
-        courseStartDate: new Date(),
+    const parents = await prisma.user.findMany({
+      where: { role: 'PARENT' },
+      select: {
+        id: true,
+        email: true,
+        status: true,
+        createdAt: true,
         profile: {
-          create: {
-            firstName,
-            lastName,
+          select: {
+            firstName: true,
+            lastName: true,
+            dni: true,
+            phone: true,
+            address: true
+          }
+        },
+        children: {
+          select: {
+            id: true,
+            email: true,
+            profile: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            }
           }
         }
       },
-      include: {
-        profile: true
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(parents);
+  } catch (error) {
+    console.error('Error al obtener tutores:', error);
+    res.status(500).json({ error: 'Error al obtener lista de tutores/padres' });
+  }
+});
+
+// Endpoint para que un tutor obtenga la lista de sus alumnos/hijos asociados
+router.get('/children', authenticateToken, async (req: AuthRequest, res) => {
+  if (!req.user || req.user.role !== 'PARENT') {
+    return res.status(403).json({ error: 'Solo los tutores pueden consultar esta lista.' });
+  }
+  try {
+    const parentUser = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { id: true, email: true }
+    });
+    if (!parentUser) {
+      return res.status(404).json({ error: 'Tutor no encontrado' });
+    }
+    const children = await getChildrenForParent(prisma, parentUser.id, parentUser.email);
+    res.json(children);
+  } catch (error) {
+    console.error('Error al obtener hijos del tutor:', error);
+    res.status(500).json({ error: 'Error al obtener lista de alumnos asociados' });
+  }
+});
+
+// Obtener la evaluación final por competencias de un alumno
+router.get('/:id/evaluation', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const paramId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    let targetStudentId = paramId;
+
+    if (paramId === 'me' || req.user?.role === 'STUDENT') {
+      if (req.user?.role === 'PARENT') {
+        const queryStudentId = req.query.studentId as string;
+        if (queryStudentId) {
+          targetStudentId = queryStudentId;
+        } else {
+          const parentUser = await prisma.user.findUnique({ where: { id: req.user.id } });
+          if (parentUser) {
+            const children = await getChildrenForParent(prisma, parentUser.id, parentUser.email);
+            if (children.length > 0) targetStudentId = children[0].id;
+          }
+        }
+      } else {
+        targetStudentId = req.user!.id;
+      }
+    } else if (req.user?.role === 'PARENT') {
+      const parentUser = await prisma.user.findUnique({ where: { id: req.user.id } });
+      if (parentUser) {
+        const children = await getChildrenForParent(prisma, parentUser.id, parentUser.email);
+        const isChild = children.some(c => c.id === paramId);
+        if (!isChild) {
+          return res.status(403).json({ error: 'No tienes acceso a la evaluación de este alumno.' });
+        }
+      }
+    }
+
+    const evaluation = await prisma.finalEvaluation.findUnique({
+      where: { studentId: targetStudentId }
+    });
+
+    res.json(evaluation || null);
+  } catch (error) {
+    console.error('Error al obtener evaluación final:', error);
+    res.status(500).json({ error: 'Error al obtener la evaluación final' });
+  }
+});
+
+// Crear o actualizar la evaluación final por competencias de un alumno (Profesor)
+router.put('/:id/evaluation', authenticateToken, requireTeacher, async (req: AuthRequest, res) => {
+  const studentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const { grammar, reading, writing, listening, speaking, overallGrade, observations } = req.body;
+
+  try {
+    const student = await prisma.user.findUnique({
+      where: { id: studentId, role: 'STUDENT' }
+    });
+    if (!student) {
+      return res.status(404).json({ error: 'Alumno no encontrado' });
+    }
+
+    const parseGrade = (val: any) => {
+      if (val === null || val === undefined || val === '') return null;
+      const num = Number(val);
+      return isNaN(num) ? null : Math.max(0, Math.min(10, num));
+    };
+
+    const evaluation = await prisma.finalEvaluation.upsert({
+      where: { studentId },
+      create: {
+        studentId,
+        grammar: parseGrade(grammar),
+        reading: parseGrade(reading),
+        writing: parseGrade(writing),
+        listening: parseGrade(listening),
+        speaking: parseGrade(speaking),
+        overallGrade: parseGrade(overallGrade),
+        observations: observations ? String(observations).trim() : null
+      },
+      update: {
+        grammar: parseGrade(grammar),
+        reading: parseGrade(reading),
+        writing: parseGrade(writing),
+        listening: parseGrade(listening),
+        speaking: parseGrade(speaking),
+        overallGrade: parseGrade(overallGrade),
+        observations: observations ? String(observations).trim() : null
       }
     });
 
-    await ensureStudentPaymentSchedule(prisma, {
-      id: newStudent.id,
-      role: newStudent.role,
-      createdAt: newStudent.createdAt,
-      courseDurationMonths: newStudent.courseDurationMonths,
-      monthlyFee: newStudent.monthlyFee,
-      courseStartDate: newStudent.courseStartDate
-    });
+    res.json(evaluation);
+  } catch (error) {
+    console.error('Error al guardar evaluación final:', error);
+    res.status(500).json({ error: 'Error al guardar la evaluación final' });
+  }
+});
 
-    // Intentar notificar a n8n para que envíe el correo
-    // Usamos 'n8n' en vez de 'localhost' porque estamos dentro de la red interna de Docker
-    try {
-      await fetch('http://n8n:5678/webhook-test/nuevo-alumno', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: newStudent.email,
-          firstName: newStudent.profile?.firstName,
-          lastName: newStudent.profile?.lastName,
-          generatedPassword: autoPassword
-        })
-      });
-      console.log('Webhook de n8n disparado con éxito');
-    } catch (n8nError) {
-      console.error('No se pudo contactar con n8n, pero el alumno fue creado:', n8nError);
+// Ruta protegida: crear alumno (con soporte de ficha extendida y vinculación familiar)
+router.post('/', authenticateToken, requireTeacher, async (req, res) => {
+  const { email, firstName, lastName, dni, phone, birthDate, address, schoolYear, allergies, imageAuthorization, imageAuthorizationScope, observations, parentId, parentData, modality } = req.body;
+
+  const trimmedFirstName = firstName?.trim();
+  const trimmedLastName = lastName?.trim();
+  const trimmedEmail = email?.trim().toLowerCase();
+
+  if (!trimmedEmail || !trimmedFirstName || !trimmedLastName) {
+    return res.status(400).json({ error: 'Faltan campos requeridos (email, nombre y apellidos del alumno)' });
+  }
+
+  if (parentData !== null && parentData !== undefined) {
+    if (!parentData.firstName?.trim() || !parentData.lastName?.trim() || !parentData.email?.trim()) {
+      return res.status(400).json({ error: 'Faltan campos obligatorios del padre/tutor (nombre, apellidos y correo electrónico)' });
     }
+  }
+
+  try {
+    // Evitar duplicados exactos de alumno (mismo email + mismo nombre y apellidos), permitiendo hermanos con distinto nombre y mismo email familiar
+    const sameEmailStudents = await prisma.user.findMany({
+      where: { email: trimmedEmail, role: 'STUDENT' },
+      include: { profile: true }
+    });
+    const duplicateStudent = sameEmailStudents.find(
+      (s) =>
+        normalizeText(s.profile?.firstName) === normalizeText(trimmedFirstName) &&
+        normalizeText(s.profile?.lastName) === normalizeText(trimmedLastName)
+    );
+    if (duplicateStudent) {
+      return res.status(400).json({ error: 'Ya existe un alumno registrado con ese mismo nombre, apellidos y correo electrónico.' });
+    }
+
+    const autoPassword = `hit${Math.floor(1000 + Math.random() * 9000)}`;
+    const passwordHash = await bcrypt.hash(autoPassword, 10);
+    const { newStudent, createdParentInfo, linkedExistingParentInfo } = await prisma.$transaction(async (transaction) => {
+      let finalParentId = parentId || null;
+      let createdParentInfo: { id: string; email: string; name: string } | null = null;
+      let linkedExistingParentInfo: { id: string; email: string; name: string } | null = null;
+
+      if (!finalParentId && parentData?.email && parentData.firstName && parentData.lastName) {
+        const parentEmail = parentData.email.trim().toLowerCase();
+        const parentFirstName = parentData.firstName.trim();
+        const parentLastName = parentData.lastName.trim();
+        const parentDni = parentData.dni?.trim() || null;
+        const parentPhone = parentData.phone?.trim() || null;
+        const parentAddress = parentData.address?.trim() || address?.trim() || null;
+
+        let existingParent = await transaction.user.findFirst({
+          where: { email: parentEmail, role: 'PARENT' },
+          include: { profile: true }
+        });
+
+        if (!existingParent) {
+          existingParent = await transaction.user.create({
+            data: {
+              email: parentEmail,
+              passwordHash: await bcrypt.hash(randomBytes(32).toString('hex'), 10),
+              role: 'PARENT',
+              status: 'PENDING',
+              profile: {
+                create: {
+                  firstName: parentFirstName,
+                  lastName: parentLastName,
+                  dni: parentDni,
+                  phone: parentPhone,
+                  address: parentAddress
+                }
+              }
+            },
+            include: { profile: true }
+          });
+          createdParentInfo = {
+            id: existingParent.id,
+            email: existingParent.email,
+            name: `${parentFirstName} ${parentLastName}`
+          };
+        } else {
+          // Si ya existía un tutor con ese correo, enriquecer campos vacíos de su perfil sin pisar los ya existentes
+          if (existingParent.profile) {
+            const profileUpdates: Record<string, string> = {};
+            if (!existingParent.profile.dni && parentDni) profileUpdates.dni = parentDni;
+            if (!existingParent.profile.phone && parentPhone) profileUpdates.phone = parentPhone;
+            if (!existingParent.profile.address && parentAddress) profileUpdates.address = parentAddress;
+            if (Object.keys(profileUpdates).length > 0) {
+              await transaction.profile.update({
+                where: { userId: existingParent.id },
+                data: profileUpdates
+              });
+            }
+          }
+          linkedExistingParentInfo = {
+            id: existingParent.id,
+            email: existingParent.email,
+            name: `${existingParent.profile?.firstName || parentFirstName} ${existingParent.profile?.lastName || parentLastName}`.trim()
+          };
+        }
+        finalParentId = existingParent.id;
+      }
+
+      const newStudent = await transaction.user.create({
+        data: {
+          email: trimmedEmail,
+          passwordHash,
+          role: 'STUDENT',
+          status: 'INACTIVE',
+          modality: modality || 'PRESENCIAL',
+          parentId: finalParentId,
+          profile: {
+            create: {
+              firstName: trimmedFirstName,
+              lastName: trimmedLastName,
+              dni: dni?.trim() || null,
+              phone: phone?.trim() || null,
+              birthDate: birthDate ? new Date(birthDate) : null,
+              address: address?.trim() || null,
+              schoolYear: schoolYear?.trim() || null,
+              allergies: allergies?.trim() || null,
+              imageAuthorization: typeof imageAuthorization === 'boolean' ? imageAuthorization : null,
+              imageAuthorizationScope: imageAuthorizationScope?.trim() || null,
+              observations: observations?.trim() || null
+            }
+          }
+        },
+        include: {
+          profile: true,
+          parent: { include: { profile: true } }
+        }
+      });
+
+      return { newStudent, createdParentInfo, linkedExistingParentInfo };
+    });
 
     res.status(201).json({
       message: 'Alumno creado con éxito',
@@ -94,22 +311,32 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
         email: newStudent.email,
         firstName: newStudent.profile?.firstName,
         lastName: newStudent.profile?.lastName,
-        monthlyFee: newStudent.monthlyFee,
-        courseDurationMonths: newStudent.courseDurationMonths,
-        courseStartDate: newStudent.courseStartDate,
+        dni: newStudent.profile?.dni,
+        phone: newStudent.profile?.phone,
+        address: newStudent.profile?.address,
+        modality: newStudent.modality,
+        parent: newStudent.parent ? {
+          id: newStudent.parent.id,
+          email: newStudent.parent.email,
+          name: `${newStudent.parent.profile?.firstName} ${newStudent.parent.profile?.lastName}`.trim(),
+          phone: newStudent.parent.profile?.phone,
+          dni: newStudent.parent.profile?.dni
+        } : null
       },
-      generatedPassword: autoPassword // En un entorno real se enviaría por email
+      generatedPassword: autoPassword,
+      createdParent: createdParentInfo,
+      linkedExistingParent: linkedExistingParentInfo
     });
   } catch (error: any) {
     if (error.code === 'P2002') {
-      return res.status(400).json({ error: 'El correo ya está registrado' });
+      return res.status(400).json({ error: 'Ya existe una cuenta con ese correo y perfil.' });
     }
-    console.error(error);
+    console.error('Error al crear alumno:', error);
     res.status(500).json({ error: 'Error al crear el alumno' });
   }
 });
 
-// Ruta para obtener todos los alumnos (para el dashboard del profesor)
+// Ruta para obtener todos los alumnos (para el panel del profesor)
 router.get('/', authenticateToken, requireTeacher, async (req, res) => {
   try {
     const students = await prisma.user.findMany({
@@ -117,14 +344,60 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
       select: {
         id: true,
         email: true,
+        status: true,
         createdAt: true,
-        monthlyFee: true,
-        courseDurationMonths: true,
-        courseStartDate: true,
+        modality: true,
+        parentId: true,
         profile: {
           select: {
             firstName: true,
-            lastName: true
+            lastName: true,
+            dni: true,
+            phone: true,
+            birthDate: true,
+            address: true,
+            schoolYear: true,
+            allergies: true,
+            imageAuthorization: true,
+            imageAuthorizationScope: true,
+            observations: true
+          }
+        },
+        parent: {
+          select: {
+            id: true,
+            email: true,
+            status: true,
+            profile: {
+              select: {
+                firstName: true,
+                lastName: true,
+                phone: true,
+                dni: true,
+                address: true
+              }
+            }
+          }
+        },
+        enrollments: {
+          select: {
+            courseId: true,
+            course: {
+              select: {
+                title: true
+              }
+            }
+          }
+        },
+        academyEnrollments: { orderBy: { startDate: 'desc' } },
+        paymentStatuses: {
+          select: {
+            month: true,
+            year: true,
+            amount: true,
+            isPaid: true,
+            status: true,
+            dueDate: true
           }
         }
       },
@@ -132,6 +405,7 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
     });
     res.json(students);
   } catch (error) {
+    console.error('Error al obtener alumnos:', error);
     res.status(500).json({ error: 'Error al obtener alumnos' });
   }
 });
@@ -139,50 +413,177 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
 // Ruta para actualizar un alumno
 router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
   const studentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const { firstName, lastName, email } = req.body;
-  const billing = parseBillingFields(req.body as Record<string, unknown>);
+  const { firstName, lastName, email, dni, phone, birthDate, address, schoolYear, allergies, imageAuthorization, imageAuthorizationScope, observations, parentId, parentData, modality, billingPeriod, billingAmount } = req.body;
 
-  if (!firstName || !lastName || !email) {
-    return res.status(400).json({ error: 'Todos los campos son obligatorios' });
+  const trimmedFirstName = firstName?.trim();
+  const trimmedLastName = lastName?.trim();
+  const trimmedEmail = email?.trim().toLowerCase();
+
+  if (!trimmedFirstName || !trimmedLastName || !trimmedEmail) {
+    return res.status(400).json({ error: 'Nombre, apellidos y email son obligatorios' });
   }
 
-  if ('error' in billing) {
-    return res.status(400).json(billing);
+  if (parentData !== null && parentData !== undefined) {
+    if (!parentData.firstName?.trim() || !parentData.lastName?.trim() || !parentData.email?.trim()) {
+      return res.status(400).json({ error: 'Faltan campos obligatorios del padre/tutor (nombre, apellidos y correo electrónico)' });
+    }
   }
 
   try {
-    // Comprobar si el email ya existe en otro usuario
-    const existingUser = await prisma.user.findFirst({
-      where: { email, NOT: { id: studentId } }
-    });
-    if (existingUser) {
-      return res.status(400).json({ error: 'Este correo ya pertenece a otro usuario' });
-    }
+    if (billingPeriod !== undefined && billingPeriod !== 'MONTHLY' && billingPeriod !== 'QUARTERLY') return res.status(400).json({ error: 'El tipo de pago no es válido.' });
+    if (billingAmount !== undefined && (!Number.isFinite(Number(billingAmount)) || Number(billingAmount) <= 0)) return res.status(400).json({ error: 'El importe de pago debe ser mayor que cero.' });
 
-    const updatedUser = await prisma.user.update({
-      where: { id: studentId },
-      data: {
-        email,
-        monthlyFee: billing.monthlyFee,
-        courseDurationMonths: billing.courseDurationMonths,
-        profile: {
-          upsert: {
-            create: { firstName, lastName },
-            update: { firstName, lastName }
+    const { updatedUser, createdParentInfo, linkedExistingParentInfo } = await prisma.$transaction(async (transaction) => {
+      let resolvedParentId: string | null | undefined = parentId !== undefined ? (parentId || null) : undefined;
+      let createdParentInfo: { id: string; email: string; name: string } | null = null;
+      let linkedExistingParentInfo: { id: string; email: string; name: string } | null = null;
+
+      if (!resolvedParentId && parentData?.email && parentData.firstName && parentData.lastName) {
+        const parentEmail = parentData.email.trim().toLowerCase();
+        const parentFirstName = parentData.firstName.trim();
+        const parentLastName = parentData.lastName.trim();
+        const parentDni = parentData.dni?.trim() || null;
+        const parentPhone = parentData.phone?.trim() || null;
+        const parentAddress = parentData.address?.trim() || address?.trim() || null;
+
+        let existingParent = await transaction.user.findFirst({
+          where: { email: parentEmail, role: 'PARENT' },
+          include: { profile: true }
+        });
+
+        if (!existingParent) {
+          existingParent = await transaction.user.create({
+            data: {
+              email: parentEmail,
+              passwordHash: await bcrypt.hash(randomBytes(32).toString('hex'), 10),
+              role: 'PARENT',
+              status: 'PENDING',
+              profile: {
+                create: {
+                  firstName: parentFirstName,
+                  lastName: parentLastName,
+                  dni: parentDni,
+                  phone: parentPhone,
+                  address: parentAddress
+                }
+              }
+            },
+            include: { profile: true }
+          });
+          createdParentInfo = {
+            id: existingParent.id,
+            email: existingParent.email,
+            name: `${parentFirstName} ${parentLastName}`
+          };
+        } else {
+          if (existingParent.profile) {
+            const profileUpdates: Record<string, string> = {};
+            if (!existingParent.profile.dni && parentDni) profileUpdates.dni = parentDni;
+            if (!existingParent.profile.phone && parentPhone) profileUpdates.phone = parentPhone;
+            if (!existingParent.profile.address && parentAddress) profileUpdates.address = parentAddress;
+            if (Object.keys(profileUpdates).length > 0) {
+              await transaction.profile.update({
+                where: { userId: existingParent.id },
+                data: profileUpdates
+              });
+            }
+          }
+          linkedExistingParentInfo = {
+            id: existingParent.id,
+            email: existingParent.email,
+            name: `${existingParent.profile?.firstName || parentFirstName} ${existingParent.profile?.lastName || parentLastName}`.trim()
+          };
+        }
+        resolvedParentId = existingParent.id;
+      }
+
+      const updatedUser = await transaction.user.update({
+        where: { id: studentId },
+        data: {
+          email: trimmedEmail,
+          modality: modality !== undefined ? modality : undefined,
+          parentId: resolvedParentId,
+          profile: {
+            upsert: {
+              create: {
+                firstName: trimmedFirstName,
+                lastName: trimmedLastName,
+                dni: dni?.trim() || null,
+                phone: phone?.trim() || null,
+                birthDate: birthDate ? new Date(birthDate) : null,
+                address: address?.trim() || null,
+                schoolYear: schoolYear?.trim() || null,
+                allergies: allergies?.trim() || null,
+                imageAuthorization: typeof imageAuthorization === 'boolean' ? imageAuthorization : null,
+                imageAuthorizationScope: imageAuthorizationScope?.trim() || null,
+                observations: observations?.trim() || null
+              },
+              update: {
+                firstName: trimmedFirstName,
+                lastName: trimmedLastName,
+                dni: dni !== undefined ? (dni?.trim() || null) : undefined,
+                phone: phone !== undefined ? (phone?.trim() || null) : undefined,
+                birthDate: birthDate !== undefined ? (birthDate ? new Date(birthDate) : null) : undefined,
+                address: address !== undefined ? (address?.trim() || null) : undefined,
+                schoolYear: schoolYear !== undefined ? (schoolYear?.trim() || null) : undefined,
+                allergies: allergies !== undefined ? (allergies?.trim() || null) : undefined,
+                imageAuthorization: typeof imageAuthorization === 'boolean' ? imageAuthorization : undefined,
+                imageAuthorizationScope: imageAuthorizationScope !== undefined ? (imageAuthorizationScope?.trim() || null) : undefined,
+                observations: observations !== undefined ? (observations?.trim() || null) : undefined
+              }
+            }
+          }
+        },
+        include: {
+          profile: true,
+          parent: {
+            include: { profile: true }
           }
         }
-      },
-      include: { profile: true }
+      });
+
+      return { updatedUser, createdParentInfo, linkedExistingParentInfo };
     });
 
-    await ensureStudentPaymentSchedule(prisma, {
-      id: updatedUser.id,
-      role: updatedUser.role,
-      createdAt: updatedUser.createdAt,
-      courseDurationMonths: updatedUser.courseDurationMonths,
-      monthlyFee: updatedUser.monthlyFee,
-      courseStartDate: updatedUser.courseStartDate
-    });
+    if (billingPeriod !== undefined || billingAmount !== undefined) {
+      const activeEnrollment = await prisma.academyEnrollment.findFirst({ where: { studentId, endDate: null }, orderBy: { startDate: 'desc' } });
+      if (!activeEnrollment) {
+        return res.status(400).json({ error: 'No hay una matrícula activa donde actualizar el importe.' });
+      }
+
+      const now = new Date();
+      const currentMonth = now.getMonth() + 1;
+      const currentYear = now.getFullYear();
+      const newBillingAmount = billingAmount !== undefined ? Number(billingAmount) : activeEnrollment.monthlyFee;
+
+      await prisma.$transaction([
+        prisma.academyEnrollment.update({
+          where: { id: activeEnrollment.id },
+          data: {
+            billingPeriod: billingPeriod || activeEnrollment.billingPeriod,
+            monthlyFee: newBillingAmount
+          }
+        }),
+        prisma.paymentStatus.updateMany({
+          where: {
+            studentId,
+            isPaid: false,
+            OR: [
+              { enrollmentId: activeEnrollment.id },
+              { enrollmentId: null }
+            ],
+            AND: [{
+              OR: [
+                { year: { gt: currentYear } },
+                { year: currentYear, month: { gte: currentMonth } }
+              ]
+            }]
+          },
+          data: { amount: newBillingAmount, enrollmentId: activeEnrollment.id }
+        })
+      ]);
+      await ensureStudentPaymentScheduleById(prisma, studentId);
+    }
 
     res.json({
       message: 'Alumno actualizado con éxito',
@@ -191,10 +592,21 @@ router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
         email: updatedUser.email,
         firstName: updatedUser.profile?.firstName,
         lastName: updatedUser.profile?.lastName,
-        monthlyFee: updatedUser.monthlyFee,
-        courseDurationMonths: updatedUser.courseDurationMonths,
-        courseStartDate: updatedUser.courseStartDate
-      }
+        dni: updatedUser.profile?.dni,
+        phone: updatedUser.profile?.phone,
+        birthDate: updatedUser.profile?.birthDate,
+        address: updatedUser.profile?.address,
+        modality: updatedUser.modality,
+        parent: updatedUser.parent ? {
+          id: updatedUser.parent.id,
+          email: updatedUser.parent.email,
+          name: `${updatedUser.parent.profile?.firstName} ${updatedUser.parent.profile?.lastName}`.trim(),
+          phone: updatedUser.parent.profile?.phone,
+          dni: updatedUser.parent.profile?.dni
+        } : null
+      },
+      createdParent: createdParentInfo,
+      linkedExistingParent: linkedExistingParentInfo
     });
   } catch (error) {
     console.error('Error al actualizar alumno:', error);
@@ -207,15 +619,19 @@ router.delete('/:id', authenticateToken, requireTeacher, async (req, res) => {
   const studentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
   try {
-    // Eliminar en cascada manualmente dentro de una transacción
+    const studentToDelete = await prisma.user.findUnique({ where: { id: studentId }, select: { parentId: true } });
     await prisma.$transaction([
       prisma.paymentStatus.deleteMany({ where: { studentId } }),
+      prisma.academyEnrollment.deleteMany({ where: { studentId } }),
       prisma.submission.deleteMany({ where: { studentId } }),
       prisma.materialAssignment.deleteMany({ where: { studentId } }),
       prisma.enrollment.deleteMany({ where: { studentId } }),
+      prisma.assignment.deleteMany({ where: { studentId } }),
       prisma.profile.deleteMany({ where: { userId: studentId } }),
       prisma.user.delete({ where: { id: studentId } })
     ]);
+
+    await deactivateParentIfNoActiveChildren(prisma, studentToDelete?.parentId);
 
     res.json({ message: 'Alumno eliminado con éxito' });
   } catch (error) {

@@ -1,153 +1,389 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { CircleDollarSign, FileText, GraduationCap, LogOut } from 'lucide-react';
+import { Award, BookOpen, CircleDollarSign, GraduationCap, LogOut, MessageCircle, Menu, X, Users, Settings, Home } from 'lucide-react';
+import { useParent } from '../context/ParentContext';
+import SettingsModal from './SettingsModal';
+import CustomSelect from './CustomSelect';
+import { useLearningNotifications } from '../hooks/useLearningNotifications';
 
 const StudentLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const { parentName, childrenList, selectedStudentId, setSelectedStudentId, refreshParentData } = useParent();
+  const { hasNewGrades, hasNewTasks, markGradesSeen } = useLearningNotifications(selectedStudentId);
+
+  const userRole = localStorage.getItem('userRole');
 
   useEffect(() => {
     const token = localStorage.getItem('token');
     const role = localStorage.getItem('userRole');
 
-    if (!token || role !== 'STUDENT') {
+    if (!token || (role !== 'STUDENT' && role !== 'PARENT')) {
       navigate('/');
+    } else if (role === 'PARENT') {
+      refreshParentData();
     }
-  }, [navigate]);
+  }, [navigate, refreshParentData]);
+
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (location.pathname === '/student/grades') markGradesSeen();
+  }, [location.pathname, markGradesSeen]);
+
+  useEffect(() => {
+    const fetchUnreadChatCount = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+        const res = await fetch(`${apiUrl}/api/chat/unread-count`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setUnreadChatCount(Number(data.unreadCount) || 0);
+        }
+      } catch {
+        setUnreadChatCount(0);
+      }
+    };
+
+    fetchUnreadChatCount();
+    const interval = setInterval(fetchUnreadChatCount, 3500);
+    return () => clearInterval(interval);
+  }, [location.pathname]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('userId');
     localStorage.removeItem('userRole');
+    localStorage.removeItem('userEmail');
+    localStorage.removeItem('selectedStudentId');
     navigate('/');
   };
 
+  const getMainBackground = () => {
+    if (location.pathname === '/student' || location.pathname === '/student/dashboard') return '#fef3c7';
+    if (location.pathname === '/student/courses' || location.pathname.startsWith('/student/course/')) return '#e0f2fe';
+    if (location.pathname === '/student/payments') return '#ffe4e6';
+    if (location.pathname === '/student/grades') return '#f3e8ff';
+    if (location.pathname === '/student/chat') return '#d1fae5';
+    return '#f1f5f9';
+  };
+
   const navItems = [
-    { label: 'Material asignado', path: '/student/dashboard', icon: <FileText size={20} /> },
-    { label: 'Mis Pagos', path: '/student', icon: <CircleDollarSign size={20} /> }
+    { label: 'Inicio', path: '/student', icon: <Home size={20} />, iconColor: '#d99a00' },
+    { label: 'Mis Clases', path: '/student/courses', icon: <BookOpen size={20} />, iconColor: '#1682b3' },
   ];
 
+  if (userRole === 'PARENT' || (userRole === 'STUDENT' && localStorage.getItem('hasParent') !== 'true')) {
+    navItems.push({ label: 'Mis Pagos', path: '/student/payments', icon: <CircleDollarSign size={20} />, iconColor: '#d14f72' });
+  }
+
+  navItems.push(
+    { label: 'Calificaciones', path: '/student/grades', icon: <Award size={20} />, iconColor: '#7950b8' },
+    { label: 'Chat con Profesor', path: '/student/chat', icon: <MessageCircle size={20} />, iconColor: '#12966b' }
+  );
+
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--background)' }}>
-      <aside
+    <div style={{ display: 'flex', minHeight: '100vh', background: '#ffffff', flexDirection: 'column' }}>
+      {/* Barra Superior Móvil */}
+      <header
         style={{
-          width: '260px',
-          background: 'var(--surface)',
-          borderRight: '1px solid var(--border)',
-          display: 'flex',
-          flexDirection: 'column',
+          display: 'none',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0.75rem 1.25rem',
+          background: '#ffffff',
+          borderBottom: '1px solid #e2e8f0',
           position: 'sticky',
           top: 0,
-          height: '100vh',
-          zIndex: 20
+          zIndex: 30,
         }}
+        className="mobile-header-bar"
       >
-        <div style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', borderBottom: '1px solid var(--border)' }}>
-          <img src="/logo.webp" alt="HitSchool" style={{ width: '36px', height: '36px', borderRadius: '8px' }} />
-          <div>
-            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--text-main)' }}>HitSchool</h3>
-            <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Panel Alumno
-            </span>
-          </div>
-        </div>
-
-        <nav style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1 }}>
-          {navItems.map((item) => {
-            const isActive = location.pathname === item.path;
-
-            return (
-              <button
-                key={item.path}
-                onClick={() => navigate(item.path)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  padding: '0.75rem 1rem',
-                  borderRadius: '8px',
-                  border: 'none',
-                  background: isActive ? 'var(--primary)' : 'transparent',
-                  color: isActive ? '#ffffff' : 'var(--text-main)',
-                  cursor: 'pointer',
-                  fontWeight: isActive ? '600' : '500',
-                  fontSize: '0.95rem',
-                  textAlign: 'left',
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = 'transparent';
-                  }
-                }}
-              >
-                {item.icon}
-                {item.label}
-              </button>
-            );
-          })}
-        </nav>
-
-        <div style={{ padding: '1rem', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem' }}>
-            <div
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '50%',
-                background: 'var(--primary)',
-                color: '#fff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            >
-              <GraduationCap size={18} />
-            </div>
-            <div style={{ flex: 1, overflow: 'hidden' }}>
-              <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: '600', color: 'var(--text-main)' }}>Alumno</p>
-              <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                Portal de pagos
-              </p>
-            </div>
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <button
-            onClick={handleLogout}
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-main)',
+              cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              gap: '0.5rem',
-              padding: '0.6rem',
-              borderRadius: '8px',
-              border: '1px solid var(--border)',
-              background: 'transparent',
-              color: 'var(--text-muted)',
-              cursor: 'pointer',
-              fontSize: '0.9rem',
-              transition: 'all 0.2s ease'
+              padding: '4px'
             }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = '#ef4444';
-              e.currentTarget.style.borderColor = '#ef4444';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = 'var(--text-muted)';
-              e.currentTarget.style.borderColor = 'var(--border)';
-            }}
+            aria-label="Abrir menú"
           >
-            <LogOut size={16} /> Cerrar Sesion
+            {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <img src="/logo.webp" alt="HitSchool" style={{ width: '28px', height: '28px', borderRadius: '6px' }} />
+            <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 'bold', color: 'var(--text-main)' }}>HitSchool</h3>
+          </div>
         </div>
-      </aside>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{ fontSize: '0.72rem', color: 'var(--primary)', fontWeight: '700', textTransform: 'uppercase', background: 'var(--primary-light)', padding: '0.2rem 0.5rem', borderRadius: '6px' }}>
+            {userRole === 'PARENT' ? 'Tutor' : 'Alumno'}
+          </span>
+        </div>
+      </header>
 
-      <main style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
-        <Outlet />
-      </main>
+      {/* Overlay para cerrar sidebar en móvil */}
+      <div
+        className={`sidebar-overlay ${isMobileMenuOpen ? 'active' : ''}`}
+        onClick={() => setIsMobileMenuOpen(false)}
+      />
+
+      <div style={{ display: 'flex', flex: 1, position: 'relative' }}>
+        <aside
+          className={`sidebar-nav-container ${isMobileMenuOpen ? 'drawer-open' : ''}`}
+          style={{
+            width: '260px',
+            background: '#ffffff',
+            borderRight: '1px solid #e2e8f0',
+            display: 'flex',
+            flexDirection: 'column',
+            position: 'sticky',
+            top: 0,
+            height: '100vh',
+            zIndex: 45,
+            transition: 'transform 0.3s ease',
+          }}
+        >
+          <div style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <img src="/logo.webp" alt="HitSchool" style={{ width: '36px', height: '36px', borderRadius: '8px' }} />
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--text-main)' }}>HitSchool</h3>
+                <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  {userRole === 'PARENT' ? 'Panel Tutor' : 'Panel Alumno'}
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="mobile-drawer-close"
+              style={{
+                display: 'none',
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                padding: '4px'
+              }}
+              aria-label="Cerrar menú"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          <nav style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1, overflowY: 'auto' }}>
+            {navItems.map((item) => {
+              const isActive = location.pathname === item.path ||
+                (item.path === '/student/courses' && location.pathname.startsWith('/student/course/')) ||
+                (item.path === '/student' && location.pathname === '/student/dashboard');
+
+              return (
+                <button
+                  key={item.path}
+                  onClick={() => {
+                    navigate(item.path);
+                    setIsMobileMenuOpen(false);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    padding: '0.75rem 1rem',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: isActive ? 'var(--primary)' : 'transparent',
+                    color: isActive ? '#ffffff' : 'var(--text-main)',
+                    cursor: 'pointer',
+                    fontWeight: isActive ? '600' : '500',
+                    fontSize: '0.95rem',
+                    textAlign: 'left',
+                    transition: 'all 0.2s ease',
+                    minHeight: '44px'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.background = '#f8fafc';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.background = 'transparent';
+                    }
+                  }}
+                >
+                  <span style={{ display: 'inline-flex', color: isActive ? '#ffffff' : item.iconColor, position: 'relative' }}>
+                    {React.cloneElement(item.icon, { strokeWidth: 2.5 })}
+                    {item.path === '/student/chat' && unreadChatCount > 0 && (
+                      <span style={{ position: 'absolute', top: -3, right: -3, width: 9, height: 9, borderRadius: '50%', background: '#ef4444', border: `2px solid ${isActive ? 'var(--primary)' : '#ffffff'}` }} />
+                    )}
+                    {item.path === '/student/grades' && hasNewGrades && (
+                      <span style={{ position: 'absolute', top: -3, right: -3, width: 9, height: 9, borderRadius: '50%', background: '#ef4444', border: `2px solid ${isActive ? 'var(--primary)' : '#ffffff'}` }} />
+                    )}
+                    {item.path === '/student/courses' && hasNewTasks && (
+                      <span style={{ position: 'absolute', top: -3, right: -3, width: 9, height: 9, borderRadius: '50%', background: '#ef4444', border: `2px solid ${isActive ? 'var(--primary)' : '#ffffff'}` }} />
+                    )}
+                  </span>
+                  {item.label}
+                </button>
+              );
+            })}
+          </nav>
+
+          <div style={{ padding: '1rem', borderTop: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem' }}>
+              <div
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '50%',
+                  background: 'var(--primary)',
+                  color: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}
+              >
+                {userRole === 'PARENT' ? <Users size={18} /> : <GraduationCap size={18} />}
+              </div>
+              <div style={{ flex: 1, overflow: 'hidden' }}>
+                <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: '600', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {userRole === 'PARENT' ? parentName : 'Alumno'}
+                </p>
+                <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {userRole === 'PARENT' ? 'Panel de Tutor' : 'Panel de Alumno'}
+                </p>
+              </div>
+            </div>
+
+            {userRole === 'PARENT' && childrenList.length > 0 && (
+              <div style={{ padding: '0 0.25rem' }}>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
+                  Alumno / Hijo activo:
+                </label>
+                <CustomSelect
+                  value={selectedStudentId}
+                  onChange={(val) => setSelectedStudentId(val)}
+                  options={childrenList.map((child) => {
+                    const childName = child.profile?.firstName || child.profile?.lastName
+                      ? `${child.profile?.firstName || ''} ${child.profile?.lastName || ''}`.trim()
+                      : child.email;
+                    return {
+                      value: child.id,
+                      label: `🎓 ${childName}`
+                    };
+                  })}
+                  size="sm"
+                  variant="subtle"
+                  style={{ width: '100%' }}
+                />
+              </div>
+            )}
+
+
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.5rem',
+                padding: '0.6rem',
+                borderRadius: '8px',
+                border: '1px solid var(--border)',
+                background: 'transparent',
+                color: 'var(--text-main)',
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+                transition: 'all 0.2s ease',
+                minHeight: '40px'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'var(--primary)';
+                e.currentTarget.style.color = 'var(--primary)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--border)';
+                e.currentTarget.style.color = 'var(--text-main)';
+              }}
+            >
+              <Settings size={16} /> Ajustes de Cuenta
+            </button>
+
+            <button
+              onClick={handleLogout}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.5rem',
+                padding: '0.6rem',
+                borderRadius: '8px',
+                border: '1px solid var(--border)',
+                background: 'transparent',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+                transition: 'all 0.2s ease',
+                minHeight: '40px'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = '#ef4444';
+                e.currentTarget.style.borderColor = '#ef4444';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = 'var(--text-muted)';
+                e.currentTarget.style.borderColor = 'var(--border)';
+              }}
+            >
+              <LogOut size={16} /> Cerrar Sesión
+            </button>
+          </div>
+        </aside>
+
+        <main className="student-themed-content" style={{ flex: 1, minWidth: 0, minHeight: '100vh', overflowY: 'auto', background: getMainBackground(), transition: 'background-color 0.2s ease' }}>
+          <Outlet />
+        </main>
+      </div>
+
+      {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
+
+      <style>{`
+        @media (max-width: 900px) {
+          .mobile-header-bar {
+            display: flex !important;
+          }
+          .sidebar-nav-container {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            bottom: 0 !important;
+            height: 100% !important;
+            transform: translateX(-100%);
+            box-shadow: 4px 0 24px rgba(0,0,0,0.15);
+          }
+          .sidebar-nav-container.drawer-open {
+            transform: translateX(0) !important;
+          }
+          .mobile-drawer-close {
+            display: block !important;
+          }
+        }
+      `}</style>
     </div>
   );
 };

@@ -1,17 +1,6 @@
-import { PaymentState, PrismaClient } from '@prisma/client';
+import { BillingPeriod, PaymentState, PrismaClient, Role, AcademyEnrollment } from '@prisma/client';
 
-export const ALLOWED_MONTHLY_FEES = [35, 65] as const;
 export const DEFAULT_VISIBLE_MONTH_COUNT = 3;
-export const MAX_COURSE_DURATION_MONTHS = 60;
-
-export interface StudentBillingSnapshot {
-  id: string;
-  role: 'STUDENT' | 'TEACHER' | 'ADMIN';
-  createdAt: Date;
-  courseDurationMonths: number | null;
-  monthlyFee: number | null;
-  courseStartDate: Date | null;
-}
 
 export interface MonthTarget {
   month: number;
@@ -20,11 +9,26 @@ export interface MonthTarget {
 
 const normalizeMonthDate = (year: number, month: number) => new Date(year, month - 1, 1, 12, 0, 0, 0);
 
+export const getDueDateForEnrollmentMonth = (
+  enrollment: Pick<AcademyEnrollment, 'startDate'>,
+  month: number,
+  year: number
+) => {
+  const startDay = new Date(enrollment.startDate).getDate();
+  let dueDate = new Date(year, month - 1, startDay, 12, 0, 0, 0);
+
+  if (dueDate.getMonth() !== (month - 1) % 12 && dueDate.getMonth() !== month - 1) {
+    dueDate = new Date(year, month, 0, 12, 0, 0, 0); 
+  }
+  return dueDate;
+};
+
 const addMonths = (date: Date, offset: number) => new Date(date.getFullYear(), date.getMonth() + offset, 1, 12, 0, 0, 0);
 
-const startOfStudentBilling = (student: StudentBillingSnapshot) => {
-  const source = student.courseStartDate ?? student.createdAt;
-  return new Date(source.getFullYear(), source.getMonth(), 1, 12, 0, 0, 0);
+const isCurrentOrFutureMonth = (month: number, year: number, referenceDate = new Date()) => {
+  const target = normalizeMonthDate(year, month).getTime();
+  const current = normalizeMonthDate(referenceDate.getFullYear(), referenceDate.getMonth() + 1).getTime();
+  return target >= current;
 };
 
 export const getVisibleMonthTargets = (count = DEFAULT_VISIBLE_MONTH_COUNT, referenceDate = new Date()): MonthTarget[] => {
@@ -37,129 +41,161 @@ export const getVisibleMonthTargets = (count = DEFAULT_VISIBLE_MONTH_COUNT, refe
   });
 };
 
+export const getStudentApplicableMonthsUpToNow = (
+  enrollments: Pick<AcademyEnrollment, 'startDate' | 'endDate'>[],
+  referenceDate = new Date()
+): MonthTarget[] => {
+  const monthsSet = new Set<string>();
+
+  enrollments.forEach(enrollment => {
+    const start = new Date(enrollment.startDate);
+    const startMonth = new Date(start.getFullYear(), start.getMonth(), 1, 12, 0, 0, 0);
+    const end = enrollment.endDate ? new Date(enrollment.endDate) : referenceDate;
+    const endMonth = new Date(end.getFullYear(), end.getMonth(), 1, 12, 0, 0, 0);
+
+    let current = new Date(startMonth);
+    while (current.getTime() <= Math.max(startMonth.getTime(), endMonth.getTime())) {
+      monthsSet.add(`${current.getFullYear()}-${current.getMonth() + 1}`);
+      current = addMonths(current, 1);
+    }
+  });
+
+  const months = Array.from(monthsSet).map(s => {
+    const [y, m] = s.split('-');
+    return { year: parseInt(y), month: parseInt(m) };
+  });
+
+  return months.sort((a, b) => {
+    if (a.year !== b.year) return b.year - a.year;
+    return b.month - a.month;
+  });
+};
+
 export const isPaymentOverdue = (
-  payment: { isPaid: boolean; dueDate: Date },
+  payment: { isPaid: boolean; dueDate: Date | string | null },
   referenceDate = new Date()
 ) => {
-  if (payment.isPaid) {
+  if (payment.isPaid || !payment.dueDate) {
     return false;
   }
 
-  const warningDate = new Date(payment.dueDate);
-  warningDate.setDate(warningDate.getDate() + 7);
+  const dDate = new Date(payment.dueDate);
+  if (isNaN(dDate.getTime())) return false;
 
-  return referenceDate.getTime() > warningDate.getTime();
+  const warningDate = new Date(dDate);
+  warningDate.setDate(warningDate.getDate() + 10);
+
+  const refDate = new Date(referenceDate);
+  return refDate.getTime() > warningDate.getTime();
 };
 
 export const getPaymentVisualStatus = (
-  payment: { isPaid: boolean; dueDate: Date },
+  payment: { isPaid: boolean; month: number; year: number; dueDate?: Date | string | null },
   referenceDate = new Date()
 ): 'PAID' | 'PENDING' | 'OVERDUE' => {
   if (payment.isPaid) {
     return 'PAID';
   }
 
-  return isPaymentOverdue(payment, referenceDate) ? 'OVERDUE' : 'PENDING';
-};
-
-export const ensureStudentPaymentSchedule = async (
-  prisma: PrismaClient,
-  student: StudentBillingSnapshot
-) => {
-  if (student.role !== 'STUDENT' || !student.courseDurationMonths || !student.monthlyFee) {
-    return [];
+  if (payment.dueDate) {
+    return isPaymentOverdue({ isPaid: payment.isPaid, dueDate: payment.dueDate }, referenceDate)
+      ? 'OVERDUE'
+      : 'PENDING';
   }
 
-  const startMonth = startOfStudentBilling(student);
-  const payments = [] as Array<{ month: number; year: number }>;
+  const currentYear = referenceDate.getFullYear();
+  const currentMonth = referenceDate.getMonth() + 1;
 
-  for (let offset = 0; offset < student.courseDurationMonths; offset += 1) {
-    const installmentDate = addMonths(startMonth, offset);
-    const month = installmentDate.getMonth() + 1;
-    const year = installmentDate.getFullYear();
-    const dueDate = normalizeMonthDate(year, month);
-
-    const existingPayment = await prisma.paymentStatus.findUnique({
-      where: {
-        studentId_month_year: {
-          studentId: student.id,
-          month,
-          year
-        }
-      }
-    });
-
-    if (!existingPayment) {
-      await prisma.paymentStatus.create({
-        data: {
-          studentId: student.id,
-          month,
-          year,
-          amount: student.monthlyFee,
-          dueDate,
-          status: PaymentState.PENDING,
-          isPaid: false
-        }
-      });
-    } else if (!existingPayment.isPaid && (existingPayment.amount !== student.monthlyFee || existingPayment.dueDate.getTime() !== dueDate.getTime())) {
-      await prisma.paymentStatus.update({
-        where: { id: existingPayment.id },
-        data: {
-          amount: student.monthlyFee,
-          dueDate,
-          status: PaymentState.PENDING
-        }
-      });
-    }
-
-    payments.push({ month, year });
-  }
-
-  return payments;
+  return payment.year < currentYear || (payment.year === currentYear && payment.month < currentMonth)
+    ? 'OVERDUE'
+    : 'PENDING';
 };
 
 export const ensureStudentPaymentScheduleById = async (prisma: PrismaClient, studentId: string) => {
-  const student = await prisma.user.findUnique({
-    where: { id: studentId },
-    select: {
-      id: true,
-      role: true,
-      createdAt: true,
-      courseDurationMonths: true,
-      monthlyFee: true,
-      courseStartDate: true
-    }
+  const enrollments = await prisma.academyEnrollment.findMany({
+    where: { studentId }
   });
 
-  if (!student) {
+  if (enrollments.length === 0) {
     return [];
   }
 
-  return ensureStudentPaymentSchedule(prisma, student);
+  const generatedPayments = [];
+
+  for (const enrollment of enrollments) {
+    const start = new Date(enrollment.startDate);
+    const startMonthDate = new Date(start.getFullYear(), start.getMonth(), 1, 12, 0, 0, 0);
+    
+    const end = enrollment.endDate ? new Date(enrollment.endDate) : new Date();
+    const endMonthDate = new Date(end.getFullYear(), end.getMonth(), 1, 12, 0, 0, 0);
+
+    const billingInterval = enrollment.billingPeriod === BillingPeriod.QUARTERLY ? 3 : 1;
+    let current = new Date(startMonthDate);
+    
+    while (current.getTime() <= Math.max(startMonthDate.getTime(), endMonthDate.getTime())) {
+      const month = current.getMonth() + 1;
+      const year = current.getFullYear();
+      const dueDate = getDueDateForEnrollmentMonth(enrollment, month, year);
+
+      const existingPayment = await prisma.paymentStatus.findFirst({
+        where: {
+          studentId,
+          month,
+          year
+        }
+      });
+
+      if (!existingPayment) {
+        await prisma.paymentStatus.create({
+          data: {
+            studentId,
+            enrollmentId: enrollment.id,
+            month,
+            year,
+            amount: enrollment.monthlyFee,
+            dueDate,
+            status: PaymentState.PENDING,
+            isPaid: false
+          }
+        });
+      } else if (existingPayment.enrollmentId === enrollment.id && !existingPayment.isPaid) {
+        const existingTime = existingPayment.dueDate ? new Date(existingPayment.dueDate).getTime() : 0;
+        const shouldUpdateAmount = isCurrentOrFutureMonth(month, year) && existingPayment.amount !== enrollment.monthlyFee;
+        if (shouldUpdateAmount || existingTime !== dueDate.getTime()) {
+          await prisma.paymentStatus.update({
+            where: { id: existingPayment.id },
+            data: {
+              amount: shouldUpdateAmount ? enrollment.monthlyFee : existingPayment.amount,
+              dueDate,
+              status: PaymentState.PENDING
+            }
+          });
+        }
+      }
+
+      generatedPayments.push({ month, year });
+      current = addMonths(current, billingInterval);
+    }
+  }
+
+  return generatedPayments;
 };
 
 export const getDueDateForMonth = (month: number, year: number) => normalizeMonthDate(year, month);
 
 export const isMonthWithinStudentSchedule = (
-  student: Pick<StudentBillingSnapshot, 'createdAt' | 'courseDurationMonths' | 'courseStartDate'>,
+  enrollments: Pick<AcademyEnrollment, 'startDate' | 'endDate'>[],
   month: number,
   year: number
 ) => {
-  if (!student.courseDurationMonths || student.courseDurationMonths <= 0) {
-    return false;
-  }
-
-  const startMonth = new Date(
-    (student.courseStartDate ?? student.createdAt).getFullYear(),
-    (student.courseStartDate ?? student.createdAt).getMonth(),
-    1,
-    12,
-    0,
-    0,
-    0
-  );
-  const endMonth = addMonths(startMonth, student.courseDurationMonths - 1);
   const targetMonth = normalizeMonthDate(year, month);
-
-  return targetMonth.getTime() >= startMonth.getTime() && targetMonth.getTime() <= endMonth.getTime();
+  
+  return enrollments.some(enrollment => {
+    const start = new Date(enrollment.startDate);
+    const startMonth = new Date(start.getFullYear(), start.getMonth(), 1, 12, 0, 0, 0);
+    const end = enrollment.endDate ? new Date(enrollment.endDate) : new Date();
+    const endMonth = new Date(end.getFullYear(), end.getMonth(), 1, 12, 0, 0, 0);
+    
+    return targetMonth.getTime() >= startMonth.getTime() && targetMonth.getTime() <= endMonth.getTime();
+  });
 };

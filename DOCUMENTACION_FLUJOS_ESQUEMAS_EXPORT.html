@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Documentación Flujos HitSchool</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 0;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      background: #e6e6e6;
+      color: #111827;
+      font-family: "Segoe UI", Arial, sans-serif;
+      font-size: 10px;
+      line-height: 1.28;
+    }
+
+    .page {
+      width: 210mm;
+      height: 297mm;
+      margin: 0 auto 10mm auto;
+      padding: 10mm 12mm;
+      overflow: hidden;
+      background: #ffffff;
+      page-break-after: always;
+      break-after: page;
+      display: flex;
+      flex-direction: column;
+      gap: 4mm;
+    }
+
+    .cover {
+      justify-content: center;
+      gap: 8mm;
+    }
+
+    h1,
+    h2,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 24px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      font-size: 14px;
+      line-height: 1.15;
+      letter-spacing: 0;
+      page-break-after: avoid;
+      break-after: avoid;
+    }
+
+    .intro {
+      max-width: 150mm;
+      font-size: 11px;
+    }
+
+    .diagram {
+      width: 100%;
+      min-height: 0;
+      flex: 1 1 auto;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .diagram .mermaid {
+      width: 100%;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      margin: 0;
+      padding: 0;
+      text-align: center;
+      white-space: pre;
+    }
+
+    .diagram svg {
+      display: block;
+      max-width: 100%;
+      max-height: 100%;
+    }
+
+    .details {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      font-size: 8.4px;
+      line-height: 1.22;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .details th,
+    .details td {
+      border: 1px solid #c8c8c8;
+      padding: 3px 4px;
+      vertical-align: top;
+    }
+
+    .details th {
+      background: #f2f4f7;
+      font-weight: 700;
+    }
+
+    .details th:first-child,
+    .details td:first-child {
+      width: 33mm;
+      font-weight: 700;
+    }
+
+    .summary-list {
+      margin: 0;
+      padding-left: 5mm;
+      font-size: 11px;
+    }
+
+    @media print {
+      html,
+      body {
+        width: 210mm;
+        background: #ffffff;
+      }
+
+      .page {
+        margin: 0;
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <section class="page cover">
+    <h1>Documentación Técnica Visual de HitSchool</h1>
+    <h2>Carta ASM Simplificada</h2>
+    <p class="intro">Documentación de los flujos principales de la plataforma usando diagramas Mermaid, preparada específicamente para exportar a PDF en A4 sin cortes de diagramas ni títulos separados.</p>
+  </section>
+
+  <section class="page">
+    <h2>1. Flujo de Acceso y Autenticación</h2>
+    <div class="diagram">
+      <pre class="mermaid">flowchart TD
+    A(["ESTADO INICIAL:&lt;br/&gt;Usuario entra en la ruta raíz&lt;br/&gt;de la aplicación"])
+    B("ACCIÓN: Mostrar pantalla&lt;br/&gt;de login")
+    C("ACCIÓN: Introducir usuario&lt;br/&gt;y contraseña")
+    D("ACCIÓN: Enviar credenciales&lt;br/&gt;a /api/auth/login")
+    E{"¿Credenciales&lt;br/&gt;válidas?"}
+    F("ACCIÓN: Crear sesión y&lt;br/&gt;guardar token del usuario")
+    G{"¿Rol del usuario?"}
+    H(["ESTADO FINAL:&lt;br/&gt;Redirigir a /teacher"])
+    I(["ESTADO FINAL:&lt;br/&gt;Redirigir a /student"])
+    J(["ESTADO FINAL:&lt;br/&gt;Redirigir a /teacher&lt;br/&gt;con funciones de administrador"])
+    K(["ESTADO FINAL:&lt;br/&gt;Mostrar error de acceso&lt;br/&gt;y bloquear sesión"])
+
+    A --&gt; B
+    B --&gt; C
+    C --&gt; D
+    D --&gt; E
+    E -- Sí --&gt; F
+    F --&gt; G
+    G -- Teacher --&gt; H
+    G -- Student --&gt; I
+    G -- Admin --&gt; J
+    E -- No --&gt; K</pre>
+    </div>
+    <table class="details">
+      <tr><th>Elemento</th><th>Descripción</th></tr>
+      <tr><td>Entradas / Evento</td><td>Inicio de sesión desde la raíz de la plataforma con credenciales del usuario.</td></tr>
+      <tr><td>Condiciones Clave</td><td>Credenciales válidas y rol asignado al usuario.</td></tr>
+      <tr><td>Salida / Cambio de Estado</td><td>Se crea una sesión autenticada. Profesores y administradores entran en /teacher; alumnos y tutores entran en /student.</td></tr>
+    </table>
+  </section>
+
+  <section class="page">
+    <h2>2. Flujo de Creación y Duplicación de Clases</h2>
+    <div class="diagram">
+      <pre class="mermaid">flowchart TD
+    A(["ESTADO INICIAL:&lt;br/&gt;Administrador crea o duplica una clase;&lt;br/&gt;profesor accede a una clase autorizada"])
+    B{"¿Crear clase nueva&lt;br/&gt;o duplicar existente?"}
+    C("ACCIÓN: Abrir formulario&lt;br/&gt;de creación de clase")
+    D("ACCIÓN: Seleccionar una&lt;br/&gt;clase base para duplicar")
+    E("ACCIÓN: Ajustar nombre,&lt;br/&gt;modalidad y parámetros")
+    F{"¿Es una&lt;br/&gt;duplicación?"}
+    G("ACCIÓN: Limpiar alumnos&lt;br/&gt;antiguos y matrículas")
+    H("ACCIÓN: Reajustar fechas&lt;br/&gt;de publicación y entrega")
+    I("ACCIÓN: Guardar nueva&lt;br/&gt;clase en base de datos")
+    J("ACCIÓN: Generar tareas&lt;br/&gt;y recursos asociados")
+    K("ACCIÓN: Publicar clase&lt;br/&gt;en dashboard docente")
+    L(["ESTADO FINAL:&lt;br/&gt;Clase creada y disponible"])
+    M(["ESTADO FINAL:&lt;br/&gt;Clase duplicada lista&lt;br/&gt;para edición"])
+
+    A --&gt; B
+    B -- Nueva --&gt; C
+    B -- Duplicar --&gt; D
+    C --&gt; E
+    D --&gt; E
+    E --&gt; F
+    F -- Sí --&gt; G
+    G --&gt; H
+    H --&gt; I
+    F -- No --&gt; I
+    I --&gt; J
+    J --&gt; K
+    K -- Creada --&gt; L
+    K -- Duplicada --&gt; M</pre>
+    </div>
+    <table class="details">
+      <tr><th>Elemento</th><th>Descripción</th></tr>
+      <tr><td>Entradas / Evento</td><td>El administrador crea o duplica una clase; el titular o un profesor asignado trabaja dentro de ella.</td></tr>
+      <tr><td>Condiciones Clave</td><td>Crear, editar, duplicar, asignar profesores y limpiar matrículas requieren permisos distintos.</td></tr>
+      <tr><td>Salida / Cambio de Estado</td><td>La clase queda guardada y disponible solo para el administrador, el titular y los profesores asignados.</td></tr>
+    </table>
+  </section>
+
+  <section class="page">
+    <h2>3. Flujo Ciclo de Tareas y Evaluaciones</h2>
+    <div class="diagram">
+      <pre class="mermaid">flowchart TD
+    A(["ESTADO INICIAL:&lt;br/&gt;Profesor prepara asignatura&lt;br/&gt;y tarea"])
+    B("ACCIÓN: Crear tarea con&lt;br/&gt;título, fechas y criterios")
+    C("ACCIÓN: Guardar tarea&lt;br/&gt;en base de datos")
+    D("ACCIÓN: Publicar tarea&lt;br/&gt;en curso del alumno")
+    E(["ESTADO FINAL:&lt;br/&gt;Tarea visible en pendientes"])
+    F("ACCIÓN: Alumno abre&lt;br/&gt;la entrega")
+    G("ACCIÓN: Subir entrega&lt;br/&gt;o examen resuelto")
+    H("ACCIÓN: Almacenar entrega&lt;br/&gt;con metadatos y archivos")
+    I{"¿Incluye preguntas&lt;br/&gt;test o abiertas?"}
+    J("ACCIÓN: Corregir preguntas&lt;br/&gt;test automáticamente")
+    K("ACCIÓN: Revisar respuestas&lt;br/&gt;abiertas y puntuar")
+    L("ACCIÓN: Recalcular nota&lt;br/&gt;y actualizar expediente")
+    M(["ESTADO FINAL:&lt;br/&gt;Nota visible en calificaciones"])
+    N(["ESTADO FINAL:&lt;br/&gt;Entrega pendiente&lt;br/&gt;de revisión"])
+
+    A --&gt; B
+    B --&gt; C
+    C --&gt; D
+    D --&gt; E
+    E --&gt; F
+    F --&gt; G
+    G --&gt; H
+    H --&gt; I
+    I -- Test --&gt; J
+    J --&gt; L
+    I -- Abiertas --&gt; K
+    K --&gt; L
+    L --&gt; M
+    K -- Revisión --&gt; N</pre>
+    </div>
+    <table class="details">
+      <tr><th>Elemento</th><th>Descripción</th></tr>
+      <tr><td>Entradas / Evento</td><td>Creación de una tarea y posterior entrega por parte del alumno.</td></tr>
+      <tr><td>Condiciones Clave</td><td>Tipo de preguntas, corrección automática y revisión docente.</td></tr>
+      <tr><td>Salida / Cambio de Estado</td><td>Se guardan entregas, se revisan, se recalcula la nota y se actualiza el expediente académico.</td></tr>
+    </table>
+  </section>
+
+  <section class="page">
+    <h2>4. Flujo de Administración y Gestión de Usuarios</h2>
+    <div class="diagram">
+      <pre class="mermaid">flowchart TD
+    A(["ESTADO INICIAL:&lt;br/&gt;Administrador entra al&lt;br/&gt;módulo de usuarios"])
+    B{"¿Qué entidad&lt;br/&gt;desea gestionar?"}
+    C("ACCIÓN: Seleccionar&lt;br/&gt;Alumno")
+    D("ACCIÓN: Seleccionar&lt;br/&gt;Profesor")
+    E("ACCIÓN: Seleccionar&lt;br/&gt;Tutor")
+    F("ACCIÓN: Seleccionar&lt;br/&gt;Admin")
+    G{"¿Alta, baja&lt;br/&gt;o reactivación?"}
+    H("ACCIÓN: Dar de alta&lt;br/&gt;nuevo usuario")
+    I("ACCIÓN: Dar de baja&lt;br/&gt;usuario activo")
+    J("ACCIÓN: Reactivar&lt;br/&gt;usuario previo")
+    K("ACCIÓN: Guardar estado&lt;br/&gt;y credenciales")
+    L("ACCIÓN: Asignar matrícula&lt;br/&gt;y vincular aulas")
+    M("ACCIÓN: Actualizar permisos&lt;br/&gt;y visibilidad")
+    N(["ESTADO FINAL:&lt;br/&gt;Usuario gestionado&lt;br/&gt;correctamente"])
+
+    A --&gt; B
+    B -- Alumno --&gt; C
+    B -- Profesor --&gt; D
+    B -- Tutor --&gt; E
+    B -- Admin --&gt; F
+    C --&gt; G
+    D --&gt; G
+    E --&gt; G
+    F --&gt; G
+    G -- Alta --&gt; H
+    G -- Baja --&gt; I
+    G -- Reactivar --&gt; J
+    H --&gt; K
+    I --&gt; K
+    J --&gt; K
+    K --&gt; L
+    L --&gt; M
+    M --&gt; N</pre>
+    </div>
+    <table class="details">
+      <tr><th>Elemento</th><th>Descripción</th></tr>
+      <tr><td>Entradas / Evento</td><td>Selección de una entidad y decisión de alta, baja o reactivación.</td></tr>
+      <tr><td>Condiciones Clave</td><td>Entidad gestionada, acción administrativa y permisos finales.</td></tr>
+      <tr><td>Salida / Cambio de Estado</td><td>El usuario queda activo, inactivo o reactivado y recibe matrícula y permisos adecuados.</td></tr>
+    </table>
+  </section>
+
+  <section class="page">
+    <h2>5. Flujo de Pagos e Impagos</h2>
+    <div class="diagram">
+      <pre class="mermaid">flowchart TD
+    A(["ESTADO INICIAL:&lt;br/&gt;ADMIN entra al panel&lt;br/&gt;de pagos"])
+    B("ACCIÓN: Recopilar historial&lt;br/&gt;financiero y recibos")
+    C("ACCIÓN: Agrupar deuda&lt;br/&gt;por alumno, curso o periodo")
+    D{"¿Hay impagos&lt;br/&gt;o pendientes?"}
+    E("ACCIÓN: Marcar estado&lt;br/&gt;como Impago")
+    F("ACCIÓN: Marcar estado&lt;br/&gt;como Al día")
+    G("ACCIÓN: Actualizar registro&lt;br/&gt;y monitor financiero")
+    H(["ESTADO FINAL:&lt;br/&gt;Estado financiero actualizado"])
+    I("ACCIÓN: Alumno o tutor&lt;br/&gt;revisa recibos")
+    J{"¿Consulta recibos&lt;br/&gt;personales?"}
+    K(["ESTADO FINAL:&lt;br/&gt;Histórico de pagos&lt;br/&gt;y deuda personal"])
+    L(["ESTADO FINAL:&lt;br/&gt;Acceso restringido&lt;br/&gt;o sin datos"])
+
+    A --&gt; B
+    B --&gt; C
+    C --&gt; D
+    D -- Sí --&gt; E
+    E --&gt; G
+    D -- No --&gt; F
+    F --&gt; G
+    G --&gt; H
+    H --&gt; I
+    I --&gt; J
+    J -- Sí --&gt; K
+    J -- No --&gt; L</pre>
+    </div>
+    <table class="details">
+      <tr><th>Elemento</th><th>Descripción</th></tr>
+      <tr><td>Entradas / Evento</td><td>Consulta de pagos globales por ADMIN o histórico personal por alumno/tutor.</td></tr>
+      <tr><td>Condiciones Clave</td><td>Existencia de impagos y tipo de vista financiera permitida por rol.</td></tr>
+      <tr><td>Salida / Cambio de Estado</td><td>Se actualiza el estado financiero y se muestra la información autorizada.</td></tr>
+    </table>
+  </section>
+
+  <section class="page">
+    <h2>6. Flujo de Comunicación y Lectura de Mensajes</h2>
+    <div class="diagram">
+      <pre class="mermaid">flowchart TD
+    A(["ESTADO INICIAL:&lt;br/&gt;Usuario abre una&lt;br/&gt;conversación activa"])
+    B("ACCIÓN: Redactar mensaje&lt;br/&gt;y enviarlo")
+    C("ACCIÓN: Guardar mensaje&lt;br/&gt;en la conversación")
+    D{"¿Conversación abierta&lt;br/&gt;en la interfaz actual?"}
+    E("ACCIÓN: Mostrar mensaje&lt;br/&gt;en tiempo real")
+    F("ACCIÓN: Generar alerta&lt;br/&gt;y badge no leído")
+    G("ACCIÓN: Actualizar lista&lt;br/&gt;y subir conversación")
+    H(["ESTADO FINAL:&lt;br/&gt;Chat actualizado"])
+    I(["ESTADO FINAL:&lt;br/&gt;Mensaje pendiente&lt;br/&gt;de lectura"])
+
+    A --&gt; B
+    B --&gt; C
+    C --&gt; D
+    D -- Sí --&gt; E
+    E --&gt; G
+    G --&gt; H
+    D -- No --&gt; F
+    F --&gt; G
+    G --&gt; I</pre>
+    </div>
+    <table class="details">
+      <tr><th>Elemento</th><th>Descripción</th></tr>
+      <tr><td>Entradas / Evento</td><td>Envío de un mensaje entre profesor y alumno.</td></tr>
+      <tr><td>Condiciones Clave</td><td>Conversación abierta, vista activa y estado de lectura.</td></tr>
+      <tr><td>Salida / Cambio de Estado</td><td>El mensaje se entrega, se marca como leído o no leído y la conversación se reordena al inicio.</td></tr>
+    </table>
+  </section>
+
+  <section class="page">
+    <h2>7. Flujo de Consulta de Expediente Académico</h2>
+    <div class="diagram">
+      <pre class="mermaid">flowchart TD
+    A(["ESTADO INICIAL:&lt;br/&gt;Alumno o tutor entra&lt;br/&gt;al expediente"])
+    B("ACCIÓN: Solicitar notas&lt;br/&gt;por trimestre o periodo")
+    C("ACCIÓN: Agrupar notas&lt;br/&gt;por curso, materia y actividad")
+    D{"¿Filtrar por materia&lt;br/&gt;o rendimiento?"}
+    E("ACCIÓN: Aplicar filtro&lt;br/&gt;por materia o periodo")
+    F("ACCIÓN: Analizar pendientes&lt;br/&gt;y rendimiento acumulado")
+    G("ACCIÓN: Generar vista&lt;br/&gt;de notas y observaciones")
+    H(["ESTADO FINAL:&lt;br/&gt;Expediente visible&lt;br/&gt;para alumno o tutor"])
+    I(["ESTADO FINAL:&lt;br/&gt;Resumen general&lt;br/&gt;sin filtro"])
+
+    A --&gt; B
+    B --&gt; C
+    C --&gt; D
+    D -- Sí --&gt; E
+    E --&gt; F
+    F --&gt; G
+    D -- No --&gt; F
+    G --&gt; H
+    F -- Resumen --&gt; I</pre>
+    </div>
+    <table class="details">
+      <tr><th>Elemento</th><th>Descripción</th></tr>
+      <tr><td>Entradas / Evento</td><td>Acceso del alumno o tutor para consultar notas y rendimiento.</td></tr>
+      <tr><td>Condiciones Clave</td><td>Filtros aplicados, tareas pendientes y rendimiento bajo.</td></tr>
+      <tr><td>Salida / Cambio de Estado</td><td>Se genera la vista final con notas, materias y análisis académico.</td></tr>
+    </table>
+  </section>
+
+  <section class="page">
+    <h2>8. Flujo de Permisos de Clase y Profesores Asignados</h2>
+    <div class="diagram">
+      <pre class="mermaid">flowchart TD
+    A(["USUARIO SOLICITA UNA CLASE"]) --&gt; B{"¿Qué rol tiene?"}
+    B -- Administrador --&gt; C(["ACCESO GLOBAL"])
+    B -- Profesor --&gt; D{"¿Titular o asignado?"}
+    D -- Sí --&gt; E(["Acceso a alumnos, tareas, anuncios y calificaciones"])
+    D -- No --&gt; F(["Acceso denegado"])
+    E -- Añadir colaborador --&gt; G(["Titular o asignado puede añadir profesor"])
+    E -- Retirar colaborador --&gt; H(["Solo administrador puede retirar"])</pre>
+    </div>
+    <table class="details">
+      <tr><th>Elemento</th><th>Descripción</th></tr>
+      <tr><td>Entradas / Evento</td><td>Un profesor accede a una clase, crea contenido o consulta datos académicos.</td></tr>
+      <tr><td>Condiciones Clave</td><td>Debe ser titular o figurar en CourseTeacher; el alumno debe estar matriculado.</td></tr>
+      <tr><td>Salida / Cambio de Estado</td><td>El acceso queda limitado al ámbito de la clase autorizada.</td></tr>
+    </table>
+  </section>
+
+  <section class="page">
+    <h2>9. Flujo de Calificaciones por Clase y por Alumno</h2>
+    <div class="diagram">
+      <pre class="mermaid">flowchart TD
+    A(["PROFESOR ABRE CALIFICACIONES"]) --&gt; B(["Vista predeterminada por clases"])
+    B --&gt; C(["Cargar clases autorizadas"])
+    C --&gt; D(["Cargar alumnos y tareas evaluables"])
+    D --&gt; E{"¿Modalidad?"}
+    E -- Presencial --&gt; F(["35% Mid Term + 35% Final Term + 30% Tareas"])
+    E -- Online --&gt; G(["Media continua de tareas"])
+    F --&gt; H(["Nota global separada por clase"])
+    G --&gt; H
+    H --&gt; I(["Vista secundaria por alumno y por clase"])</pre>
+    </div>
+    <table class="details">
+      <tr><th>Elemento</th><th>Descripción</th></tr>
+      <tr><td>Entradas / Evento</td><td>Consulta de calificaciones de profesor, alumno, tutor o administrador.</td></tr>
+      <tr><td>Condiciones Clave</td><td>Cada registro combina alumno, clase, trimestre y año académico.</td></tr>
+      <tr><td>Salida / Cambio de Estado</td><td>Las notas no mezclan clases; un alumno puede tener una nota independiente en cada clase.</td></tr>
+    </table>
+  </section>
+
+  <section class="page">
+    <h2>10. Flujo de Materiales y Exámenes Interactivos</h2>
+    <div class="diagram">
+      <pre class="mermaid">flowchart TD
+    A(["PROFESOR CREA MATERIAL"]) --&gt; B{"¿Tipo de recurso?"}
+    B -- Documento, vídeo o audio --&gt; C(["Guardar recurso y URL"])
+    B -- Formulario --&gt; D(["Guardar preguntas y puntuaciones"])
+    C --&gt; E(["Publicar o asignar"])
+    D --&gt; E
+    E --&gt; F(["Alumno abre recurso"])
+    F -- Formulario --&gt; G(["Responder y enviar"])
+    G --&gt; H(["Corregir objetivos y revisar abiertas"])
+    H --&gt; I(["Guardar nota y feedback"])</pre>
+    </div>
+    <table class="details">
+      <tr><th>Elemento</th><th>Descripción</th></tr>
+      <tr><td>Entradas / Evento</td><td>Alta, edición, duplicación, asignación o entrega de un material.</td></tr>
+      <tr><td>Condiciones Clave</td><td>Tipo, nivel, categoría, preguntas abiertas y estado de la entrega.</td></tr>
+      <tr><td>Salida / Cambio de Estado</td><td>El recurso queda disponible y la entrega actualiza el expediente cuando se evalúa.</td></tr>
+    </table>
+  </section>
+
+  <section class="page">
+    <h2>11. Flujo de Notificaciones y Novedades</h2>
+    <div class="diagram">
+      <pre class="mermaid">flowchart TD
+    A(["PUBLICAR ANUNCIO O TAREA"]) --&gt; B(["Guardar contenido"])
+    B --&gt; C(["Resolver alumnos y tutores activos"])
+    C --&gt; D(["Enviar correo SMTP sin duplicados"])
+    D --&gt; E{"¿SMTP correcto?"}
+    E -- Sí --&gt; F(["Marcar notificación enviada"])
+    E -- No --&gt; G(["Conservar y reintentar"])
+    B --&gt; H(["Actualizar novedades de interfaz"])
+    H --&gt; I(["Badge en Chat, Calificaciones o Mis Clases"])</pre>
+    </div>
+    <table class="details">
+      <tr><th>Elemento</th><th>Descripción</th></tr>
+      <tr><td>Entradas / Evento</td><td>Publicación de anuncio, tarea, calificación o mensaje nuevo.</td></tr>
+      <tr><td>Condiciones Clave</td><td>Solo cuentas activas reciben correo; publishAt controla las tareas programadas.</td></tr>
+      <tr><td>Salida / Cambio de Estado</td><td>Se envía, reintenta si falla y se muestra la novedad hasta consultarla.</td></tr>
+    </table>
+  </section>
+
+  <section class="page">
+    <h2>12. Flujo de Matrículas, Pagos y Tutores</h2>
+    <div class="diagram">
+      <pre class="mermaid">flowchart TD
+    A(["GESTIONAR ALUMNO"]) --&gt; B{"¿Alta o baja?"}
+    B -- Alta --&gt; C(["Crear matrícula y activar cuenta"])
+    C --&gt; D(["Generar pagos y enviar credenciales SMTP"])
+    B -- Baja --&gt; E(["Cerrar matrícula y retirar cursos"])
+    E --&gt; F(["Desactivar alumno"])
+    F --&gt; G{"¿Tutor tiene hijos activos?"}
+    G -- No --&gt; H(["Desactivar tutor"])
+    G -- Sí --&gt; I(["Mantener tutor activo"])</pre>
+    </div>
+    <table class="details">
+      <tr><th>Elemento</th><th>Descripción</th></tr>
+      <tr><td>Entradas / Evento</td><td>Alta, baja, reactivación, matrícula o actualización de pagos.</td></tr>
+      <tr><td>Condiciones Clave</td><td>La matrícula activa la cuenta; la baja puede desactivar automáticamente al tutor.</td></tr>
+      <tr><td>Salida / Cambio de Estado</td><td>Se actualizan estado, pagos, visibilidad, credenciales y acceso familiar.</td></tr>
+    </table>
+  </section>
+
+  <section class="page cover">
+    <h2>Resumen general del sistema</h2>
+    <p class="intro">HitSchool combina doce flujos funcionales agrupados en cuatro capas:</p>
+    <ul class="summary-list">
+      <li>Acceso y autenticación</li>
+      <li>Gestión académica y curricular</li>
+      <li>Administración operativa y financiera</li>
+      <li>Comunicación, notificaciones y seguimiento del alumno</li>
+    </ul>
+    <p class="intro">Cada flujo mantiene una visión clara del estado del usuario, la actividad del curso y el resultado académico, con reglas de acceso diferenciadas por rol, separación de calificaciones por clase y actualización continua de la base de datos y la interfaz.</p>
+  </section>
+
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: "base",
+      securityLevel: "loose",
+      flowchart: {
+        curve: "linear",
+        useMaxWidth: false,
+        nodeSpacing: 12,
+        rankSpacing: 18,
+        htmlLabels: true
+      },
+      themeVariables: {
+        fontSize: "10px",
+        fontFamily: "Segoe UI, Arial, sans-serif",
+        nodePadding: "6",
+        primaryColor: "#fff3d9",
+        primaryBorderColor: "#e1b96b",
+        primaryTextColor: "#111827",
+        lineColor: "#4b5563",
+        edgeLabelBackground: "#ffffff",
+        tertiaryColor: "#eef4ff"
+      }
+    });
+
+    function fitDiagram(diagram) {
+      const svg = diagram.querySelector("svg");
+      if (!svg) return;
+
+      const viewBox = svg.viewBox.baseVal;
+      const originalWidth = viewBox && viewBox.width ? viewBox.width : svg.getBBox().width;
+      const originalHeight = viewBox && viewBox.height ? viewBox.height : svg.getBBox().height;
+      const availableWidth = diagram.clientWidth;
+      const availableHeight = diagram.clientHeight;
+      const scale = Math.min(availableWidth / originalWidth, availableHeight / originalHeight, 1.12);
+
+      svg.style.width = `${Math.floor(originalWidth * scale)}px`;
+      svg.style.height = `${Math.floor(originalHeight * scale)}px`;
+    }
+
+    async function renderAndFit() {
+      await mermaid.run({ querySelector: ".mermaid" });
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      document.querySelectorAll(".diagram").forEach(fitDiagram);
+    }
+
+    await renderAndFit();
+    window.addEventListener("resize", () => document.querySelectorAll(".diagram").forEach(fitDiagram));
+    window.addEventListener("beforeprint", () => document.querySelectorAll(".diagram").forEach(fitDiagram));
+  </script>
+</body>
+</html>

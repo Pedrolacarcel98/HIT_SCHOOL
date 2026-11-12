@@ -1,14 +1,18 @@
 import React, { useState } from 'react';
-import { CheckCircle2, XCircle, RotateCcw, Award, Volume2 } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { CheckCircle2, XCircle, RotateCcw, Award, X, Clock } from 'lucide-react';
 import AudioPlayer from './AudioPlayer';
 
 interface Question {
   id: string;
   questionText: string;
+  blankText?: string;
   audioUrl?: string;
-  type: 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'SHORT_ANSWER';
+  imageUrl?: string;
+  type: 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'SHORT_ANSWER' | 'FILL_IN_THE_BLANKS' | 'OPEN_TEXT';
   options?: string[];
   correctAnswer: string | number; // index or string
+  caseSensitive?: boolean;
   points: number;
 }
 
@@ -16,11 +20,28 @@ interface FormPlayerProps {
   title: string;
   description?: string;
   questions: Question[];
-  onFinish?: (score: number, total: number) => void;
+  onFinish?: (score: number, total: number, answers: { [key: string]: any }) => void;
+  onClose?: () => void;
+  readOnly?: boolean;
+  allowRetry?: boolean;
+  initialAnswers?: { [key: string]: any };
+  audioMode?: 'drive-preview' | 'backend-proxy';
 }
 
-const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions = [] }) => {
-  const [answers, setAnswers] = useState<{ [key: string]: any }>({});
+const getBlankAnswers = (questionText: string) => Array.from(questionText.matchAll(/\(([^)]+)\)/g), (match) => match[1]);
+
+const getBlankText = (question: Question) => question.blankText || question.questionText;
+
+const isTextCorrect = (answer: string, expected: string, caseSensitive = false) => {
+  const normalizedAnswer = answer.trim();
+  const normalizedExpected = expected.trim();
+  return caseSensitive
+    ? normalizedAnswer === normalizedExpected
+    : normalizedAnswer.toLowerCase() === normalizedExpected.toLowerCase();
+};
+
+const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions = [], onFinish, onClose, readOnly = false, allowRetry = true, initialAnswers = {}, audioMode = 'drive-preview' }) => {
+  const [answers, setAnswers] = useState<{ [key: string]: any }>(initialAnswers);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [score, setScore] = useState(0);
   const [totalPoints, setTotalPoints] = useState(0);
@@ -29,14 +50,24 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
   const [showResultModal, setShowResultModal] = useState(false);
   const [modalStep, setModalStep] = useState<'COMPLETED' | 'GRADE' | 'REVIEW'>('COMPLETED');
 
+  const hasOpenText = questions.some((q) => q.type === 'OPEN_TEXT');
+  const openTextCount = questions.filter((q) => q.type === 'OPEN_TEXT').length;
+
   const handleSelectOption = (questionId: string, optionIndex: number) => {
-    if (isSubmitted) return;
+    if (isSubmitted || readOnly) return;
     setAnswers({ ...answers, [questionId]: optionIndex });
   };
 
   const handleTextAnswer = (questionId: string, text: string) => {
-    if (isSubmitted) return;
+    if (isSubmitted || readOnly) return;
     setAnswers({ ...answers, [questionId]: text });
+  };
+
+  const handleBlankAnswer = (questionId: string, blankIndex: number, text: string) => {
+    if (isSubmitted || readOnly) return;
+    const currentAnswers = Array.isArray(answers[questionId]) ? [...answers[questionId]] : [];
+    currentAnswers[blankIndex] = text;
+    setAnswers({ ...answers, [questionId]: currentAnswers });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -54,10 +85,13 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
           earned += qPoints;
         }
       } else if (q.type === 'SHORT_ANSWER') {
-        if (
-          userAnswer &&
-          String(userAnswer).trim().toLowerCase() === String(q.correctAnswer).trim().toLowerCase()
-        ) {
+        if (userAnswer && isTextCorrect(String(userAnswer), String(q.correctAnswer))) {
+          earned += qPoints;
+        }
+      } else if (q.type === 'FILL_IN_THE_BLANKS') {
+        const expectedAnswers = getBlankAnswers(getBlankText(q));
+        const blankAnswers = Array.isArray(userAnswer) ? userAnswer : [];
+        if (expectedAnswers.length > 0 && expectedAnswers.every((expected, index) => isTextCorrect(String(blankAnswers[index] || ''), expected, q.caseSensitive))) {
           earned += qPoints;
         }
       }
@@ -68,6 +102,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
     setIsSubmitted(true);
     setModalStep('COMPLETED');
     setShowResultModal(true);
+    onFinish?.(earned, max, answers);
   };
 
   const handleReset = () => {
@@ -89,8 +124,8 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
       </div>
 
       {/* Pop-up Modal de Resultado */}
-      {showResultModal && (
-        <div style={{
+      {showResultModal && createPortal(
+        <div className="modal-backdrop" style={{
           position: 'fixed',
           inset: 0,
           background: 'rgba(0,0,0,0.75)',
@@ -101,7 +136,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
           zIndex: 100,
           padding: '1.5rem'
         }}>
-          <div className="glass-panel animate-fade-in" style={{
+          <div className="glass-panel modal-card" style={{
             width: '100%',
             maxWidth: modalStep === 'REVIEW' ? '700px' : '460px',
             maxHeight: '90vh',
@@ -111,27 +146,54 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
             textAlign: modalStep === 'REVIEW' ? 'left' : 'center',
             boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
             border: '1px solid var(--border)',
-            overflow: 'hidden'
+            overflow: 'hidden',
+            position: 'relative'
           }}>
+            <button
+              type="button"
+              onClick={() => {
+                setShowResultModal(false);
+                onClose?.();
+              }}
+              aria-label="Cerrar resultados"
+              style={{
+                position: 'absolute',
+                top: '1rem',
+                right: '1rem',
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                padding: '0.4rem',
+                borderRadius: '6px'
+              }}
+            >
+              <X size={18} />
+            </button>
             {modalStep === 'COMPLETED' && (
               <div>
                 <div style={{
                   width: '64px',
                   height: '64px',
                   borderRadius: '50%',
-                  background: 'rgba(34, 197, 94, 0.15)',
-                  color: 'var(--primary)',
+                  background: hasOpenText ? '#fef3c7' : 'var(--primary-light)',
+                  color: hasOpenText ? '#b45309' : 'var(--primary-text)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   margin: '0 auto 1.5rem',
-                  boxShadow: '0 0 20px rgba(34, 197, 94, 0.2)'
+                  border: `1px solid ${hasOpenText ? '#fde68a' : 'var(--primary-border)'}`,
+                  boxShadow: hasOpenText ? '0 4px 12px rgba(217, 119, 6, 0.2)' : 'var(--shadow-primary)'
                 }}>
-                  <CheckCircle2 size={36} />
+                  {hasOpenText ? <Clock size={36} /> : <CheckCircle2 size={36} />}
                 </div>
-                <h3 style={{ margin: '0 0 0.5rem', color: 'var(--text)', fontSize: '1.5rem' }}>¡Examen completado!</h3>
+                <h3 style={{ margin: '0 0 0.5rem', color: 'var(--text)', fontSize: '1.5rem' }}>
+                  {hasOpenText ? '¡Examen entregado!' : '¡Examen completado!'}
+                </h3>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', margin: '0 0 2rem', lineHeight: '1.5' }}>
-                  Has respondido a todas las preguntas. Pulsa el botón para ver tu resultado detallado.
+                  {hasOpenText
+                    ? 'Has respondido a todas las preguntas. Este examen incluye preguntas de texto libre que serán revisadas y calificadas por tu profesor.'
+                    : 'Has respondido a todas las preguntas. Pulsa el botón para ver tu resultado detallado.'}
                 </p>
                 <button
                   type="button"
@@ -149,7 +211,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                     cursor: 'pointer'
                   }}
                 >
-                  <Award size={18} /> Ver Calificación
+                  <Award size={18} /> {hasOpenText ? 'Ver Resumen de Entrega' : 'Ver Calificación'}
                 </button>
               </div>
             )}
@@ -160,35 +222,62 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                   width: '64px',
                   height: '64px',
                   borderRadius: '50%',
-                  background: percentage >= 60 ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                  color: percentage >= 60 ? '#22c55e' : '#ef4444',
+                  background: hasOpenText ? '#fef3c7' : (percentage >= 50 ? 'var(--primary-light)' : 'rgba(239, 68, 68, 0.12)'),
+                  color: hasOpenText ? '#b45309' : (percentage >= 50 ? 'var(--primary-text)' : '#9e2a2b'),
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  margin: '0 auto 1.25rem'
+                  margin: '0 auto 1.25rem',
+                  border: `1px solid ${hasOpenText ? '#fde68a' : (percentage >= 50 ? 'var(--primary-border)' : '#f7caca')}`
                 }}>
-                  <Award size={36} />
+                  {hasOpenText ? <Clock size={36} /> : <Award size={36} />}
                 </div>
 
-                <h3 style={{ margin: '0 0 0.5rem', color: 'var(--text)', fontSize: '1.5rem' }}>Tu Calificación</h3>
+                <h3 style={{ margin: '0 0 0.5rem', color: 'var(--text)', fontSize: '1.5rem' }}>
+                  {hasOpenText ? 'Entrega Registrada' : 'Tu Calificación'}
+                </h3>
                 
-                <div style={{
-                  margin: '1.5rem 0',
-                  padding: '1.25rem',
-                  borderRadius: '12px',
-                  background: percentage >= 60 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                  border: `1px solid ${percentage >= 60 ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
-                }}>
-                  <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: percentage >= 60 ? '#22c55e' : '#ef4444' }}>
-                    {score} <span style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>/ {totalPoints}</span>
+                {hasOpenText ? (
+                  <div style={{
+                    margin: '1.5rem 0',
+                    padding: '1.25rem',
+                    borderRadius: '12px',
+                    background: '#fffbeb',
+                    border: '1px solid #fde68a'
+                  }}>
+                    <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#b45309' }}>
+                      ⏳ Calificación Pendiente
+                    </div>
+                    <div style={{ fontSize: '0.92rem', fontWeight: '500', color: 'var(--text)', marginTop: '0.4rem', lineHeight: '1.4' }}>
+                      Este examen incluye <strong>{openTextCount} {openTextCount === 1 ? 'pregunta de texto libre' : 'preguntas de texto libre'}</strong> que debe evaluar tu profesor.
+                    </div>
+                    {totalPoints > 0 && (
+                      <p style={{ margin: '0.5rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                        Puntuación total del examen: {totalPoints} pts
+                      </p>
+                    )}
                   </div>
-                  <div style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--text)', marginTop: '0.25rem' }}>
-                    {percentage}% de Acierto
+                ) : (
+                  <div style={{
+                    margin: '1.5rem 0',
+                    padding: '1.25rem',
+                    borderRadius: '12px',
+                    background: percentage >= 50 ? 'var(--primary-subtle)' : '#fdf0f0',
+                    border: `1px solid ${percentage >= 50 ? 'var(--primary-border)' : '#f7caca'}`
+                  }}>
+                    <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: percentage >= 50 ? 'var(--primary-text)' : '#9e2a2b' }}>
+                      {score} <span style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>/ {totalPoints}</span>
+                    </div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--text)', marginTop: '0.25rem' }}>
+                      {percentage}% de Acierto
+                    </div>
+                    {percentage >= 50 && (
+                      <p style={{ margin: '0.5rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                        🎉 ¡Enhorabuena! Has superado el examen.
+                      </p>
+                    )}
                   </div>
-                  <p style={{ margin: '0.5rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                    {percentage >= 60 ? '🎉 ¡Enhorabuena! Has superado el examen.' : '💪 Puedes reintentarlo para mejorar tu puntuación.'}
-                  </p>
-                </div>
+                )}
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   <button
@@ -206,20 +295,24 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                       cursor: 'pointer'
                     }}
                   >
-                    <CheckCircle2 size={16} /> Revisar Respuestas (Aciertos y Fallos)
+                    <CheckCircle2 size={16} /> Revisar Respuestas Enviadas
                   </button>
 
                   <button
                     type="button"
-                    onClick={handleReset}
+                    onClick={() => {
+                      setShowResultModal(false);
+                      onClose?.();
+                    }}
                     style={{
                       width: '100%',
                       padding: '0.85rem',
                       borderRadius: '8px',
                       border: '1px solid var(--border)',
-                      background: 'transparent',
+                      background: 'var(--surface)',
                       color: 'var(--text)',
                       fontSize: '0.9rem',
+                      fontWeight: 600,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -227,8 +320,31 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                       cursor: 'pointer'
                     }}
                   >
-                    <RotateCcw size={16} /> Reintentar Examen
+                    ✓ Finalizar y Salir
                   </button>
+
+                  {!hasOpenText && allowRetry && (
+                    <button
+                      type="button"
+                      onClick={handleReset}
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        borderRadius: '8px',
+                        border: 'none',
+                        background: 'transparent',
+                        color: 'var(--text-muted)',
+                        fontSize: '0.85rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.4rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <RotateCcw size={15} /> Reintentar Examen
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -239,8 +355,10 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border)' }}>
                   <div>
                     <h3 style={{ margin: 0, fontSize: '1.3rem', color: 'var(--text)' }}>Revisión de Respuestas</h3>
-                    <span style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 'bold' }}>
-                      Puntuación final: {score} / {totalPoints} ({percentage}%)
+                    <span style={{ fontSize: '0.85rem', color: hasOpenText ? '#b45309' : 'var(--primary)', fontWeight: 'bold' }}>
+                      {hasOpenText
+                        ? 'Calificación pendiente de corrección por el profesor'
+                        : `Puntuación final: ${score} / ${totalPoints} (${percentage}%)`}
                     </span>
                   </div>
                   <button
@@ -267,8 +385,74 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                 <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem', paddingRight: '0.5rem' }}>
                   {questions.map((q, idx) => {
                     const userAnswer = answers[q.id];
-                    const isCorrect = (q.type === 'SHORT_ANSWER' && String(userAnswer || '').trim().toLowerCase() === String(q.correctAnswer).trim().toLowerCase()) ||
-                      (q.type !== 'SHORT_ANSWER' && Number(userAnswer) === Number(q.correctAnswer));
+
+                    if (q.type === 'OPEN_TEXT') {
+                      return (
+                        <div
+                          key={q.id || idx}
+                          style={{
+                            padding: '1.25rem',
+                            borderRadius: '10px',
+                            background: 'var(--surface)',
+                            border: '1px solid #fde68a',
+                            borderLeft: '4px solid #f59e0b'
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                            <span style={{ fontWeight: 'bold', fontSize: '0.85rem', color: '#b45309', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <Clock size={16} />
+                              Pregunta {idx + 1} ({q.points || 1} {q.points === 1 ? 'pto' : 'pts'}) — Pendiente de calificar
+                            </span>
+                            <span style={{ fontSize: '0.75rem', color: '#b45309', background: '#fef3c7', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>
+                              Texto Libre / Redacción
+                            </span>
+                          </div>
+
+                          <p style={{ margin: '0 0 0.75rem', fontWeight: '500', color: 'var(--text)', fontSize: '0.95rem' }}>
+                            {q.questionText}
+                          </p>
+
+                          {q.imageUrl && (
+                            <img
+                              src={q.imageUrl}
+                              alt={`Imagen de apoyo para la pregunta ${idx + 1}`}
+                              style={{ display: 'block', maxWidth: '100%', maxHeight: '200px', margin: '0 0 0.75rem', objectFit: 'contain', borderRadius: '6px', border: '1px solid var(--border)' }}
+                            />
+                          )}
+
+                          {q.audioUrl && (
+                            <div style={{ marginBottom: '0.75rem' }}>
+                              <AudioPlayer src={q.audioUrl} title={`Pista de Audio - Pregunta ${idx + 1}`} />
+                            </div>
+                          )}
+
+                          <div style={{ marginTop: '0.4rem' }}>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Tu respuesta enviada:</span>
+                            <div style={{
+                              marginTop: '0.35rem',
+                              padding: '0.75rem 1rem',
+                              borderRadius: '6px',
+                              background: 'var(--surface-alt)',
+                              border: '1px solid var(--border)',
+                              whiteSpace: 'pre-wrap',
+                              color: 'var(--text)',
+                              fontSize: '0.92rem',
+                              lineHeight: '1.5'
+                            }}>
+                              {userAnswer ? String(userAnswer) : 'No respondida'}
+                            </div>
+                            <p style={{ margin: '0.4rem 0 0', color: '#b45309', fontSize: '0.82rem' }}>
+                              <em>El profesor evaluará esta respuesta y asignará su puntuación correspondiente.</em>
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    const isCorrect = q.type === 'FILL_IN_THE_BLANKS'
+                      ? getBlankAnswers(getBlankText(q)).every((expected, index) => isTextCorrect(String((Array.isArray(userAnswer) ? userAnswer[index] : '') || ''), expected, q.caseSensitive))
+                      : (q.type === 'SHORT_ANSWER' && isTextCorrect(String(userAnswer || ''), String(q.correctAnswer))) ||
+                        (q.type !== 'SHORT_ANSWER' && Number(userAnswer) === Number(q.correctAnswer));
 
                     let userSelectedText = 'No respondida';
                     let correctText = '';
@@ -280,6 +464,9 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                       if (q.options?.[Number(q.correctAnswer)]) {
                         correctText = q.options[Number(q.correctAnswer)];
                       }
+                    } else if (q.type === 'FILL_IN_THE_BLANKS') {
+                      userSelectedText = Array.isArray(userAnswer) ? userAnswer.join(' | ') : 'No respondida';
+                      correctText = getBlankAnswers(getBlankText(q)).join(' | ');
                     } else {
                       userSelectedText = userAnswer || 'No respondida';
                       correctText = String(q.correctAnswer);
@@ -292,23 +479,37 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                           padding: '1.25rem',
                           borderRadius: '10px',
                           background: 'var(--surface)',
-                          border: `1px solid ${isCorrect ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
-                          borderLeft: `4px solid ${isCorrect ? '#22c55e' : '#ef4444'}`
+                          border: `1px solid ${isCorrect ? 'var(--primary-border)' : '#f7caca'}`,
+                          borderLeft: `4px solid ${isCorrect ? 'var(--primary)' : '#ef4444'}`
                         }}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                          <span style={{ fontWeight: 'bold', fontSize: '0.85rem', color: isCorrect ? '#22c55e' : '#ef4444', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                          <span style={{ fontWeight: 'bold', fontSize: '0.85rem', color: isCorrect ? 'var(--primary-text)' : '#9e2a2b', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                             {isCorrect ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
                             Pregunta {idx + 1} ({isCorrect ? `+${q.points || 1} pts` : '0 pts'})
                           </span>
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                            {q.type === 'MULTIPLE_CHOICE' ? 'Opción Múltiple' : q.type === 'TRUE_FALSE' ? 'Verdadero/Falso' : 'Respuesta Corta'}
+                            {q.type === 'MULTIPLE_CHOICE' ? 'Opción Múltiple' : q.type === 'TRUE_FALSE' ? 'Verdadero/Falso' : q.type === 'FILL_IN_THE_BLANKS' ? 'Completar espacios' : 'Respuesta Corta'}
                           </span>
                         </div>
 
                         <p style={{ margin: '0 0 0.75rem', fontWeight: '500', color: 'var(--text)', fontSize: '0.95rem' }}>
                           {q.questionText}
                         </p>
+
+                        {q.imageUrl && (
+                          <img
+                            src={q.imageUrl}
+                            alt={`Imagen de apoyo para la pregunta ${idx + 1}`}
+                            style={{ display: 'block', maxWidth: '100%', maxHeight: '200px', margin: '0 0 0.75rem', objectFit: 'contain', borderRadius: '6px', border: '1px solid var(--border)' }}
+                          />
+                        )}
+
+                        {q.audioUrl && (
+                          <div style={{ marginBottom: '0.75rem' }}>
+                            <AudioPlayer src={q.audioUrl} title={`Pista de Audio - Pregunta ${idx + 1}`} />
+                          </div>
+                        )}
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.85rem' }}>
                           <div>
@@ -330,8 +531,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                   })}
                 </div>
 
-                {/* Footer de Revisión */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: '0.5rem' }}>
                   <button
                     type="button"
                     onClick={() => setModalStep('GRADE')}
@@ -348,26 +548,49 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                     ← Volver a Calificación
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={handleReset}
-                    className="btn-primary"
-                    style={{
-                      padding: '0.6rem 1.25rem',
-                      fontSize: '0.85rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.4rem',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <RotateCcw size={15} /> Reintentar Examen
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowResultModal(false);
+                        onClose?.();
+                      }}
+                      className="btn-primary"
+                      style={{
+                        padding: '0.6rem 1.25rem',
+                        fontSize: '0.85rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ✓ Finalizar y Salir
+                    </button>
+                    {allowRetry && (
+                      <button
+                        type="button"
+                        onClick={handleReset}
+                        style={{
+                          padding: '0.6rem 1.1rem',
+                          fontSize: '0.85rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.4rem',
+                          border: '1px solid var(--border)',
+                          borderRadius: '8px',
+                          background: 'transparent',
+                          color: 'var(--text-muted)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <RotateCcw size={15} /> Reintentar
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Lista de Preguntas */}
@@ -375,8 +598,10 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
         {questions.map((q, idx) => {
           const userAnswer = answers[q.id];
           const isCorrect = isSubmitted && (
-            (q.type === 'SHORT_ANSWER' && String(userAnswer || '').trim().toLowerCase() === String(q.correctAnswer).trim().toLowerCase()) ||
-            (q.type !== 'SHORT_ANSWER' && Number(userAnswer) === Number(q.correctAnswer))
+            q.type === 'FILL_IN_THE_BLANKS'
+              ? getBlankAnswers(getBlankText(q)).every((expected, index) => isTextCorrect(String((Array.isArray(userAnswer) ? userAnswer[index] : '') || ''), expected, q.caseSensitive))
+              : (q.type === 'SHORT_ANSWER' && isTextCorrect(String(userAnswer || ''), String(q.correctAnswer))) ||
+                (q.type !== 'SHORT_ANSWER' && Number(userAnswer) === Number(q.correctAnswer))
           );
 
           return (
@@ -398,14 +623,24 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                 </span>
               </div>
 
-              <h4 style={{ margin: '0 0 1rem', color: 'var(--text)', fontSize: '1.1rem', fontWeight: '500' }}>
-                {q.questionText}
-              </h4>
+              {q.type !== 'FILL_IN_THE_BLANKS' && (
+                <h4 style={{ margin: '0 0 1rem', color: 'var(--text)', fontSize: '1.1rem', fontWeight: '500' }}>
+                  {q.questionText}
+                </h4>
+              )}
+
+              {q.imageUrl && (
+                <img
+                  src={q.imageUrl}
+                  alt={`Imagen de apoyo para la pregunta ${idx + 1}`}
+                  style={{ display: 'block', maxWidth: '100%', maxHeight: '320px', margin: '0 0 1.25rem', objectFit: 'contain', borderRadius: '8px', border: '1px solid var(--border)' }}
+                />
+              )}
 
               {/* Reproductor de Audio asociado a la pregunta (Listening) */}
               {q.audioUrl && (
                 <div style={{ marginBottom: '1.25rem' }}>
-                  <AudioPlayer src={q.audioUrl} title={`Pista de Audio - Pregunta ${idx + 1}`} />
+                  <AudioPlayer src={q.audioUrl} title={`Pista de Audio - Pregunta ${idx + 1}`} audioMode={audioMode} />
                 </div>
               )}
 
@@ -422,14 +657,14 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
 
                     if (isSubmitted) {
                       if (isOptionCorrect) {
-                        bg = 'rgba(34, 197, 94, 0.15)';
-                        border = '1px solid #22c55e';
+                        bg = 'var(--primary-light)';
+                        border = '1px solid var(--primary)';
                       } else if (isSelected && !isOptionCorrect) {
-                        bg = 'rgba(239, 68, 68, 0.15)';
+                        bg = 'rgba(239, 68, 68, 0.12)';
                         border = '1px solid #ef4444';
                       }
                     } else if (isSelected) {
-                      bg = 'rgba(34, 197, 94, 0.1)';
+                      bg = 'var(--primary-light)';
                       border = '1px solid var(--primary)';
                     }
 
@@ -454,7 +689,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                           type="radio"
                           name={`question-${q.id}`}
                           checked={isSelected}
-                          disabled={isSubmitted}
+                          disabled={isSubmitted || readOnly}
                           onChange={() => handleSelectOption(q.id, optIdx)}
                           style={{ accentColor: 'var(--primary)', cursor: 'pointer' }}
                         />
@@ -476,7 +711,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                 <div>
                   <input
                     type="text"
-                    disabled={isSubmitted}
+                    disabled={isSubmitted || readOnly}
                     value={userAnswer || ''}
                     onChange={(e) => handleTextAnswer(q.id, e.target.value)}
                     placeholder="Escribe tu respuesta aquí..."
@@ -499,11 +734,74 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
                   )}
                 </div>
               )}
+
+              {q.type === 'FILL_IN_THE_BLANKS' && (
+                <div style={{ color: 'var(--text)', fontSize: '1.05rem', lineHeight: '2.5' }}>
+                  {(() => {
+                    let blankIndex = 0;
+                    return getBlankText(q).split(/(\([^)]+\))/g).map((part, partIndex) => {
+                      if (!/^\([^)]+\)$/.test(part)) return <React.Fragment key={partIndex}>{part}</React.Fragment>;
+                      const currentBlankIndex = blankIndex;
+                      blankIndex += 1;
+                      const blankAnswers = Array.isArray(userAnswer) ? userAnswer : [];
+                      const expected = part.slice(1, -1);
+                      const blankCorrect = isSubmitted && isTextCorrect(String(blankAnswers[currentBlankIndex] || ''), expected, q.caseSensitive);
+                      return (
+                        <input
+                          key={partIndex}
+                          type="text"
+                          disabled={isSubmitted || readOnly}
+                          value={blankAnswers[currentBlankIndex] || ''}
+                          onChange={(event) => handleBlankAnswer(q.id, currentBlankIndex, event.target.value)}
+                          aria-label={`Hueco ${currentBlankIndex + 1} de la pregunta ${idx + 1}`}
+                          style={{ width: 'min(150px, 42vw)', margin: '0 0.3rem', padding: '0.35rem 0.5rem', borderRadius: '6px', border: isSubmitted ? `1px solid ${blankCorrect ? '#22c55e' : '#ef4444'}` : '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)', fontSize: '0.95rem', outline: 'none' }}
+                        />
+                      );
+                    });
+                  })()}
+                  {isSubmitted && !isCorrect && (
+                    <p style={{ margin: '0.65rem 0 0', color: '#ef4444', fontSize: '0.85rem' }}>
+                      Respuestas correctas: <strong>{getBlankAnswers(getBlankText(q)).join(' | ')}</strong>
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {q.type === 'OPEN_TEXT' && (
+                <div>
+                  <textarea
+                    rows={6}
+                    disabled={isSubmitted || readOnly}
+                    value={userAnswer || ''}
+                    onChange={(e) => handleTextAnswer(q.id, e.target.value)}
+                    placeholder="Escribe aquí tu respuesta libre o redacción..."
+                    style={{
+                      width: '100%',
+                      minHeight: '130px',
+                      padding: '0.75rem 1rem',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border)',
+                      background: 'var(--background)',
+                      color: 'var(--text)',
+                      outline: 'none',
+                      resize: 'vertical',
+                      fontSize: '0.95rem',
+                      lineHeight: '1.5',
+                      fontFamily: 'inherit'
+                    }}
+                  />
+                  {isSubmitted && (
+                    <p style={{ margin: '0.5rem 0 0', color: '#b45309', fontSize: '0.85rem' }}>
+                      <em>Respuesta enviada. Esta pregunta será evaluada manualmente por el profesor.</em>
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
 
-        {!isSubmitted && questions.length > 0 && (
+        {!readOnly && !isSubmitted && questions.length > 0 && (
           <button
             type="button"
             onClick={handleSubmit}
@@ -513,7 +811,7 @@ const FormPlayer: React.FC<FormPlayerProps> = ({ title, description, questions =
               fontSize: '1rem',
               fontWeight: 'bold',
               alignSelf: 'center',
-              boxShadow: '0 4px 14px rgba(34,197,94,0.4)',
+              boxShadow: 'var(--shadow-primary)',
               cursor: 'pointer'
             }}
           >

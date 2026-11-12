@@ -1,0 +1,339 @@
+import { Router, Request, Response } from 'express';
+import { PrismaClient } from '@prisma/client';
+import { authenticateToken, requireTeacher } from '../middleware/auth';
+import { syncTaskDeliveryOnStepCompletion } from './structuredTasks';
+
+const router = Router();
+const prisma = new PrismaClient();
+interface AuthRequest extends Request {
+  user?: any;
+}
+
+const parsePublishAt = (value: unknown) => {
+  if (!value) return { value: null as Date | null };
+  const publishAt = new Date(String(value));
+  if (Number.isNaN(publishAt.getTime()) || publishAt <= new Date()) return { error: 'La fecha de publicación debe ser futura.' };
+  return { value: publishAt };
+};
+
+// 1. Obtener tareas para el estudiante logueado (o el alumno seleccionado por el tutor)
+router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    let studentId = req.user!.id;
+
+    if (req.user!.role === 'PARENT') {
+      const userEmail = (req.user as any)?.email || '';
+      const requestedStudentId = req.query.studentId as string;
+      if (requestedStudentId) {
+        const child = await prisma.user.findFirst({
+          where: {
+            id: requestedStudentId,
+            role: 'STUDENT',
+            OR: [
+              { parentId: req.user!.id },
+              { parent: { email: { equals: userEmail, mode: 'insensitive' } } }
+            ]
+          }
+        });
+        if (child) studentId = child.id;
+      } else {
+        const child = await prisma.user.findFirst({
+          where: {
+            role: 'STUDENT',
+            OR: [
+              { parentId: req.user!.id },
+              { parent: { email: { equals: userEmail, mode: 'insensitive' } } }
+            ]
+          }
+        });
+        if (child) studentId = child.id;
+      }
+    }
+
+    // Obtener los cursos en los que está el estudiante
+    const enrollments = await prisma.enrollment.findMany({
+      where: { studentId },
+      select: { courseId: true }
+    });
+    const courseIds = enrollments.map(e => e.courseId);
+
+    // Buscar tareas asignadas directamente al estudiante o a sus cursos
+    const assignments = await prisma.assignment.findMany({
+      where: {
+        structuredTaskStepId: null,
+        AND: [
+          {
+            OR: [
+              { studentId },
+              { courseId: { in: courseIds } }
+            ]
+          },
+          {
+            OR: [
+              { publishAt: null },
+              { publishAt: { lte: new Date() } }
+            ]
+          }
+        ]
+      },
+      include: {
+        course: { select: { title: true } },
+        material: { select: { id: true, title: true, type: true, url: true, formData: true, description: true } },
+        teacher: { select: { profile: { select: { firstName: true, lastName: true } } } },
+        submissions: {
+          where: { studentId },
+          orderBy: { submittedAt: 'asc' }
+        }
+      },
+      orderBy: { dueDate: 'asc' }
+    });
+
+    res.json(assignments);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener tareas' });
+  }
+});
+
+// 2. Obtener tareas creadas por el profesor logueado
+router.get('/teacher', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
+  try {
+    const teacherId = req.user!.id;
+    const assignments = await prisma.assignment.findMany({
+      where: {
+        OR: [
+          { teacherId },
+          { course: { modality: 'PRESENCIAL' } },
+          { course: { teacherId } },
+          { course: { assignedTeachers: { some: { teacherId } } } }
+        ]
+      },
+      include: {
+        course: { select: { id: true, title: true } },
+        student: { select: { email: true, profile: { select: { firstName: true, lastName: true } } } },
+        material: { select: { id: true, title: true, type: true, url: true, formData: true, description: true } },
+        structuredTaskStep: { select: { id: true, order: true, title: true, requiresSubmission: true, task: { select: { id: true, title: true, category: true, dueDate: true } } } },
+        submissions: {
+          include: {
+            student: { select: { email: true, profile: { select: { firstName: true, lastName: true } } } }
+          }
+        }
+      },
+      orderBy: { dueDate: 'desc' }
+    });
+
+    res.json(assignments);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener tareas del profesor' });
+  }
+});
+
+// 3. Crear una nueva tarea (Profesor)
+router.post('/', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
+  const { title, description, category, dueDate, publishAt, courseId, studentId, materialId } = req.body;
+  const teacherId = req.user!.id;
+
+  if (!title) return res.status(400).json({ error: 'El título es obligatorio' });
+  if (!courseId && !studentId) return res.status(400).json({ error: 'Debe asignar la tarea a un curso o a un alumno' });
+  const parsedPublishAt = parsePublishAt(publishAt);
+  if (parsedPublishAt.error) return res.status(400).json({ error: parsedPublishAt.error });
+
+  try {
+    const assignment = await prisma.assignment.create({
+      data: {
+        title,
+        description: description || '',
+        category: category || 'GRAMMAR_VOCABULARY',
+        dueDate: dueDate ? new Date(dueDate) : null,
+        publishAt: parsedPublishAt.value,
+        courseId: courseId || null,
+        studentId: studentId || null,
+        materialId: materialId || null,
+        teacherId
+      }
+    });
+    res.status(201).json(assignment);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al crear la tarea' });
+  }
+});
+
+// 4. Marcar tarea como completada (Estudiante)
+router.post('/:id/submit', authenticateToken, async (req: AuthRequest, res: Response) => {
+  if (req.user?.role !== 'STUDENT') return res.status(403).json({ error: 'Solo los alumnos pueden entregar tareas' });
+  const assignmentId = req.params.id as string;
+  const studentId = req.user!.id;
+  const { content, attachment, link, grade } = req.body;
+
+  try {
+    // Check if assignment exists
+    const assignment = await prisma.assignment.findUnique({
+      where: { id: assignmentId }
+    });
+
+    if (!assignment) return res.status(404).json({ error: 'Tarea no encontrada' });
+
+    const isDirectAssignment = assignment.studentId === studentId;
+    const isCourseAssignment = assignment.courseId && await prisma.enrollment.findUnique({
+      where: { studentId_courseId: { studentId, courseId: assignment.courseId } },
+      select: { id: true }
+    });
+    if (!isDirectAssignment && !isCourseAssignment) return res.status(403).json({ error: 'No tienes acceso a esta tarea' });
+
+    // Check if submission already exists
+    const existing = await prisma.submission.findFirst({
+      where: { assignmentId, studentId }
+    });
+
+    if (existing) return res.status(400).json({ error: 'Ya has entregado esta tarea' });
+
+    const normalizedContent = (() => {
+      if (!content && !attachment) return null;
+
+      if (attachment && typeof attachment === 'object') {
+        const payload = {
+          text: typeof content === 'string' ? content : '',
+          link: typeof link === 'string' ? link : null,
+          attachment: {
+            name: typeof attachment.name === 'string' ? attachment.name : 'archivo-adjunto',
+            mimeType: typeof attachment.mimeType === 'string' ? attachment.mimeType : 'application/octet-stream',
+            dataUrl: typeof attachment.dataUrl === 'string' ? attachment.dataUrl : '',
+            size: typeof attachment.size === 'number' ? attachment.size : undefined
+          }
+        };
+
+        return JSON.stringify(payload);
+      }
+
+      return typeof content === 'string' ? content : null;
+    })();
+
+    const submission = await prisma.submission.create({
+      data: {
+        assignmentId,
+        studentId,
+        content: normalizedContent,
+        grade: typeof grade === 'number' ? grade : null
+      }
+    });
+
+    res.status(201).json(submission);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al enviar la tarea' });
+  }
+});
+
+router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
+  const assignmentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const { title, description, category, dueDate, publishAt, courseId, studentId, materialId } = req.body;
+  if (!title?.trim() || (!courseId && !studentId)) {
+    return res.status(400).json({ error: 'Título y destinatario son obligatorios' });
+  }
+  const parsedPublishAt = parsePublishAt(publishAt);
+  if (parsedPublishAt.error) return res.status(400).json({ error: parsedPublishAt.error });
+
+  try {
+    const assignment = await prisma.assignment.updateMany({
+      where: { id: assignmentId, teacherId: req.user!.id },
+      data: {
+        title: title.trim(),
+        description: description || '',
+        category: category || 'GRAMMAR_VOCABULARY',
+        dueDate: dueDate ? new Date(dueDate) : null,
+        publishAt: parsedPublishAt.value,
+        courseId: courseId || null,
+        studentId: studentId || null,
+        materialId: materialId || null
+      }
+    });
+    if (assignment.count === 0) return res.status(404).json({ error: 'Tarea no encontrada' });
+    res.json({ message: 'Tarea actualizada correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al actualizar la tarea' });
+  }
+});
+
+// 5. Calificar / Comentar tarea (Profesor)
+router.post('/submissions/:subId/grade', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
+  const subId = req.params.subId as string;
+  const { grade, feedback, questionScores } = req.body;
+  
+  try {
+    const parsedGrade = grade !== undefined && grade !== null && grade !== '' ? parseFloat(grade) : null;
+    if (parsedGrade !== null && (isNaN(parsedGrade) || parsedGrade < 0 || parsedGrade > 10)) {
+      return res.status(400).json({ error: 'La calificación debe ser un número entre 0 y 10.' });
+    }
+
+    const currentSubmission = await prisma.submission.findUnique({
+      where: { id: subId }
+    });
+
+    if (!currentSubmission) {
+      return res.status(404).json({ error: 'Entrega no encontrada.' });
+    }
+
+    let updatedContent = currentSubmission.content;
+    if (questionScores && typeof questionScores === 'object') {
+      try {
+        const parsed = currentSubmission.content ? JSON.parse(currentSubmission.content) : {};
+        const previousQuestionScores = parsed.questionScores || {};
+        const mergedScores = { ...previousQuestionScores, ...questionScores };
+
+        const baseScore = typeof parsed.baseScore === 'number'
+          ? parsed.baseScore
+          : (typeof parsed.score === 'number' && (!parsed.questionScores || Object.keys(parsed.questionScores).length === 0)
+              ? parsed.score
+              : 0);
+
+        const openTextTotal = Object.values(mergedScores).reduce((acc: number, val: any) => acc + (Number(val) || 0), 0);
+        const newTotalEarned = Number((baseScore + openTextTotal).toFixed(2));
+
+        parsed.questionScores = mergedScores;
+        parsed.score = newTotalEarned;
+        if (parsed.baseScore === undefined) {
+          parsed.baseScore = baseScore;
+        }
+        updatedContent = JSON.stringify(parsed);
+      } catch (parseErr) {
+        console.error('Error al actualizar questionScores en submission.content:', parseErr);
+      }
+    }
+
+    const submission = await prisma.submission.update({
+      where: { id: subId },
+      data: {
+        grade: parsedGrade,
+        feedback: feedback !== undefined ? (feedback ? String(feedback).trim() : null) : undefined,
+        content: updatedContent
+      },
+      include: {
+        student: { select: { email: true, profile: { select: { firstName: true, lastName: true } } } }
+      }
+    });
+
+    if (submission.structuredTaskId) {
+      await syncTaskDeliveryOnStepCompletion(submission.structuredTaskId, submission.studentId);
+    }
+
+    res.json(submission);
+  } catch (error) {
+    console.error('Error al calificar la tarea:', error);
+    res.status(500).json({ error: 'Error al calificar la tarea' });
+  }
+});
+
+// 6. Eliminar tarea (Profesor)
+router.delete('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
+  const assignmentId = req.params.id as string;
+  const teacherId = req.user!.id;
+
+  try {
+    await prisma.assignment.delete({
+      where: { id: assignmentId, teacherId }
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al eliminar la tarea' });
+  }
+});
+
+export default router;

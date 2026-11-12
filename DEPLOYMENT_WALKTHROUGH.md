@@ -35,7 +35,20 @@ El proyecto ya incluye valores predeterminados para desarrollo local, pero aseg�
 DATABASE_URL="postgresql://root:rootpassword@db:5432/hitschool?schema=public"
 JWT_SECRET="supersecretjwtkey_change_in_production"
 PORT=3000
+FRONTEND_URL="http://localhost:5173"
+SMTP_HOST="smtp.example.com"
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_REJECT_UNAUTHORIZED=false
+SMTP_USER="pruebas@hitschool.example.com"
+SMTP_PASSWORD="credencial-de-prueba"
+SMTP_FROM="HitSchool <pruebas@hitschool.example.com>"
+SUPPORT_EMAIL="soporte@tudominio.com"
 ```
+
+Las credenciales anteriores son datos de prueba y no envían correos reales. Sustitúyelas por las credenciales de tu proveedor SMTP antes de probar la recuperación de contraseña. `SMTP_REJECT_UNAUTHORIZED=false` solo debe usarse en entornos locales cuando un antivirus o proxy intercepte TLS con un certificado autofirmado; en producción debe omitirse o establecerse en `true`. El backend utiliza SMTP directamente tanto para la recuperación como para el correo de bienvenida de los profesores.
+
+`SUPPORT_EMAIL` es opcional y se muestra como contacto en el pie de los correos transaccionales. Si no se configura, el mensaje indica al destinatario que contacte con la administración de su academia.
 
 ---
 
@@ -62,9 +75,9 @@ docker-compose up -d --build
 
 Una vez que los contenedores estén levantados, sincroniza el esquema de Prisma y genera los usuarios y materiales de demostración:
 
-### Paso 5.1: Sincronizar el esquema de tablas en PostgreSQL
+### Paso 5.1: Sincronizar el esquema y las reglas de email en PostgreSQL
 ```bash
-docker exec hit_school_backend npx prisma db push
+docker exec hit_school_backend npm run schema:sync
 ```
 
 ### Paso 5.2: Cargar datos de prueba (Profesor, Alumno y Recursos Didácticos)
@@ -73,28 +86,42 @@ docker exec hit_school_backend npx prisma db seed
 ```
 
 > **Datos de Acceso Precargados:**
+> - 💼 **Profesor:** `admin@hitschool.com` | Contraseña: `1234`
 > - 💼 **Profesor:** `profesor@hitschool.com` | Contraseña: `1234`
-> - 🎓 **Alumno:** `alumno@hitschool.com` | Contraseña: `1234`
+> - 💼 **Profesor2:** `profesor2@hitschool.com` | Contraseña: `1234`
+> - 🎓 **Alumno:** `marpargut@hitschool.com` | Contraseña: `1234`
+> - 🎓 **Tutor:** `marpargut@hitschool.com` | Contraseña: `123456`
 
 ---
 
 ## 🤖 6. Configurar n8n para el Envío Automático de Correos
 
-Cuando el profesor da de alta a un nuevo alumno, el backend dispara un Webhook a n8n para que este envíe automáticamente un email con sus credenciales.
+Cuando el profesor crea la ficha de un alumno, la cuenta queda pendiente de alta. El email de cuenta activada se envía directamente por SMTP desde el backend cuando se formaliza su primera matrícula. Si el alumno ya estuvo matriculado, se dio de baja y vuelve a matricularse, se envía el email de cuenta reactivada.
+
+La recuperación de contraseña se realiza directamente desde el backend mediante SMTP, por lo que no necesita un webhook de n8n. Cuando el usuario está activo, el backend genera una contraseña temporal, la envía al correo indicado y solo después actualiza la contraseña almacenada.
+
+Las publicaciones del tablón también generan notificaciones directamente desde el backend mediante SMTP. Al publicar un anuncio, se envía un correo individual a cada alumno matriculado y a su tutor asociado cuando sus cuentas están activas. Los destinatarios duplicados se agrupan por correo y el profesor que publica no recibe una copia. El mensaje incluye la clase, el profesor, el contenido del anuncio y un enlace para acceder a la clase. Si algún correo falla, el anuncio se conserva y el error queda registrado en los logs del backend.
+
+Las tareas estructuradas/multistep también generan notificaciones directamente desde el backend mediante SMTP. Las tareas de clase se envían a todos los alumnos matriculados y a sus tutores activos; las tareas individuales solo se envían a los alumnos asignados y a sus tutores activos. Las plantillas no generan correos y el profesor no recibe copia. Si `publishAt` tiene una fecha futura, el backend espera hasta esa fecha; si está vacío, se notifica inmediatamente. El backend revisa las tareas pendientes cada minuto y guarda la fecha de envío para evitar duplicados tras reinicios. Si SMTP falla, la tarea se conserva y queda pendiente para reintento.
+
+Cuando se reactiva un alumno o un profesor dado de baja, el backend genera una nueva contraseña temporal, la guarda cifrada y la envía directamente por SMTP al correo de la cuenta reactivada. La reactivación se completa aunque el correo falle; el error queda registrado en los logs y la contraseña nueva deberá comunicarse manualmente si fuera necesario.
+
+Los tutores creados desde Gestión de Tutores o al crear un alumno quedan pendientes de alta y no reciben correo en ese momento. Al pulsar **Dar de alta** en `/teacher/parents`, el backend activa la cuenta y envía sus credenciales por SMTP; si se trata de una cuenta dada de baja anteriormente, envía el correo de reactivación. Estas notificaciones se gestionan directamente desde el backend y no necesitan un flujo de n8n. Cuando un alumno se da de baja, el backend oculta ese alumno del portal del tutor y, si el tutor ya no tiene ningún alumno activo, desactiva automáticamente su cuenta. La gestión de tutores permite listar, buscar, editar, crear, dar de alta, dar de baja/reactivar y eliminar tutores sin alumnos asociados.
 
 ### Paso a Paso en n8n:
 1. Accede a **[http://localhost:5678](http://localhost:5678)** y crea tu cuenta de administrador local.
-2. Crea un nuevo flujo (**"Add workflow"**) y añade un nodo de tipo **Webhook**:
+2. Los correos de alta inicial y reactivación de alumnos ya no necesitan un flujo de n8n: los envía directamente el backend mediante SMTP.
+3. Si necesitas mantener automatizaciones adicionales, crea un nuevo flujo (**"Add workflow"**) y añade un nodo de tipo **Webhook**:
    - **HTTP Method:** `POST`
    - **Path:** `nuevo-alumno`
    - **Webhook URLs:** Verás que la URL de test es `http://localhost:5678/webhook-test/nuevo-alumno`.
-3. Haz clic en **"Listen for test event"** en el nodo.
-4. Conecta el Webhook a un nodo de **Gmail** (o SMTP):
+4. Haz clic en **"Listen for test event"** en el nodo.
+5. Conecta el Webhook a un nodo de **Gmail** (o SMTP):
    - **Acción:** `Send Email`.
    - **To:** `{{ $json.body.email }}`.
    - **Subject:** `¡Bienvenido a HitSchool, {{ $json.body.firstName }}! 🎓`.
    - **Message (HTML):** Usa la plantilla prediseñada con los estilos corporativos de HitSchool.
-5. Guarda el flujo y actívalo (**Active: ON**).
+6. Guarda el flujo y actívalo (**Active: ON**).
 
 ---
 
@@ -104,11 +131,29 @@ Sigue esta lista de verificación para comprobar que todo funciona al 100%:
 
 ### 1. Inicio de Sesión y Roles
 - Ve a [http://localhost:5173](http://localhost:5173).
-- Selecciona **"Soy Profesor"** e introduce `profesor@hitschool.com` / `1234`.
+- Selecciona el rol correspondiente (**"Soy Alumno"**, **"Soy Tutor / Padre"** o **"Soy Profesor"**).
+- Introduce las credenciales (ej. `profesor@hitschool.com` / `1234` para Profesor, o `alumno@hitschool.com` / `1234` para Alumno).
 - Comprueba que la barra lateral persistente aparece a la izquierda con:
   - 📖 **Mis Clases**
   - 📁 **Material de Clase**
   - 👥 **Gestión de Alumnos**
+
+### Notificaciones del Tablón
+- Crea o utiliza una clase con al menos un alumno matriculado y, si procede, un tutor asociado.
+- Verifica que las cuentas del alumno y del tutor estén activas.
+- Publica un anuncio desde la pestaña **Tablón**.
+- Comprueba que el alumno y su tutor reciben el correo en sus direcciones respectivas.
+- Comprueba que una cuenta inactiva no recibe la notificación y que el anuncio sigue visible en la clase.
+- Para probar un fallo de correo, detén temporalmente el servicio SMTP o usa una configuración inválida y verifica el error en `docker logs hit_school_backend`; la publicación debe conservarse.
+
+### Notificaciones de Tareas Estructuradas
+- Crea una tarea estructurada de tipo **Clase** para una clase con alumnos matriculados.
+- Comprueba que los alumnos y tutores activos reciben el correo y que el profesor no lo recibe.
+- Crea una tarea estructurada de tipo **Individual** para varios alumnos y comprueba que solo ellos y sus tutores reciben la notificación.
+- Programa una tarea con `publishAt` futuro y verifica que no llega antes de la fecha; el backend la procesará en el siguiente ciclo de un minuto.
+- Comprueba que una plantilla, una cuenta inactiva o un destinatario duplicado no genera envíos incorrectos.
+- Reinicia el backend después de un envío y verifica que no se repite el correo.
+- Para probar un fallo SMTP, usa una configuración inválida y revisa `docker logs hit_school_backend`; la tarea debe conservarse y reintentarse cuando el SMTP vuelva a funcionar.
 
 ### 2. Gestión de Aulas (Core Google Classroom)
 - En **Mis Clases**, pulsa **`+ Crear nueva clase`** (ej. *B2 First Cambridge*).
@@ -129,7 +174,9 @@ Sigue esta lista de verificación para comprobar que todo funciona al 100%:
 
 ### 4. Gestión Completa de Alumnos (CRUD)
 - Entra a **Gestión de Alumnos** (`/teacher/students`):
-  - Pulsa **`+ Nuevo Alumno`** y rellena el formulario. Comprueba que n8n recibe los datos y se dispara el webhook.
+  - Pulsa **`+ Nuevo Alumno`** y rellena el formulario. Comprueba que la cuenta queda pendiente de matrícula.
+  - Matricula por primera vez al alumno y comprueba que recibe por SMTP el correo de cuenta activada con sus credenciales.
+  - Da de baja al alumno y vuelve a matricularlo; comprueba que recibe el correo de cuenta reactivada.
   - Utiliza el **buscador en tiempo real** para filtrar por nombre o correo.
   - Pulsa el botón de **Editar** (icono de lápiz) para modificar los datos de un alumno.
   - Pulsa el botón de **Eliminar** (icono de papelera) y confirma el borrado seguro en cascada.
@@ -165,7 +212,7 @@ docker-compose down
 ```bash
 docker-compose down -v
 docker-compose up -d --build
-docker exec hit_school_backend npx prisma db push
+docker exec hit_school_backend npm run schema:sync
 docker exec hit_school_backend npx prisma db seed
 ```
 
@@ -196,3 +243,30 @@ HIT_SCHOOL/
 
 ---
 *HitSchool © 2026 — Plataforma Educativa Integral.*
+
+---
+
+## Recursos en Google Drive
+
+Google Drive alojará los archivos, así que no consumirá almacenamiento ni ancho de banda del servidor. HitSchool solo guarda y muestra el enlace.
+
+Para organizar los recursos:
+
+1. Crea una carpeta en Google Drive, por ejemplo `HitSchool - Recursos`.
+2. Dentro crea subcarpetas: `Imágenes`, `Vídeos`, `Audios` y `Documentos`.
+3. Pulsa con botón derecho en cada carpeta y selecciona `Compartir`.
+4. En “Acceso general”, selecciona `Cualquier persona con el enlace`.
+5. Asigna el rol `Lector`.
+6. Sube los archivos a sus carpetas correspondientes.
+7. Para añadir un recurso en HitSchool, abre el archivo concreto, pulsa `Compartir` → `Copiar enlace`, y pega ese enlace individual en Material de Clase.
+
+No pegues el enlace de la carpeta en un recurso: debe usarse siempre el enlace del archivo concreto.
+
+Compatible con:
+
+- Imágenes: se pueden previsualizar.
+- Vídeos: compatibles; MP4 es el formato más fiable.
+- Audios: compatibles; MP3 es el formato recomendado.
+- Documentos/PDF: compatibles.
+
+La carpeta pública facilita que los archivos hereden permisos de lectura, pero HitSchool debe recibir el enlace individual de cada archivo.

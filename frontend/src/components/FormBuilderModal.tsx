@@ -1,14 +1,29 @@
-import React, { useState } from 'react';
-import { X, Plus, Trash2, CheckCircle, Eye, Save, Music, HelpCircle } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { X, Plus, Trash2, Eye, Save, Music, HelpCircle, Image, Search, FileText } from 'lucide-react';
 import FormPlayer from './FormPlayer';
+import AudioPlayer from './AudioPlayer';
+import CustomSelect from './CustomSelect';
+
+interface MediaResource {
+  id: string;
+  title: string;
+  description?: string | null;
+  type: 'AUDIO' | 'IMAGE';
+  url?: string | null;
+  level?: string;
+}
 
 interface Question {
   id: string;
   questionText: string;
+  blankText?: string;
   audioUrl?: string;
-  type: 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'SHORT_ANSWER';
+  imageUrl?: string;
+  type: 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'SHORT_ANSWER' | 'FILL_IN_THE_BLANKS' | 'OPEN_TEXT';
   options: string[];
   correctAnswer: string | number;
+  caseSensitive?: boolean;
   points: number;
 }
 
@@ -17,6 +32,20 @@ interface FormBuilderModalProps {
   onSaveSuccess: () => void;
   initialData?: any;
 }
+
+const getBlankAnswers = (questionText: string) => Array.from(questionText.matchAll(/\(([^)]+)\)/g), (match) => match[1]);
+
+const replaceBlankAnswer = (questionText: string, blankIndex: number, replacement: string) => {
+  let currentIndex = 0;
+  return questionText.replace(/\(([^)]+)\)/g, (match) => {
+    if (currentIndex === blankIndex) {
+      currentIndex += 1;
+      return `(${replacement})`;
+    }
+    currentIndex += 1;
+    return match;
+  });
+};
 
 const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSuccess, initialData }) => {
   const [title, setTitle] = useState(initialData?.title || '');
@@ -29,6 +58,7 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
         id: 'q-1',
         questionText: 'Listen to the conversation and choose the correct answer:',
         audioUrl: '',
+        imageUrl: '',
         type: 'MULTIPLE_CHOICE',
         options: ['Option A', 'Option B', 'Option C'],
         correctAnswer: 0,
@@ -39,12 +69,48 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
   const [previewMode, setPreviewMode] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [mediaResources, setMediaResources] = useState<MediaResource[]>([]);
+  const [mediaPicker, setMediaPicker] = useState<{ questionIndex: number; type: MediaResource['type'] } | null>(null);
+  const [mediaSearch, setMediaSearch] = useState('');
+
+  useEffect(() => {
+    const loadMediaResources = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+        const response = await fetch(`${apiUrl}/api/materials`, { headers: { Authorization: `Bearer ${token}` } });
+        if (response.ok) setMediaResources(await response.json());
+      } catch (loadError) {
+        console.error('Error al cargar los recursos multimedia:', loadError);
+      }
+    };
+
+    loadMediaResources();
+  }, []);
+
+  const pickerResources = useMemo(() => {
+    if (!mediaPicker) return [];
+    const query = mediaSearch.trim().toLowerCase();
+    return mediaResources.filter((resource) => resource.type === mediaPicker.type && Boolean(resource.url) && (!query || `${resource.title} ${resource.description || ''}`.toLowerCase().includes(query)));
+  }, [mediaPicker, mediaResources, mediaSearch]);
+
+  const openMediaPicker = (questionIndex: number, type: MediaResource['type']) => {
+    setMediaPicker({ questionIndex, type });
+    setMediaSearch('');
+  };
+
+  const selectMediaResource = (resource: MediaResource) => {
+    if (!mediaPicker || !resource.url) return;
+    updateQuestion(mediaPicker.questionIndex, mediaPicker.type === 'AUDIO' ? { audioUrl: resource.url } : { imageUrl: resource.url });
+    setMediaPicker(null);
+  };
 
   const addQuestion = () => {
     const newQ: Question = {
       id: `q-${Date.now()}`,
       questionText: '',
       audioUrl: '',
+      imageUrl: '',
       type: 'MULTIPLE_CHOICE',
       options: ['Opción 1', 'Opción 2', 'Opción 3'],
       correctAnswer: 0,
@@ -148,7 +214,8 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
   };
 
   return (
-    <div style={{
+    <>
+    <div className="modal-backdrop" style={{
       position: 'fixed',
       inset: 0,
       background: 'rgba(0,0,0,0.7)',
@@ -159,26 +226,20 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
       zIndex: 60,
       padding: '1rem'
     }}>
-      <div className="glass-panel animate-fade-in" style={{
+      <div className="glass-panel modal-card modal-card--wide form-builder__card" style={{
         width: '100%',
         maxWidth: '900px',
         maxHeight: '90vh',
         display: 'flex',
         flexDirection: 'column',
         padding: 0,
+        borderRadius: '24px',
         overflow: 'hidden'
       }}>
         {/* Modal Header */}
-        <div style={{
-          padding: '1.25rem 2rem',
-          borderBottom: '1px solid var(--border)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          background: 'rgba(255,255,255,0.02)'
-        }}>
+        <div className="form-builder__header">
           <div>
-            <h3 style={{ margin: 0, color: 'var(--text)', fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <HelpCircle style={{ color: 'var(--primary)' }} />
               {initialData?.id ? 'Editar Examen Interactivo' : 'Creador de Examen / Formulario'}
             </h3>
@@ -187,7 +248,7 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
             </span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <button
               type="button"
               onClick={() => setPreviewMode(!previewMode)}
@@ -195,11 +256,11 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.4rem',
-                padding: '0.5rem 1rem',
+                padding: '0.5rem 0.9rem',
                 borderRadius: '6px',
                 border: '1px solid var(--border)',
-                background: previewMode ? 'var(--primary)' : 'var(--background)',
-                color: previewMode ? '#ffffff' : 'var(--text)',
+                background: previewMode ? 'var(--primary)' : 'var(--surface)',
+                color: previewMode ? '#ffffff' : 'var(--text-main)',
                 cursor: 'pointer',
                 fontSize: '0.85rem'
               }}
@@ -207,16 +268,16 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
               <Eye size={16} /> {previewMode ? 'Modo Editor' : 'Vista Previa'}
             </button>
 
-            <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+            <button onClick={onClose} className="modal-close" aria-label="Cerrar modal">
               <X size={22} />
             </button>
           </div>
         </div>
 
         {/* Modal Body */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '2rem' }}>
+        <div className="form-builder__body">
           {error && (
-            <div style={{ padding: '0.75rem 1rem', background: '#fee2e2', color: '#ef4444', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
+            <div style={{ padding: '0.75rem 1rem', background: '#fdf0f0', color: '#9e2a2b', border: '1px solid #f7caca', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
               {error}
             </div>
           )}
@@ -226,65 +287,74 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
               title={title || 'Título del Examen'}
               description={description}
               questions={questions}
+              readOnly
+              initialAnswers={Object.fromEntries(questions.map((question) => [question.id, question.correctAnswer]))}
             />
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
               {/* Form Config Bar */}
-              <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Título del Examen / Test</label>
-                  <input
-                    type="text"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Ej. B2 First Listening Mock Exam - Part 1"
-                    style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)', fontSize: '1rem', fontWeight: 'bold' }}
-                  />
+              <div className="glass-panel form-builder__config">
+                <div className="form-builder__config-grid">
+                  <div className="form-builder__field">
+                    <label htmlFor="form-builder-title">Título del Examen / Test</label>
+                    <input
+                      id="form-builder-title"
+                      type="text"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="Ej. B2 First Listening Mock Exam - Part 1"
+                      style={{ fontWeight: 600 }}
+                    />
+                  </div>
+
+                  <div className="form-builder__field">
+                    <label htmlFor="form-builder-level">Nivel</label>
+                    <CustomSelect
+                      id="form-builder-level"
+                      value={level}
+                      onChange={(val) => setLevel(val)}
+                      options={[
+                        { value: 'A1', label: 'A1 (Beginner)' },
+                        { value: 'A2', label: 'A2 (Elementary)' },
+                        { value: 'B1', label: 'B1 (Intermediate)' },
+                        { value: 'B2', label: 'B2 (Upper-Intermediate)' },
+                        { value: 'C1', label: 'C1 (Advanced)' },
+                        { value: 'C2', label: 'C2 (Proficiency)' },
+                        { value: 'GENERAL', label: 'General' }
+                      ]}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+
+                  <div className="form-builder__field">
+                    <label htmlFor="form-builder-skill">Pilar (Skill)</label>
+                    <CustomSelect
+                      id="form-builder-skill"
+                      value={category}
+                      onChange={(val) => setCategory(val)}
+                      options={[
+                        { value: 'MOCK_EXAM', label: 'Mock Exams' },
+                        { value: 'LISTENING', label: 'Listening' },
+                        { value: 'READING', label: 'Reading' },
+                        { value: 'GRAMMAR_VOCABULARY', label: 'Grammar and Vocabulary' },
+                        { value: 'WRITING', label: 'Writing' },
+                        { value: 'SPEAKING', label: 'Speaking' }
+                      ]}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Instrucciones / Descripción</label>
+                <div className="form-builder__field">
+                  <label htmlFor="form-builder-description">Instrucciones / Descripción</label>
                   <textarea
+                    id="form-builder-description"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Instrucciones para el alumno..."
-                    style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)', minHeight: '60px', resize: 'vertical' }}
+                    rows={2}
+                    style={{ resize: 'vertical' }}
                   />
-                </div>
-
-                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                  <div style={{ flex: 1, minWidth: '180px' }}>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Nivel</label>
-                    <select
-                      value={level}
-                      onChange={(e) => setLevel(e.target.value)}
-                      style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }}
-                    >
-                      <option value="A1">A1 (Beginner)</option>
-                      <option value="A2">A2 (Elementary)</option>
-                      <option value="B1">B1 (Intermediate)</option>
-                      <option value="B2">B2 (Upper-Intermediate)</option>
-                      <option value="C1">C1 (Advanced)</option>
-                      <option value="C2">C2 (Proficiency)</option>
-                      <option value="GENERAL">General</option>
-                    </select>
-                  </div>
-
-                  <div style={{ flex: 1, minWidth: '180px' }}>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Pilar (Skill)</label>
-                    <select
-                      value={category}
-                      onChange={(e) => setCategory(e.target.value)}
-                      style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }}
-                    >
-                      <option value="MOCK_EXAM">Mock Exams</option>
-                      <option value="LISTENING">Listening</option>
-                      <option value="READING">Reading</option>
-                      <option value="GRAMMAR_VOCABULARY">Grammar and Vocabulary</option>
-                      <option value="WRITING">Writing</option>
-                      <option value="SPEAKING">Speaking</option>
-                    </select>
-                  </div>
                 </div>
               </div>
 
@@ -314,44 +384,83 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
                           type="text"
                           value={q.questionText}
                           onChange={(e) => updateQuestion(qIndex, { questionText: e.target.value })}
-                          placeholder="Ej. What is the speaker suggesting in the recording?"
+                          placeholder="Ej. Completa los huecos con la respuesta correcta."
                           style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }}
                         />
                       </div>
 
-                      {/* Audio URL Input */}
                       <div>
                         <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                          <Music size={15} style={{ color: 'var(--primary)' }} /> URL de Audio para esta pregunta (Opcional para Listening)
+                          <Music size={15} style={{ color: 'var(--primary)' }} /> Audio de Material de Clase (Opcional para Listening)
                         </label>
-                        <input
-                          type="url"
-                          value={q.audioUrl || ''}
-                          onChange={(e) => updateQuestion(qIndex, { audioUrl: e.target.value })}
-                          placeholder="https://ejemplo.com/audio-track-1.mp3"
-                          style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)', fontSize: '0.85rem' }}
-                        />
+                        <button type="button" onClick={() => openMediaPicker(qIndex, 'AUDIO')} className="btn-secondary" style={{ marginTop: '0.6rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem' }}>
+                          <Music size={15} /> {q.audioUrl?.trim() ? 'Cambiar audio seleccionado' : 'Seleccionar audio de Material de Clase'}
+                        </button>
+                        {q.audioUrl?.trim() && (
+                          <div style={{ marginTop: '0.75rem', padding: '0.85rem', border: '1px solid var(--primary-border)', borderRadius: '8px', background: 'var(--primary-subtle)' }}>
+                            <span style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.78rem', color: 'var(--primary-text)', fontWeight: 700 }}>
+                              VISTA PREVIA DEL AUDIO
+                            </span>
+                            <AudioPlayer src={q.audioUrl.trim()} title={`Audio de la pregunta ${qIndex + 1}`} />
+                            <button type="button" onClick={() => updateQuestion(qIndex, { audioUrl: '' })} style={{ marginTop: '0.65rem', border: 'none', background: 'transparent', color: '#9e2a2b', cursor: 'pointer', fontSize: '0.8rem', padding: 0 }}>
+                              Quitar audio
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                          <Image size={15} style={{ color: 'var(--primary)' }} /> Imagen de Material de Clase (Opcional)
+                        </label>
+                        <button type="button" onClick={() => openMediaPicker(qIndex, 'IMAGE')} className="btn-secondary" style={{ marginTop: '0.6rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem' }}>
+                          <Image size={15} /> {q.imageUrl?.trim() ? 'Cambiar imagen seleccionada' : 'Seleccionar imagen de Material de Clase'}
+                        </button>
+                        {q.imageUrl && (
+                          <div style={{ marginTop: '0.75rem', padding: '0.85rem', border: '1px solid var(--primary-border)', borderRadius: '8px', background: 'var(--primary-subtle)' }}>
+                            <span style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.78rem', color: 'var(--primary-text)', fontWeight: 700 }}>
+                              VISTA PREVIA DE LA IMAGEN
+                            </span>
+                            <img
+                              src={q.imageUrl}
+                              alt={`Vista previa de la pregunta ${qIndex + 1}`}
+                              style={{ display: 'block', width: '100%', maxWidth: '460px', maxHeight: '260px', objectFit: 'contain', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)' }}
+                            />
+                            <button type="button" onClick={() => updateQuestion(qIndex, { imageUrl: '' })} style={{ marginTop: '0.65rem', border: 'none', background: 'transparent', color: '#9e2a2b', cursor: 'pointer', fontSize: '0.8rem', padding: 0 }}>
+                              Quitar imagen
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       <div style={{ display: 'flex', gap: '1rem' }}>
                         <div style={{ flex: 1 }}>
                           <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Tipo de Pregunta</label>
-                          <select
+                          <CustomSelect
                             value={q.type}
-                            onChange={(e: any) => {
-                              const newType = e.target.value;
+                            onChange={(newType: any) => {
                               let newOptions = q.options;
                               if (newType === 'TRUE_FALSE') {
                                 newOptions = ['True', 'False'];
+                              } else if (newType === 'OPEN_TEXT') {
+                                newOptions = [];
                               }
-                              updateQuestion(qIndex, { type: newType, options: newOptions, correctAnswer: 0 });
+                              updateQuestion(qIndex, {
+                                type: newType,
+                                options: newOptions,
+                                correctAnswer: (newType === 'FILL_IN_THE_BLANKS' || newType === 'OPEN_TEXT') ? '' : 0,
+                                blankText: newType === 'FILL_IN_THE_BLANKS' && !q.blankText ? 'Hola me llamo (Carlos) y tengo (12) años.' : q.blankText
+                              });
                             }}
-                            style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }}
-                          >
-                            <option value="MULTIPLE_CHOICE">Opción Múltiple (Test)</option>
-                            <option value="TRUE_FALSE">Verdadero / Falso</option>
-                            <option value="SHORT_ANSWER">Respuesta Corta</option>
-                          </select>
+                            options={[
+                              { value: 'MULTIPLE_CHOICE', label: 'Opción Múltiple (Test)' },
+                              { value: 'TRUE_FALSE', label: 'Verdadero / Falso' },
+                              { value: 'SHORT_ANSWER', label: 'Respuesta Corta' },
+                              { value: 'FILL_IN_THE_BLANKS', label: 'Completar espacios (Fill in the Blanks)' },
+                              { value: 'OPEN_TEXT', label: 'Texto Libre / Redacción' }
+                            ]}
+                            style={{ width: '100%' }}
+                          />
                         </div>
 
                         <div style={{ width: '120px' }}>
@@ -397,7 +506,7 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
                                     padding: '0.5rem 0.75rem',
                                     borderRadius: '6px',
                                     border: isCorrect ? '1px solid var(--primary)' : '1px solid var(--border)',
-                                    background: isCorrect ? 'rgba(34,197,94,0.05)' : 'var(--background)',
+                                    background: isCorrect ? 'var(--primary-subtle)' : 'var(--background)',
                                     color: 'var(--text)'
                                   }}
                                 />
@@ -450,6 +559,82 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
                           />
                         </div>
                       )}
+
+                      {q.type === 'FILL_IN_THE_BLANKS' && (
+                        <div style={{ padding: '0.85rem 1rem', borderRadius: '8px', background: 'var(--primary-subtle)', border: '1px solid var(--primary-border)' }}>
+                          <p style={{ margin: 0, color: 'var(--primary-text)', fontSize: '0.85rem', lineHeight: '1.45' }}>
+                            Escribe el texto usando paréntesis () para encerrar las respuestas correctas. Ej: Hola me llamo (Carlos).
+                          </p>
+                          <div style={{ marginTop: '0.85rem' }}>
+                            <label style={{ display: 'block', marginBottom: '0.45rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 700 }}>Texto con huecos</label>
+                            <textarea
+                              rows={3}
+                              value={q.blankText || ''}
+                              onChange={(e) => updateQuestion(qIndex, { blankText: e.target.value })}
+                              placeholder="Ej. Hola me llamo (Carlos) y tengo (12) años."
+                              style={{ width: '100%', padding: '0.65rem 0.75rem', borderRadius: '6px', border: '1px solid var(--primary-border)', background: 'var(--surface)', color: 'var(--text-main)', resize: 'vertical', lineHeight: '1.45' }}
+                            />
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.85rem' }}>
+                            <strong style={{ color: 'var(--text-main)', fontSize: '0.85rem' }}>Huecos y respuestas correctas</strong>
+                            {getBlankAnswers(q.blankText || '').map((answer, blankIndex) => (
+                              <div key={blankIndex} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                <span style={{ minWidth: '64px', color: 'var(--text-muted)', fontSize: '0.8rem' }}>Hueco {blankIndex + 1}</span>
+                                <input
+                                  type="text"
+                                  value={answer}
+                                  onChange={(e) => updateQuestion(qIndex, { blankText: replaceBlankAnswer(q.blankText || '', blankIndex, e.target.value) })}
+                                  placeholder={`Respuesta ${blankIndex + 1}`}
+                                  style={{ flex: 1, padding: '0.55rem 0.65rem', borderRadius: '6px', border: '1px solid var(--primary-border)', background: 'var(--surface)', color: 'var(--text-main)' }}
+                                />
+                              </div>
+                            ))}
+                            {getBlankAnswers(q.blankText || '').length === 0 && (
+                              <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                                Añade una respuesta entre paréntesis en el texto para crear un hueco.
+                              </p>
+                            )}
+                          </div>
+                          <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', marginTop: '0.75rem', color: 'var(--text-main)', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={Boolean(q.caseSensitive)}
+                              onChange={(e) => updateQuestion(qIndex, { caseSensitive: e.target.checked })}
+                              style={{ accentColor: 'var(--primary)' }}
+                            />
+                            Sensible a mayúsculas
+                          </label>
+                        </div>
+                      )}
+
+                      {q.type === 'OPEN_TEXT' && (
+                        <div style={{ padding: '0.85rem 1rem', borderRadius: '8px', background: '#fffbeb', border: '1px solid #fde68a' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: '#b45309', fontWeight: 600, fontSize: '0.86rem', marginBottom: '0.45rem' }}>
+                            <FileText size={16} />
+                            <span>Nota asignada por profesor, no se autocorrige</span>
+                          </div>
+                          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.82rem', lineHeight: '1.4' }}>
+                            El alumno responderá libremente en un área de texto sin límite de palabras ni caracteres.
+                          </p>
+                          <div style={{ marginTop: '0.65rem' }}>
+                            <textarea
+                              rows={3}
+                              disabled
+                              placeholder="Vista previa: El alumno redactará aquí su respuesta libre o redacción..."
+                              style={{
+                                width: '100%',
+                                padding: '0.6rem 0.75rem',
+                                borderRadius: '6px',
+                                border: '1px dashed #d1d5db',
+                                background: '#ffffff',
+                                color: 'var(--text-muted)',
+                                resize: 'none',
+                                fontSize: '0.85rem'
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -464,9 +649,9 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
                     gap: '0.5rem',
                     padding: '0.85rem',
                     borderRadius: '8px',
-                    border: '2px dashed var(--primary)',
-                    background: 'rgba(34, 197, 94, 0.05)',
-                    color: 'var(--primary)',
+                    border: '2px dashed var(--primary-border)',
+                    background: 'var(--primary-subtle)',
+                    color: 'var(--primary-text)',
                     fontWeight: '600',
                     cursor: 'pointer'
                   }}
@@ -479,19 +664,12 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
         </div>
 
         {/* Modal Footer */}
-        <div style={{
-          padding: '1.25rem 2rem',
-          borderTop: '1px solid var(--border)',
-          display: 'flex',
-          justifyContent: 'flex-end',
-          gap: '1rem',
-          background: 'rgba(255,255,255,0.02)'
-        }}>
+        <div className="form-builder__footer">
           <button
             type="button"
             onClick={onClose}
             style={{
-              padding: '0.75rem 1.5rem',
+              padding: '0.65rem 1.25rem',
               borderRadius: '8px',
               border: '1px solid var(--border)',
               background: 'transparent',
@@ -506,13 +684,53 @@ const FormBuilderModal: React.FC<FormBuilderModalProps> = ({ onClose, onSaveSucc
             onClick={handleSave}
             disabled={saving}
             className="btn-primary"
-            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.75rem' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.65rem 1.5rem' }}
           >
             <Save size={18} /> {saving ? 'Guardando...' : 'Guardar Formulario'}
           </button>
         </div>
       </div>
     </div>
+    {mediaPicker && createPortal(
+      <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'grid', placeItems: 'center', padding: '1rem', background: 'rgba(34, 49, 43, 0.48)' }} onClick={() => setMediaPicker(null)}>
+        <div className="glass-panel" style={{ width: 'min(100%, 980px)', maxHeight: '86vh', overflow: 'hidden', padding: 0, display: 'flex', flexDirection: 'column' }} onClick={(event) => event.stopPropagation()}>
+          <header style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)' }}>
+            <div>
+              <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                {mediaPicker.type === 'AUDIO' ? <Music size={19} style={{ color: 'var(--primary)' }} /> : <Image size={19} style={{ color: 'var(--primary)' }} />}
+                Seleccionar {mediaPicker.type === 'AUDIO' ? 'audio' : 'imagen'}
+              </h3>
+              <p style={{ margin: '0.3rem 0 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Materiales disponibles en tu biblioteca de clase.</p>
+            </div>
+            <button type="button" onClick={() => setMediaPicker(null)} aria-label="Cerrar biblioteca" title="Cerrar" style={{ width: '34px', height: '34px', flexShrink: 0, border: 'none', background: 'transparent', color: 'var(--text-muted)', display: 'inline-grid', placeItems: 'center', cursor: 'pointer' }}><X size={20} /></button>
+          </header>
+          <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
+            <div style={{ position: 'relative' }}>
+              <Search size={17} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input value={mediaSearch} onChange={(event) => setMediaSearch(event.target.value)} placeholder={`Buscar ${mediaPicker.type === 'AUDIO' ? 'audio' : 'imagen'} por título o descripción...`} style={{ width: '100%', padding: '0.7rem 0.75rem 0.7rem 2.25rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', outline: 'none' }} />
+            </div>
+          </div>
+          <div style={{ padding: '1.25rem 1.5rem', overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+            {pickerResources.map((resource) => (
+              <article key={resource.id} style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '1rem', background: 'var(--surface)', display: 'flex', flexDirection: 'column', gap: '0.75rem', minWidth: 0 }}>
+                {resource.type === 'AUDIO' ? (
+                  <AudioPlayer src={resource.url!} title={resource.title} />
+                ) : (
+                  <img src={resource.url!} alt={resource.title} style={{ width: '100%', height: '150px', borderRadius: '6px', objectFit: 'contain', border: '1px solid var(--border)', background: 'var(--surface-alt)' }} />
+                )}
+                <div>
+                  <strong style={{ display: 'block', color: 'var(--text-main)', fontSize: '0.9rem' }}>{resource.title}</strong>
+                  {resource.description && <span style={{ display: 'block', marginTop: '0.25rem', color: 'var(--text-muted)', fontSize: '0.78rem' }}>{resource.description}</span>}
+                </div>
+                <button type="button" onClick={() => selectMediaResource(resource)} className="btn-primary" style={{ width: '100%', padding: '0.55rem', marginTop: 'auto', fontSize: '0.82rem' }}>Seleccionar</button>
+              </article>
+            ))}
+            {pickerResources.length === 0 && <p style={{ gridColumn: '1 / -1', margin: 0, padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>No hay {mediaPicker.type === 'AUDIO' ? 'audios' : 'imágenes'} disponibles con esa búsqueda.</p>}
+          </div>
+        </div>
+      </div>, document.body
+    )}
+    </>
   );
 };
 

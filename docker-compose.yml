@@ -18,6 +18,8 @@ services:
       dockerfile: Dockerfile
     container_name: hit_school_backend
     restart: always
+    env_file:
+      - ./backend/.env
     ports:
       - "3000:3000"
     environment:
