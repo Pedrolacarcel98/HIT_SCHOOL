@@ -10,7 +10,7 @@ export interface MonthTarget {
 export const getAcademicYearForDate = (date: Date = new Date()): string => {
   const month = date.getMonth() + 1; // 1-12
   const year = date.getFullYear();
-  if (month >= 8) {
+  if (month >= 9) {
     return `${year}-${year + 1}`;
   }
   return `${year - 1}-${year}`;
@@ -190,20 +190,27 @@ export const ensureStudentPaymentScheduleById = async (prisma: PrismaClient, stu
 
     // 1. Manejo del cobro de Material / Libro si está activado
     if (enrollment.hasBook && enrollment.bookPrice && enrollment.bookPrice > 0) {
+      const bookAcademicYear = getAcademicYearForDate(start);
       const existingBookPayment = await prisma.paymentStatus.findFirst({
         where: {
           studentId,
-          academicYear,
           concept: 'Material / Libro'
         }
       });
 
-      if (!existingBookPayment) {
+      const wasDeletedBook = await prisma.deletedPaymentRecord.findFirst({
+        where: {
+          studentId,
+          concept: 'Material / Libro'
+        }
+      });
+
+      if (!existingBookPayment && !wasDeletedBook) {
         await prisma.paymentStatus.create({
           data: {
             studentId,
             enrollmentId: enrollment.id,
-            academicYear,
+            academicYear: bookAcademicYear,
             month: startMonth,
             year: startYear,
             amount: enrollment.bookPrice,
@@ -216,6 +223,11 @@ export const ensureStudentPaymentScheduleById = async (prisma: PrismaClient, stu
           }
         });
         generatedPayments.push({ month: startMonth, year: startYear, concept: 'Material / Libro' });
+      } else if (existingBookPayment && existingBookPayment.academicYear !== bookAcademicYear) {
+        await prisma.paymentStatus.update({
+          where: { id: existingBookPayment.id },
+          data: { academicYear: bookAcademicYear }
+        });
       }
     }
 
@@ -270,6 +282,7 @@ export const ensureStudentPaymentScheduleById = async (prisma: PrismaClient, stu
       const month = target.month;
       const year = target.year;
       const dueDate = getDueDateForEnrollmentMonth(enrollment, month, year);
+      const targetAcademicYear = getAcademicYearForDate(new Date(year, month - 1, 1));
 
       // Calcular importe base aplicando la Regla del 15 de Septiembre
       let calculatedAmount = enrollment.monthlyFee;
@@ -286,19 +299,28 @@ export const ensureStudentPaymentScheduleById = async (prisma: PrismaClient, stu
       const existingPayment = await prisma.paymentStatus.findFirst({
         where: {
           studentId,
-          academicYear,
           month,
           year,
           concept: 'Cuota mensual'
         }
       });
 
-      if (!existingPayment) {
+      // Si este mes fue eliminado explícitamente por el administrador por error, no regenerar
+      const wasDeletedMonth = await prisma.deletedPaymentRecord.findFirst({
+        where: {
+          studentId,
+          month,
+          year,
+          concept: 'Cuota mensual'
+        }
+      });
+
+      if (!existingPayment && !wasDeletedMonth) {
         await prisma.paymentStatus.create({
           data: {
             studentId,
             enrollmentId: enrollment.id,
-            academicYear,
+            academicYear: targetAcademicYear,
             month,
             year,
             amount: calculatedAmount,
@@ -311,7 +333,15 @@ export const ensureStudentPaymentScheduleById = async (prisma: PrismaClient, stu
           }
         });
         generatedPayments.push({ month, year, concept: 'Cuota mensual' });
-      } else {
+      } else if (existingPayment) {
+        // Asegurar que academicYear esté actualizado al curso correcto si era un valor previo incorrecto
+        if (existingPayment.academicYear !== targetAcademicYear) {
+          await prisma.paymentStatus.update({
+            where: { id: existingPayment.id },
+            data: { academicYear: targetAcademicYear }
+          });
+        }
+
         // Si el pago existe y no fue personalizado manualmente, ni está exento, ni está pagado, actualizar dueDate e importe si cambió la cuota
         if (!existingPayment.isCustom && !existingPayment.isExempt && !existingPayment.isPaid) {
           const shouldUpdateAmount = isCurrentOrFutureMonth(month, year) && existingPayment.amount !== calculatedAmount;

@@ -19,7 +19,8 @@ import {
   Users,
   X,
   Edit2,
-  BookOpen
+  BookOpen,
+  Ban
 } from 'lucide-react';
 import ModalityBadge from '../components/ModalityBadge';
 import CustomSelect from '../components/CustomSelect';
@@ -111,12 +112,19 @@ const TeacherPayments: React.FC = () => {
   const [editConcept, setEditConcept] = useState<string>('');
   const [savingEdit, setSavingEdit] = useState(false);
 
+  // Eximir pago (vacaciones)
   const [deletingPayment, setDeletingPayment] = useState<StudentPaymentItem | null>(null);
   const [savingDelete, setSavingDelete] = useState(false);
 
+  // Eliminar pago permanentemente (por error)
+  const [permanentDeletingPayment, setPermanentDeletingPayment] = useState<StudentPaymentItem | null>(null);
+  const [savingPermanentDelete, setSavingPermanentDelete] = useState(false);
+
+  // Modal añadir concepto adicional
   const [showAddExtraModal, setShowAddExtraModal] = useState(false);
   const [extraAmount, setExtraAmount] = useState('35');
-  const [extraConcept, setExtraConcept] = useState('Material / Libro');
+  const [extraConceptType, setExtraConceptType] = useState<'libro' | 'cuota' | 'otro'>('libro');
+  const [customExtraConcept, setCustomExtraConcept] = useState('');
   const [extraMonth, setExtraMonth] = useState(new Date().getMonth() + 1);
   const [extraYear, setExtraYear] = useState(new Date().getFullYear());
   const [savingExtra, setSavingExtra] = useState(false);
@@ -163,9 +171,6 @@ const TeacherPayments: React.FC = () => {
       if (res.ok) {
         const years: string[] = await res.json();
         setAcademicYears(years);
-        if (years.length > 0 && selectedAcademicYear === 'ALL') {
-          setSelectedAcademicYear(years[0]);
-        }
       }
     } catch (err) {
       console.error('Error cargando cursos escolares:', err);
@@ -535,7 +540,7 @@ const TeacherPayments: React.FC = () => {
       const token = localStorage.getItem('token');
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
-      const res = await fetch(`${apiUrl}/api/payments/item/${deletingPayment.id}`, {
+      const res = await fetch(`${apiUrl}/api/payments/item/${deletingPayment.id}?action=exempt`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -574,10 +579,82 @@ const TeacherPayments: React.FC = () => {
     }
   };
 
+  // Eliminar Pago Permanentemente (Borrado total de la base de datos por error)
+  const handleExecutePermanentDeletePayment = async () => {
+    if (!permanentDeletingPayment || !permanentDeletingPayment.id) return;
+
+    try {
+      setSavingPermanentDelete(true);
+      const token = localStorage.getItem('token');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+      const res = await fetch(`${apiUrl}/api/payments/item/${permanentDeletingPayment.id}?action=delete`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Error al eliminar el pago.');
+        return;
+      }
+
+      // Eliminar el cobro de la lista de pagos de forma inmediata
+      setStudents(prev =>
+        prev.map(s => {
+          if (s.id !== selectedStudent?.id) return s;
+          return {
+            ...s,
+            payments: s.payments.filter(p => p.id !== permanentDeletingPayment.id)
+          };
+        })
+      );
+
+      setPermanentDeletingPayment(null);
+    } catch (err) {
+      setError('Error de conexión al eliminar el pago.');
+    } finally {
+      setSavingPermanentDelete(false);
+    }
+  };
+
+  // Abrir Modal Añadir Concepto Extra inicializando valores según matrícula
+  const handleOpenAddExtraModal = () => {
+    setExtraConceptType('libro');
+    setCustomExtraConcept('');
+    const bookFee = selectedStudent?.enrollments?.[0]?.bookPrice || 35;
+    setExtraAmount(String(bookFee));
+    setExtraMonth(new Date().getMonth() + 1);
+    setExtraYear(new Date().getFullYear());
+    setShowAddExtraModal(true);
+  };
+
+  const handleConceptTypeChange = (type: 'libro' | 'cuota' | 'otro') => {
+    setExtraConceptType(type);
+    if (type === 'libro') {
+      const bookFee = selectedStudent?.enrollments?.[0]?.bookPrice || 35;
+      setExtraAmount(String(bookFee));
+    } else if (type === 'cuota') {
+      const fee = selectedStudent?.enrollments?.[0]?.monthlyFee || 35;
+      setExtraAmount(String(fee));
+    }
+  };
+
   // Añadir Concepto Extra
   const handleSaveExtraPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedStudent) return;
+
+    let finalConcept = 'Material / Libro';
+    if (extraConceptType === 'cuota') {
+      finalConcept = 'Cuota mensual';
+    } else if (extraConceptType === 'otro') {
+      finalConcept = customExtraConcept.trim();
+      if (!finalConcept) {
+        setError('Por favor, especifica el nombre del concepto.');
+        return;
+      }
+    }
 
     try {
       setSavingExtra(true);
@@ -592,7 +669,7 @@ const TeacherPayments: React.FC = () => {
         },
         body: JSON.stringify({
           amount: Number(extraAmount),
-          concept: extraConcept.trim(),
+          concept: finalConcept,
           month: Number(extraMonth),
           year: Number(extraYear),
           academicYear: selectedAcademicYear !== 'ALL' ? selectedAcademicYear : undefined
@@ -925,7 +1002,7 @@ const TeacherPayments: React.FC = () => {
                   {isAdmin && (
                     <button
                       type="button"
-                      onClick={() => setShowAddExtraModal(true)}
+                      onClick={handleOpenAddExtraModal}
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
@@ -1208,16 +1285,39 @@ const TeacherPayments: React.FC = () => {
                                           padding: '0.5rem 0.75rem',
                                           background: 'none',
                                           border: 'none',
-                                          color: '#be123c',
+                                          color: '#64748b',
                                           fontSize: '0.85rem',
                                           cursor: 'pointer',
                                           borderRadius: '6px',
                                           textAlign: 'left'
                                         }}
                                       >
-                                        <Trash2 size={14} /> Eximir Mes (Vacaciones)
+                                        <Ban size={14} style={{ color: '#64748b' }} /> Eximir Mes (Vacaciones)
                                       </button>
                                     )}
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setPermanentDeletingPayment(payment);
+                                        setOpenMenuKey(null);
+                                      }}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem',
+                                        padding: '0.5rem 0.75rem',
+                                        background: 'none',
+                                        border: 'none',
+                                        color: '#dc2626',
+                                        fontSize: '0.85rem',
+                                        cursor: 'pointer',
+                                        borderRadius: '6px',
+                                        textAlign: 'left'
+                                      }}
+                                    >
+                                      <Trash2 size={14} style={{ color: '#dc2626' }} /> Eliminar por Completo
+                                    </button>
                                   </div>
                                 )}
                               </div>
@@ -1355,8 +1455,8 @@ const TeacherPayments: React.FC = () => {
           padding: '1rem'
         }}>
           <div className="glass-panel" style={{ width: '100%', maxWidth: '420px', padding: '1.75rem', background: '#fff' }}>
-            <h3 style={{ margin: '0 0 0.75rem', color: '#be123c', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Trash2 size={20} /> Eximir Mensualidad
+            <h3 style={{ margin: '0 0 0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Ban size={20} /> Eximir Mensualidad (Vacaciones)
             </h3>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', lineHeight: 1.5, margin: '0 0 1.25rem' }}>
               ¿Confirmas que deseas eximir a este alumno del pago de <strong>{monthLabel(deletingPayment.month, deletingPayment.year)}</strong>? Se marcará como vacaciones/exento y no computará como deuda.
@@ -1373,9 +1473,53 @@ const TeacherPayments: React.FC = () => {
                 type="button"
                 disabled={savingDelete}
                 onClick={handleExecuteDeletePayment}
-                style={{ background: '#be123c', border: 'none', color: '#fff', padding: '0.6rem 1.4rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
+                style={{ background: '#64748b', border: 'none', color: '#fff', padding: '0.6rem 1.4rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
               >
                 {savingDelete ? 'Eximiendo...' : 'Sí, Eximir Mes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Eliminar Pago Definitivamente (Borrado físico por error) */}
+      {permanentDeletingPayment && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(5px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 95,
+          padding: '1rem'
+        }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '440px', padding: '1.75rem', background: '#fff' }}>
+            <h3 style={{ margin: '0 0 0.75rem', color: '#dc2626', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Trash2 size={20} /> Eliminar Pago por Completo
+            </h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', lineHeight: 1.5, margin: '0 0 1rem' }}>
+              ¿Confirmas que deseas eliminar por completo este cobro de <strong>{permanentDeletingPayment.concept || 'Cuota mensual'}</strong> ({permanentDeletingPayment.amount} €) correspondiente a <strong>{monthLabel(permanentDeletingPayment.month, permanentDeletingPayment.year)}</strong>?
+            </p>
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '0.75rem', marginBottom: '1.25rem', fontSize: '0.82rem', color: '#991b1b' }}>
+              ⚠️ <strong>Atención:</strong> Este pago desaparecerá definitivamente de la base de datos y no constará para nada ni en el expediente ni en las cartas de pago del alumno.
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              <button
+                type="button"
+                onClick={() => setPermanentDeletingPayment(null)}
+                style={{ background: 'none', border: '1px solid var(--border)', padding: '0.6rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={savingPermanentDelete}
+                onClick={handleExecutePermanentDeletePayment}
+                style={{ background: '#dc2626', border: 'none', color: '#fff', padding: '0.6rem 1.4rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
+              >
+                {savingPermanentDelete ? 'Eliminando...' : 'Sí, Eliminar por Completo'}
               </button>
             </div>
           </div>
@@ -1402,15 +1546,40 @@ const TeacherPayments: React.FC = () => {
             <form onSubmit={handleSaveExtraPayment} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div>
                 <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-main)' }}>Concepto</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="ej. Material / Libro, Clase particular"
-                  value={extraConcept}
-                  onChange={(e) => setExtraConcept(e.target.value)}
-                  style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)' }}
-                />
+                <select
+                  value={extraConceptType}
+                  onChange={(e) => handleConceptTypeChange(e.target.value as any)}
+                  style={{
+                    width: '100%',
+                    padding: '0.6rem 0.75rem',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border)',
+                    background: '#fff',
+                    color: 'var(--text-main)',
+                    fontSize: '0.9rem',
+                    fontWeight: 500,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="libro">Libro / Material</option>
+                  <option value="cuota">Cuota</option>
+                  <option value="otro">Otro (especificar...)</option>
+                </select>
               </div>
+
+              {extraConceptType === 'otro' && (
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-main)' }}>Nombre del Concepto</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="ej. Clase particular, Matrícula extraordinaria"
+                    value={customExtraConcept}
+                    onChange={(e) => setCustomExtraConcept(e.target.value)}
+                    style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)' }}
+                  />
+                </div>
+              )}
 
               <div>
                 <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-main)' }}>Importe (€)</label>

@@ -281,15 +281,19 @@ async function main() {
   console.log('--- Configurando Matrículas de Academia (AcademyEnrollment) ---');
 
   const setupAcademyEnrollment = async (studentId: string, startDate: Date, monthlyFee: number) => {
+    const startM = startDate.getMonth() + 1;
+    const startY = startDate.getFullYear();
+    const academicYear = startM >= 9 ? `${startY}-${startY + 1}` : `${startY - 1}-${startY}`;
+
     let enrollment = await prisma.academyEnrollment.findFirst({ where: { studentId } });
     if (!enrollment) {
       enrollment = await prisma.academyEnrollment.create({
-        data: { studentId, startDate, monthlyFee }
+        data: { studentId, startDate, monthlyFee, academicYear }
       });
     } else {
       enrollment = await prisma.academyEnrollment.update({
         where: { id: enrollment.id },
-        data: { startDate, monthlyFee }
+        data: { startDate, monthlyFee, academicYear }
       });
     }
     return enrollment;
@@ -315,9 +319,17 @@ async function main() {
     dueDate: Date;
     paidAt?: Date | null;
     markedById?: string | null;
+    concept?: string;
   }) => {
-    const existing = await prisma.paymentStatus.findUnique({
-      where: { studentId_month_year: { studentId: data.studentId, month: data.month, year: data.year } }
+    const concept = data.concept || 'Cuota mensual';
+    const academicYear = data.month >= 9 ? `${data.year}-${data.year + 1}` : `${data.year - 1}-${data.year}`;
+    const existing = await prisma.paymentStatus.findFirst({
+      where: {
+        studentId: data.studentId,
+        month: data.month,
+        year: data.year,
+        concept
+      }
     });
 
     if (existing) {
@@ -325,7 +337,9 @@ async function main() {
         where: { id: existing.id },
         data: {
           enrollmentId: data.enrollmentId,
+          academicYear,
           amount: data.amount,
+          concept,
           isPaid: data.isPaid,
           status: data.isPaid ? PaymentState.PAID : PaymentState.PENDING,
           dueDate: data.dueDate,
@@ -339,9 +353,11 @@ async function main() {
       data: {
         studentId: data.studentId,
         enrollmentId: data.enrollmentId,
+        academicYear,
         month: data.month,
         year: data.year,
         amount: data.amount,
+        concept,
         isPaid: data.isPaid,
         status: data.isPaid ? PaymentState.PAID : PaymentState.PENDING,
         dueDate: data.dueDate,

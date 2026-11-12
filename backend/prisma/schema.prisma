@@ -17,6 +17,7 @@ enum Role {
 enum UserStatus {
   ACTIVE
   INACTIVE
+  PENDING
 }
 
 enum Modality {
@@ -83,6 +84,7 @@ model User {
   materialAssignments MaterialAssignment[] @relation("StudentMaterialAssignments")
   paymentStatuses PaymentStatus[] @relation("StudentPayments")
   markedPayments  PaymentStatus[] @relation("MarkedPayments")
+  deletedPaymentRecords DeletedPaymentRecord[]
   assignments     Assignment[]    @relation("StudentAssignments")
   createdAssignments Assignment[] @relation("TeacherAssignments")
   sentChatMessages ChatMessage[] @relation("SentChatMessages")
@@ -381,6 +383,21 @@ model PaymentStatus {
   @@unique([studentId, academicYear, month, year, concept])
   @@index([studentId, dueDate])
   @@index([studentId, academicYear, status])
+}
+
+model DeletedPaymentRecord {
+  id           String   @id @default(uuid())
+  studentId    String
+  academicYear String?
+  month        Int
+  year         Int
+  concept      String
+  deletedAt    DateTime @default(now())
+
+  student      User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, month, year, concept])
+  @@index([studentId])
 }
 
 model FinalEvaluation {

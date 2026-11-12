@@ -197,7 +197,7 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res) => {
 // GET /api/payments - Listado principal con soporte para Activos e Histórico de Bajas
 router.get('/', authenticateToken, requireTeacher, async (req, res) => {
   const tab = getQueryString(req.query.tab) || 'active'; // 'active' | 'history'
-  const academicYear = getQueryString(req.query.academicYear) || getAcademicYearForDate();
+  const academicYear = getQueryString(req.query.academicYear) || 'ALL';
 
   try {
     // Alumnos según pestaña
@@ -353,9 +353,10 @@ router.put('/item/:id', authenticateToken, requireAdmin, async (req: AuthRequest
   }
 });
 
-// DELETE /api/payments/item/:id - Eximir un mes (vacaciones / baja temporal)
+// DELETE /api/payments/item/:id - Eximir un mes o eliminar permanentemente
 router.delete('/item/:id', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
   const paymentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const action = getQueryString(req.query.action) || (req.query.permanent === 'true' ? 'delete' : 'exempt');
 
   try {
     const existing = await prisma.paymentStatus.findUnique({ where: { id: paymentId } });
@@ -363,8 +364,36 @@ router.delete('/item/:id', authenticateToken, requireAdmin, async (req: AuthRequ
       return res.status(404).json({ error: 'Pago no encontrado.' });
     }
 
+    if (action === 'delete') {
+      // Registrar en DeletedPaymentRecord para que ensureStudentPaymentScheduleById no lo regenere automáticamente
+      await prisma.deletedPaymentRecord.upsert({
+        where: {
+          studentId_month_year_concept: {
+            studentId: existing.studentId,
+            month: existing.month,
+            year: existing.year,
+            concept: existing.concept
+          }
+        },
+        create: {
+          studentId: existing.studentId,
+          academicYear: existing.academicYear,
+          month: existing.month,
+          year: existing.year,
+          concept: existing.concept
+        },
+        update: {}
+      });
+
+      // Eliminación física total de la base de datos
+      await prisma.paymentStatus.delete({ where: { id: paymentId } });
+
+      return res.json({ message: 'Pago eliminado por completo.', deleted: true, paymentId });
+    }
+
+    // Acción por defecto: Eximir mes (vacaciones / baja temporal)
     if (existing.isPaid) {
-      return res.status(400).json({ error: 'No se puede eximir o eliminar un pago que ya ha sido cobrado.' });
+      return res.status(400).json({ error: 'No se puede eximir un pago que ya figura como pagado.' });
     }
 
     const updated = await prisma.paymentStatus.update({
@@ -378,7 +407,7 @@ router.delete('/item/:id', authenticateToken, requireAdmin, async (req: AuthRequ
     return res.json({ message: 'Pago marcado como exento (vacaciones / baja).', payment: updated });
   } catch (error) {
     console.error('Error eliminando/eximiendo pago:', error);
-    return res.status(500).json({ error: 'Error al eximir el pago.' });
+    return res.status(500).json({ error: 'Error al procesar la baja del pago.' });
   }
 });
 
@@ -402,6 +431,16 @@ router.post('/:studentId/extra', authenticateToken, requireAdmin, async (req: Au
   try {
     const student = await prisma.user.findFirst({ where: { id: studentId, role: 'STUDENT' } });
     if (!student) return res.status(404).json({ error: 'Alumno no encontrado.' });
+
+    // Si estaba registrado como eliminado previamente, limpiar para permitir la reintroducción manual
+    await prisma.deletedPaymentRecord.deleteMany({
+      where: {
+        studentId,
+        month: targetMonth,
+        year: targetYear,
+        concept: concept.trim()
+      }
+    });
 
     const newPayment = await prisma.paymentStatus.create({
       data: {
