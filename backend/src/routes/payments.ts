@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { PaymentState, PrismaClient } from '@prisma/client';
-import { authenticateToken, requireTeacher, AuthRequest } from '../middleware/auth';
+import { authenticateToken, requireTeacher, requireAdmin, AuthRequest } from '../middleware/auth';
 import {
   DEFAULT_VISIBLE_MONTH_COUNT,
   ensureStudentPaymentScheduleById,
@@ -9,7 +9,8 @@ import {
   getStudentApplicableMonthsUpToNow,
   getDueDateForEnrollmentMonth,
   isMonthWithinStudentSchedule,
-  isPaymentOverdue
+  isPaymentOverdue,
+  getAcademicYearForDate
 } from '../services/payments';
 
 const router = Router();
@@ -39,17 +40,32 @@ const parseMonthYear = (monthParam?: string, yearParam?: string) => {
   return { month, year };
 };
 
-const parseVisibleMonthCount = (monthsParam?: string) => {
-  if (!monthsParam) {
-    return DEFAULT_VISIBLE_MONTH_COUNT;
-  }
-  const value = Number(monthsParam);
-  if (!Number.isInteger(value) || value < 1 || value > 12) {
-    return DEFAULT_VISIBLE_MONTH_COUNT;
-  }
-  return value;
-};
+// GET /api/payments/academic-years - Cursos escolares disponibles
+router.get('/academic-years', authenticateToken, requireTeacher, async (req, res) => {
+  try {
+    const currentYear = getAcademicYearForDate();
+    const paymentsYears = await prisma.paymentStatus.findMany({
+      select: { academicYear: true },
+      distinct: ['academicYear']
+    });
+    const enrollmentsYears = await prisma.academyEnrollment.findMany({
+      select: { academicYear: true },
+      distinct: ['academicYear']
+    });
 
+    const yearsSet = new Set<string>([currentYear]);
+    paymentsYears.forEach(p => p.academicYear && yearsSet.add(p.academicYear));
+    enrollmentsYears.forEach(e => e.academicYear && yearsSet.add(e.academicYear));
+
+    const sortedYears = Array.from(yearsSet).sort().reverse();
+    return res.json(sortedYears);
+  } catch (error) {
+    console.error('Error obteniendo cursos escolares:', error);
+    return res.status(500).json({ error: 'Error al obtener cursos escolares.' });
+  }
+});
+
+// GET /api/payments/me - Vista de pagos para alumno o padre
 router.get('/me', authenticateToken, async (req: AuthRequest, res) => {
   if (!req.user) {
     return res.status(401).json({ error: 'Token no válido' });
@@ -114,38 +130,48 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res) => {
       return res.status(403).json({ error: 'Alumno no encontrado.' });
     }
 
-    const targetMonths = req.query.all === 'true' 
-      ? getStudentApplicableMonthsUpToNow(student.academyEnrollments)
-      : [{ month: parsed.month, year: parsed.year }];
-
     const allPayments = await prisma.paymentStatus.findMany({
-      where: { studentId: targetStudentId }
+      where: {
+        studentId: targetStudentId,
+        isExempt: false,
+        status: { not: PaymentState.EXEMPT }
+      },
+      orderBy: [
+        { year: 'desc' },
+        { month: 'desc' },
+        { createdAt: 'desc' }
+      ]
     });
 
-    const data = targetMonths.map(target => {
-      const payment = allPayments.find(p => p.month === target.month && p.year === target.year);
-      const isApplicable = isMonthWithinStudentSchedule(student.academyEnrollments, target.month, target.year);
-      const dueDate = payment?.dueDate ?? null;
-      const isPaid = payment?.isPaid ?? false;
-      const isOverdue = isPaymentOverdue({ isPaid, dueDate });
+    const data = allPayments.map(payment => {
+      const isApplicable = isMonthWithinStudentSchedule(student.academyEnrollments, payment.month, payment.year);
+      const dueDate = payment.dueDate ?? null;
+      const isPaid = payment.isPaid ?? false;
+      const isOverdue = isPaymentOverdue({ isPaid, isExempt: payment.isExempt, status: payment.status, dueDate });
 
       return {
-        month: target.month,
-        year: target.year,
-        amount: payment?.amount ?? null,
+        id: payment.id,
+        month: payment.month,
+        year: payment.year,
+        amount: payment.amount,
+        concept: payment.concept,
+        isCustom: payment.isCustom,
+        isExempt: payment.isExempt,
         dueDate,
-        paidAt: payment?.paidAt ?? null,
+        paidAt: payment.paidAt ?? null,
         isPaid,
-        exists: Boolean(payment),
-        status: isPaid ? PaymentState.PAID : PaymentState.PENDING,
+        exists: true,
+        status: payment.status,
         isOverdue,
         visualStatus: getPaymentVisualStatus({
           isPaid,
-          month: target.month,
-          year: target.year,
+          isExempt: payment.isExempt,
+          status: payment.status,
+          month: payment.month,
+          year: payment.year,
           dueDate
         }),
-        updatedAt: payment?.updatedAt ?? null,
+        updatedAt: payment.updatedAt ?? null,
         isApplicable,
         student: {
           id: student.id,
@@ -157,7 +183,7 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res) => {
       };
     });
 
-    if (req.query.all !== 'true') {
+    if (req.query.all !== 'true' && data.length > 0) {
       return res.json(data[0]);
     }
 
@@ -168,24 +194,30 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res) => {
   }
 });
 
+// GET /api/payments - Listado principal con soporte para Activos e Histórico de Bajas
 router.get('/', authenticateToken, requireTeacher, async (req, res) => {
-  const visibleMonths = parseVisibleMonthCount(getQueryString(req.query.months));
-  const parsed = parseMonthYear(getQueryString(req.query.month), getQueryString(req.query.year));
-
-  if ('error' in parsed) {
-    return res.status(400).json(parsed);
-  }
+  const tab = getQueryString(req.query.tab) || 'active'; // 'active' | 'history'
+  const academicYear = getQueryString(req.query.academicYear) || getAcademicYearForDate();
 
   try {
+    // Alumnos según pestaña
+    const studentWhere: any = { role: 'STUDENT' };
+    if (tab === 'active') {
+      studentWhere.status = 'ACTIVE';
+    } else if (tab === 'history') {
+      studentWhere.status = 'INACTIVE';
+    }
+
     const students = await prisma.user.findMany({
-      where: { role: 'STUDENT' },
+      where: studentWhere,
       select: { id: true }
     });
 
+    // Asegurar calendarios actualizados
     await Promise.all(students.map(student => ensureStudentPaymentScheduleById(prisma, student.id)));
 
     const refreshedStudents = await prisma.user.findMany({
-      where: { role: 'STUDENT' },
+      where: studentWhere,
       select: {
         id: true,
         email: true,
@@ -194,58 +226,76 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
         createdAt: true,
         profile: { select: { firstName: true, lastName: true, dni: true, address: true } },
         parent: { select: { profile: { select: { dni: true, firstName: true, lastName: true, address: true } } } },
-        academyEnrollments: { orderBy: { startDate: 'asc' } },
+        academyEnrollments: { orderBy: { startDate: 'desc' } },
         paymentStatuses: {
+          where: academicYear !== 'ALL' ? { academicYear } : undefined,
           select: {
+            id: true,
+            academicYear: true,
             month: true,
             year: true,
             amount: true,
+            concept: true,
+            isCustom: true,
+            isExempt: true,
+            notes: true,
             dueDate: true,
             paidAt: true,
             status: true,
             isPaid: true,
             updatedAt: true
-          }
+          },
+          orderBy: [
+            { year: 'desc' },
+            { month: 'desc' },
+            { createdAt: 'desc' }
+          ]
         }
       },
       orderBy: { createdAt: 'desc' }
     });
 
     const data = refreshedStudents.map((student) => {
-      let targetMonths = getStudentApplicableMonthsUpToNow(student.academyEnrollments);
-      
-      if (req.query.month || req.query.year) {
-         targetMonths = [{ month: parsed.month, year: parsed.year }];
-      }
-
-      const payments = targetMonths.map((target) => {
-        const payment = student.paymentStatuses.find(
-          (item) => item.month === target.month && item.year === target.year
-        );
-        const isApplicable = isMonthWithinStudentSchedule(student.academyEnrollments, target.month, target.year);
-        const dueDate = payment?.dueDate ?? null;
-        const isPaid = payment?.isPaid ?? false;
+      const payments = student.paymentStatuses.map((payment) => {
+        const isApplicable = isMonthWithinStudentSchedule(student.academyEnrollments, payment.month, payment.year);
+        const dueDate = payment.dueDate ?? null;
+        const isPaid = payment.isPaid ?? false;
 
         return {
-          month: target.month,
-          year: target.year,
-          amount: payment?.amount ?? null,
+          id: payment.id,
+          academicYear: payment.academicYear,
+          month: payment.month,
+          year: payment.year,
+          amount: payment.amount,
+          concept: payment.concept,
+          isCustom: payment.isCustom,
+          isExempt: payment.isExempt,
+          notes: payment.notes,
           dueDate,
-          paidAt: payment?.paidAt ?? null,
+          paidAt: payment.paidAt ?? null,
           isPaid,
-          exists: Boolean(payment),
-          status: isPaid ? PaymentState.PAID : PaymentState.PENDING,
-          isOverdue: isPaymentOverdue({ isPaid, dueDate }),
+          exists: true,
+          status: payment.status,
+          isOverdue: isPaymentOverdue({ isPaid, isExempt: payment.isExempt, status: payment.status, dueDate }),
           visualStatus: getPaymentVisualStatus({
             isPaid,
-            month: target.month,
-            year: target.year,
+            isExempt: payment.isExempt,
+            status: payment.status,
+            month: payment.month,
+            year: payment.year,
             dueDate
           }),
-          updatedAt: payment?.updatedAt ?? null,
+          updatedAt: payment.updatedAt ?? null,
           isApplicable
         };
       });
+
+      // Calcular deuda pendiente (solo cuotas no pagadas y no exentas)
+      const pendingPayments = payments.filter(p => !p.isPaid && !p.isExempt && p.status !== 'EXEMPT');
+      const pendingDebt = pendingPayments.reduce((acc, curr) => acc + (curr.amount || 0), 0);
+      const overdueDebt = payments
+        .filter(p => p.visualStatus === 'OVERDUE')
+        .reduce((acc, curr) => acc + (curr.amount || 0), 0);
 
       return {
         id: student.id,
@@ -257,49 +307,199 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
         status: student.status,
         modality: student.modality,
         enrollments: student.academyEnrollments,
-        payments
+        payments,
+        pendingDebt,
+        overdueDebt,
+        isClean: pendingDebt === 0
       };
     });
 
-    return res.json({ months: [], students: data });
+    return res.json({ students: data, academicYear });
   } catch (error) {
     console.error('Error obteniendo pagos de alumnos:', error);
     return res.status(500).json({ error: 'Error al obtener pagos de alumnos' });
   }
 });
 
+// PUT /api/payments/item/:id - Editar importe o concepto de un pago puntual
+router.put('/item/:id', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+  const paymentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const { amount, concept, notes } = req.body;
+
+  if (amount !== undefined && (typeof amount !== 'number' || isNaN(amount) || amount < 0)) {
+    return res.status(400).json({ error: 'El importe debe ser un número positivo.' });
+  }
+
+  try {
+    const existing = await prisma.paymentStatus.findUnique({ where: { id: paymentId } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Pago no encontrado.' });
+    }
+
+    const updated = await prisma.paymentStatus.update({
+      where: { id: paymentId },
+      data: {
+        amount: amount !== undefined ? amount : existing.amount,
+        concept: concept ? concept.trim() : existing.concept,
+        notes: notes !== undefined ? notes : existing.notes,
+        isCustom: true
+      }
+    });
+
+    return res.json({ message: 'Pago actualizado con éxito.', payment: updated });
+  } catch (error) {
+    console.error('Error editando pago:', error);
+    return res.status(500).json({ error: 'Error al actualizar el pago.' });
+  }
+});
+
+// DELETE /api/payments/item/:id - Eximir un mes (vacaciones / baja temporal)
+router.delete('/item/:id', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+  const paymentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+  try {
+    const existing = await prisma.paymentStatus.findUnique({ where: { id: paymentId } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Pago no encontrado.' });
+    }
+
+    if (existing.isPaid) {
+      return res.status(400).json({ error: 'No se puede eximir o eliminar un pago que ya ha sido cobrado.' });
+    }
+
+    const updated = await prisma.paymentStatus.update({
+      where: { id: paymentId },
+      data: {
+        isExempt: true,
+        status: PaymentState.EXEMPT
+      }
+    });
+
+    return res.json({ message: 'Pago marcado como exento (vacaciones / baja).', payment: updated });
+  } catch (error) {
+    console.error('Error eliminando/eximiendo pago:', error);
+    return res.status(500).json({ error: 'Error al eximir el pago.' });
+  }
+});
+
+// POST /api/payments/:studentId/extra - Añadir cargo o concepto adicional
+router.post('/:studentId/extra', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+  const studentId = Array.isArray(req.params.studentId) ? req.params.studentId[0] : req.params.studentId;
+  const { amount, concept, month, year, academicYear } = req.body;
+
+  if (!amount || typeof amount !== 'number' || amount <= 0) {
+    return res.status(400).json({ error: 'El importe debe ser un número positivo.' });
+  }
+  if (!concept || !concept.trim()) {
+    return res.status(400).json({ error: 'El concepto es obligatorio.' });
+  }
+
+  const now = new Date();
+  const targetMonth = month ? Number(month) : now.getMonth() + 1;
+  const targetYear = year ? Number(year) : now.getFullYear();
+  const targetAcademicYear = academicYear || getAcademicYearForDate(new Date(targetYear, targetMonth - 1, 1));
+
+  try {
+    const student = await prisma.user.findFirst({ where: { id: studentId, role: 'STUDENT' } });
+    if (!student) return res.status(404).json({ error: 'Alumno no encontrado.' });
+
+    const newPayment = await prisma.paymentStatus.create({
+      data: {
+        studentId,
+        academicYear: targetAcademicYear,
+        month: targetMonth,
+        year: targetYear,
+        amount,
+        concept: concept.trim(),
+        isCustom: true,
+        isExempt: false,
+        dueDate: new Date(targetYear, targetMonth - 1, 15, 12, 0, 0),
+        status: PaymentState.PENDING,
+        isPaid: false
+      }
+    });
+
+    return res.status(201).json({ message: 'Concepto adicional creado.', payment: newPayment });
+  } catch (error: any) {
+    if (error.code === 'P2002') {
+      return res.status(400).json({ error: 'Ya existe un cobro con ese concepto en ese mes.' });
+    }
+    console.error('Error creando concepto adicional:', error);
+    return res.status(500).json({ error: 'Error al crear concepto adicional.' });
+  }
+});
+
+// PUT /api/payments/:studentId/pay-all - Botón «Todo Pagado» para un alumno en concreto
+router.put('/:studentId/pay-all', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+  const studentId = Array.isArray(req.params.studentId) ? req.params.studentId[0] : req.params.studentId;
+  const academicYear = getQueryString(req.query.academicYear);
+
+  try {
+    const student = await prisma.user.findFirst({ where: { id: studentId, role: 'STUDENT' } });
+    if (!student) return res.status(404).json({ error: 'Alumno no encontrado.' });
+
+    const whereClause: any = {
+      studentId,
+      isPaid: false,
+      isExempt: false,
+      status: { not: PaymentState.EXEMPT }
+    };
+
+    if (academicYear && academicYear !== 'ALL') {
+      whereClause.academicYear = academicYear;
+    }
+
+    const updated = await prisma.paymentStatus.updateMany({
+      where: whereClause,
+      data: {
+        isPaid: true,
+        paidAt: new Date(),
+        status: PaymentState.PAID,
+        markedById: req.user?.id
+      }
+    });
+
+    return res.json({
+      message: `Se han liquidado ${updated.count} pagos pendientes con éxito.`,
+      updatedCount: updated.count
+    });
+  } catch (error) {
+    console.error('Error al poner al día los pagos del alumno:', error);
+    return res.status(500).json({ error: 'Error al marcar todo como pagado.' });
+  }
+});
+
+// PUT /api/payments/:studentId - Conmutar estado pagado individual
 router.put('/:studentId', authenticateToken, requireTeacher, async (req: AuthRequest, res) => {
   const studentId = Array.isArray(req.params.studentId) ? req.params.studentId[0] : req.params.studentId;
-  const { isPaid, month, year } = req.body;
+  const { isPaid, month, year, paymentId, concept } = req.body;
 
   if (typeof isPaid !== 'boolean') {
     return res.status(400).json({ error: 'El campo isPaid debe ser booleano.' });
   }
 
-  const parsed = parseMonthYear(
-    month !== undefined ? String(month) : undefined,
-    year !== undefined ? String(year) : undefined
-  );
-
-  if ('error' in parsed) {
-    return res.status(400).json(parsed);
-  }
-
   try {
-    await ensureStudentPaymentScheduleById(prisma, studentId);
+    let payment;
+    if (paymentId) {
+      payment = await prisma.paymentStatus.findUnique({ where: { id: paymentId } });
+    } else {
+      const parsed = parseMonthYear(
+        month !== undefined ? String(month) : undefined,
+        year !== undefined ? String(year) : undefined
+      );
+      if ('error' in parsed) return res.status(400).json(parsed);
 
-    const targetStudent = await prisma.user.findFirst({ where: { id: studentId, role: 'STUDENT' } });
-    if (!targetStudent) return res.status(404).json({ error: 'Alumno no encontrado' });
+      payment = await prisma.paymentStatus.findFirst({
+        where: {
+          studentId,
+          month: parsed.month,
+          year: parsed.year,
+          ...(concept ? { concept } : {})
+        }
+      });
+    }
 
-    const payment = await prisma.paymentStatus.findFirst({
-      where: {
-        studentId,
-        month: parsed.month,
-        year: parsed.year
-      }
-    });
-
-    if (!payment) return res.status(404).json({ error: 'No existe una cuota generada para ese mes.' });
+    if (!payment) return res.status(404).json({ error: 'No existe una cuota generada para ese registro.' });
 
     const updatedPayment = await prisma.paymentStatus.update({
       where: { id: payment.id },

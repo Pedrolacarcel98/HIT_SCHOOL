@@ -13,15 +13,19 @@ interface AcademyEnrollment {
 }
 
 interface StudentPaymentResponse {
+  id?: string;
+  concept?: string;
+  isCustom?: boolean;
+  isExempt?: boolean;
   month: number;
   year: number;
   amount: number | null;
   dueDate: string | null;
   paidAt: string | null;
   isPaid: boolean;
-  status: 'PENDING' | 'PAID';
+  status: 'PENDING' | 'PAID' | 'EXEMPT';
   isOverdue: boolean;
-  visualStatus: 'PAID' | 'PENDING' | 'OVERDUE';
+  visualStatus: 'PAID' | 'PENDING' | 'OVERDUE' | 'EXEMPT';
   isApplicable: boolean;
   updatedAt: string | null;
   student: {
@@ -127,7 +131,9 @@ const StudentPayments: React.FC = () => {
         const cards = body.map(paymentData => ({
           month: paymentData.month,
           year: paymentData.year,
-          label: getMonthLabel(paymentData.month, paymentData.year),
+          label: paymentData.concept && paymentData.concept !== 'Cuota mensual'
+            ? paymentData.concept
+            : getMonthLabel(paymentData.month, paymentData.year),
           data: paymentData,
           error: ''
         }));
@@ -189,17 +195,50 @@ const StudentPayments: React.FC = () => {
     const billedDni = card.data.student.parent?.profile?.dni || card.data.student.profile?.dni || null;
     const billedAddress = card.data.student.parent?.profile?.address || card.data.student.profile?.address || null;
 
-    generateInvoicePDF({
-      studentName: billedName,
-      studentDni: billedDni,
-      studentEmail: card.data.student.email,
-      studentAddress: billedAddress,
-      month: card.month,
-      year: card.year,
-      monthLabel: card.label,
-      amount: card.data.amount || 35,
-      paidAt: card.data.paidAt
-    });
+    // Buscar si hay varios pagos pagados en ese mismo mes/año (ej. Cuota + Libro)
+    const monthCards = groupedPayments
+      .flatMap(g => g.payments)
+      .filter(p => p.month === card.month && p.year === card.year && p.data?.isPaid && !p.data?.isExempt);
+
+    if (monthCards.length > 1) {
+      const items = monthCards.map(p => ({
+        concept: p.data?.concept === 'Material / Libro'
+          ? 'Material Didáctico / Libro de Texto Oficial'
+          : `Cuota Mensual - ${p.label}`,
+        amount: p.data?.amount || 35
+      }));
+      const totalAmount = items.reduce((acc, curr) => acc + curr.amount, 0);
+
+      generateInvoicePDF({
+        studentName: billedName,
+        studentDni: billedDni,
+        studentEmail: card.data.student.email,
+        studentAddress: billedAddress,
+        month: card.month,
+        year: card.year,
+        monthLabel: card.label,
+        amount: totalAmount,
+        items,
+        paidAt: card.data.paidAt
+      });
+    } else {
+      const conceptText = card.data.concept === 'Material / Libro'
+        ? 'Material Didáctico / Libro de Texto Oficial'
+        : `Cuota Mensual - ${card.label}`;
+
+      generateInvoicePDF({
+        studentName: billedName,
+        studentDni: billedDni,
+        studentEmail: card.data.student.email,
+        studentAddress: billedAddress,
+        month: card.month,
+        year: card.year,
+        monthLabel: card.label,
+        concept: conceptText,
+        amount: card.data.amount || 35,
+        paidAt: card.data.paidAt
+      });
+    }
   };
 
   const handleDownloadStatement = (yearFilter: string = 'ALL') => {
@@ -328,24 +367,27 @@ const StudentPayments: React.FC = () => {
                 <div style={{ display: 'grid', gap: '1rem' }}>
                   {group.payments.map((payment) => (
                     <div
-                      key={`${payment.year}-${payment.month}`}
+                      key={`${payment.year}-${payment.month}-${payment.data?.concept || 'cuota'}`}
                       style={{
-                        border: '1px solid var(--border)',
+                        border: `1px solid ${payment.data?.concept === 'Material / Libro' ? '#fde68a' : 'var(--border)'}`,
                         borderRadius: '12px',
-                        background: '#fffdf0',
-                        padding: '1.25rem'
+                        background: payment.data?.concept === 'Material / Libro' ? '#fffbeb' : '#fffdf0',
+                        padding: '1.25rem',
+                        opacity: payment.data?.isExempt ? 0.6 : 1
                       }}
                     >
                       {(() => {
                         const visualStatus = payment.data
-                          ? getPaymentVisualStatus(payment.data.isPaid, payment.month, payment.year)
+                          ? getPaymentVisualStatus(payment.data.isPaid, payment.month, payment.year, new Date(), payment.data.isExempt)
                           : null;
                         const isPaid = visualStatus === 'PAID';
                         const badge = visualStatus === 'PAID'
                           ? { label: 'Pagado', icon: <CheckCircle2 size={16} />, color: '#047857', background: '#d1fae5' }
-                          : visualStatus === 'OVERDUE'
-                            ? { label: 'Impago', icon: <XCircle size={16} />, color: '#b91c1c', background: '#fee2e2' }
-                            : { label: 'Pendiente', icon: <XCircle size={16} />, color: '#b45309', background: '#fef3c7' };
+                          : visualStatus === 'EXEMPT'
+                            ? { label: 'Exento / Vacaciones', icon: <CheckCircle2 size={16} />, color: '#64748b', background: '#f1f5f9' }
+                            : visualStatus === 'OVERDUE'
+                              ? { label: 'Impago', icon: <XCircle size={16} />, color: '#b91c1c', background: '#fee2e2' }
+                              : { label: 'Pendiente', icon: <XCircle size={16} />, color: '#b45309', background: '#fef3c7' };
 
                         return (
                           <>

@@ -1,4 +1,4 @@
-import { BillingPeriod, PaymentState, PrismaClient, Role, AcademyEnrollment } from '@prisma/client';
+import { BillingPeriod, PaymentState, PrismaClient, AcademyEnrollment, Modality } from '@prisma/client';
 
 export const DEFAULT_VISIBLE_MONTH_COUNT = 3;
 
@@ -6,6 +6,15 @@ export interface MonthTarget {
   month: number;
   year: number;
 }
+
+export const getAcademicYearForDate = (date: Date = new Date()): string => {
+  const month = date.getMonth() + 1; // 1-12
+  const year = date.getFullYear();
+  if (month >= 8) {
+    return `${year}-${year + 1}`;
+  }
+  return `${year - 1}-${year}`;
+};
 
 const normalizeMonthDate = (year: number, month: number) => new Date(year, month - 1, 1, 12, 0, 0, 0);
 
@@ -42,7 +51,7 @@ export const getVisibleMonthTargets = (count = DEFAULT_VISIBLE_MONTH_COUNT, refe
 };
 
 export const getStudentApplicableMonthsUpToNow = (
-  enrollments: Pick<AcademyEnrollment, 'startDate' | 'endDate'>[],
+  enrollments: Pick<AcademyEnrollment, 'startDate' | 'endDate' | 'billingPeriod'>[],
   referenceDate = new Date()
 ): MonthTarget[] => {
   const monthsSet = new Set<string>();
@@ -54,9 +63,19 @@ export const getStudentApplicableMonthsUpToNow = (
     const endMonth = new Date(end.getFullYear(), end.getMonth(), 1, 12, 0, 0, 0);
 
     let current = new Date(startMonth);
-    while (current.getTime() <= Math.max(startMonth.getTime(), endMonth.getTime())) {
+    const maxEnd = Math.max(startMonth.getTime(), endMonth.getTime());
+
+    while (current.getTime() <= maxEnd) {
       monthsSet.add(`${current.getFullYear()}-${current.getMonth() + 1}`);
       current = addMonths(current, 1);
+    }
+
+    // Si es trimestral y el inicio cae en un trimestre, asegurar que se cubran los meses del trimestre
+    if (enrollment.billingPeriod === BillingPeriod.QUARTERLY) {
+      const qMonths = getQuarterMonthsForDate(start);
+      qMonths.forEach(target => {
+        monthsSet.add(`${target.year}-${target.month}`);
+      });
     }
   });
 
@@ -71,11 +90,40 @@ export const getStudentApplicableMonthsUpToNow = (
   });
 };
 
+/**
+ * Devuelve los meses restantes del trimestre a partir de una fecha de inicio
+ * T1: Oct (10), Nov (11), Dec (12)
+ * T2: Jan (1), Feb (2), Mar (3)
+ * T3: Apr (4), May (5), Jun (6)
+ */
+export const getQuarterMonthsForDate = (date: Date): MonthTarget[] => {
+  const m = date.getMonth() + 1;
+  const y = date.getFullYear();
+
+  // Trimestre 1 (Oct - Dic)
+  if (m === 10) return [{ month: 10, year: y }, { month: 11, year: y }, { month: 12, year: y }];
+  if (m === 11) return [{ month: 11, year: y }, { month: 12, year: y }];
+  if (m === 12) return [{ month: 12, year: y }];
+
+  // Trimestre 2 (Ene - Mar)
+  if (m === 1) return [{ month: 1, year: y }, { month: 2, year: y }, { month: 3, year: y }];
+  if (m === 2) return [{ month: 2, year: y }, { month: 3, year: y }];
+  if (m === 3) return [{ month: 3, year: y }];
+
+  // Trimestre 3 (Abr - Jun)
+  if (m === 4) return [{ month: 4, year: y }, { month: 5, year: y }, { month: 6, year: y }];
+  if (m === 5) return [{ month: 5, year: y }, { month: 6, year: y }];
+  if (m === 6) return [{ month: 6, year: y }];
+
+  // Septiembre u otros meses: devuelve el propio mes
+  return [{ month: m, year: y }];
+};
+
 export const isPaymentOverdue = (
-  payment: { isPaid: boolean; dueDate: Date | string | null },
+  payment: { isPaid: boolean; isExempt?: boolean; status?: string; dueDate: Date | string | null },
   referenceDate = new Date()
 ) => {
-  if (payment.isPaid || !payment.dueDate) {
+  if (payment.isPaid || payment.isExempt || payment.status === 'EXEMPT' || !payment.dueDate) {
     return false;
   }
 
@@ -90,15 +138,19 @@ export const isPaymentOverdue = (
 };
 
 export const getPaymentVisualStatus = (
-  payment: { isPaid: boolean; month: number; year: number; dueDate?: Date | string | null },
+  payment: { isPaid: boolean; isExempt?: boolean; status?: string; month: number; year: number; dueDate?: Date | string | null },
   referenceDate = new Date()
-): 'PAID' | 'PENDING' | 'OVERDUE' => {
+): 'PAID' | 'PENDING' | 'OVERDUE' | 'EXEMPT' => {
+  if (payment.isExempt || payment.status === 'EXEMPT') {
+    return 'EXEMPT';
+  }
+
   if (payment.isPaid) {
     return 'PAID';
   }
 
   if (payment.dueDate) {
-    return isPaymentOverdue({ isPaid: payment.isPaid, dueDate: payment.dueDate }, referenceDate)
+    return isPaymentOverdue({ isPaid: payment.isPaid, isExempt: payment.isExempt, status: payment.status, dueDate: payment.dueDate }, referenceDate)
       ? 'OVERDUE'
       : 'PENDING';
   }
@@ -111,6 +163,13 @@ export const getPaymentVisualStatus = (
     : 'PENDING';
 };
 
+/**
+ * Genera o sincroniza el calendario de pagos de un alumno
+ * - Respeta la regla del 15 de septiembre (50% solo en presencial)
+ * - Respeta trimestres (Oct-Dic, Ene-Mar, Abr-Jun) generando las cartas correspondientes
+ * - Genera el concepto 'Material / Libro' si la matrícula tiene libro configurado
+ * - Respeta pagos con isCustom o isExempt para mantener la 'memoria'
+ */
 export const ensureStudentPaymentScheduleById = async (prisma: PrismaClient, studentId: string) => {
   const enrollments = await prisma.academyEnrollment.findMany({
     where: { studentId }
@@ -120,28 +179,117 @@ export const ensureStudentPaymentScheduleById = async (prisma: PrismaClient, stu
     return [];
   }
 
-  const generatedPayments = [];
+  const generatedPayments: Array<{ month: number; year: number; concept: string }> = [];
 
   for (const enrollment of enrollments) {
     const start = new Date(enrollment.startDate);
-    const startMonthDate = new Date(start.getFullYear(), start.getMonth(), 1, 12, 0, 0, 0);
-    
+    const academicYear = enrollment.academicYear || getAcademicYearForDate(start);
+    const startDay = start.getDate();
+    const startMonth = start.getMonth() + 1;
+    const startYear = start.getFullYear();
+
+    // 1. Manejo del cobro de Material / Libro si está activado
+    if (enrollment.hasBook && enrollment.bookPrice && enrollment.bookPrice > 0) {
+      const existingBookPayment = await prisma.paymentStatus.findFirst({
+        where: {
+          studentId,
+          academicYear,
+          concept: 'Material / Libro'
+        }
+      });
+
+      if (!existingBookPayment) {
+        await prisma.paymentStatus.create({
+          data: {
+            studentId,
+            enrollmentId: enrollment.id,
+            academicYear,
+            month: startMonth,
+            year: startYear,
+            amount: enrollment.bookPrice,
+            concept: 'Material / Libro',
+            isCustom: true,
+            isExempt: false,
+            dueDate: start,
+            status: PaymentState.PENDING,
+            isPaid: false
+          }
+        });
+        generatedPayments.push({ month: startMonth, year: startYear, concept: 'Material / Libro' });
+      }
+    }
+
+    // 2. Determinar los meses a generar según la periodicidad
+    const monthsToSchedule: MonthTarget[] = [];
     const end = enrollment.endDate ? new Date(enrollment.endDate) : new Date();
     const endMonthDate = new Date(end.getFullYear(), end.getMonth(), 1, 12, 0, 0, 0);
 
-    const billingInterval = enrollment.billingPeriod === BillingPeriod.QUARTERLY ? 3 : 1;
-    let current = new Date(startMonthDate);
-    
-    while (current.getTime() <= Math.max(startMonthDate.getTime(), endMonthDate.getTime())) {
-      const month = current.getMonth() + 1;
-      const year = current.getFullYear();
+    if (enrollment.billingPeriod === BillingPeriod.QUARTERLY) {
+      // Si empezó en septiembre, septiembre es independiente + los meses del T1
+      if (startMonth === 9) {
+        monthsToSchedule.push({ month: 9, year: startYear });
+        // Además, genera el T1 completo (10, 11, 12)
+        monthsToSchedule.push({ month: 10, year: startYear });
+        monthsToSchedule.push({ month: 11, year: startYear });
+        monthsToSchedule.push({ month: 12, year: startYear });
+      } else {
+        // Generar los meses restantes del trimestre del inicio
+        const qMonths = getQuarterMonthsForDate(start);
+        qMonths.forEach(target => {
+          if (!monthsToSchedule.some(m => m.month === target.month && m.year === target.year)) {
+            monthsToSchedule.push(target);
+          }
+        });
+      }
+
+      // Además, si el mes actual ya ha avanzado a trimestres posteriores dentro de la fecha fin, agregarlos
+      let cur = new Date(start.getFullYear(), start.getMonth(), 1, 12, 0, 0, 0);
+      while (cur.getTime() <= endMonthDate.getTime()) {
+        const qRest = getQuarterMonthsForDate(cur);
+        qRest.forEach(target => {
+          if (!monthsToSchedule.some(m => m.month === target.month && m.year === target.year)) {
+            monthsToSchedule.push(target);
+          }
+        });
+        cur = addMonths(cur, 3);
+      }
+    } else {
+      // MONTHLY: Mes a mes desde start hasta endMonthDate (o mes actual)
+      let cur = new Date(start.getFullYear(), start.getMonth(), 1, 12, 0, 0, 0);
+      while (cur.getTime() <= Math.max(new Date(start.getFullYear(), start.getMonth(), 1, 12, 0, 0, 0).getTime(), endMonthDate.getTime())) {
+        monthsToSchedule.push({
+          month: cur.getMonth() + 1,
+          year: cur.getFullYear()
+        });
+        cur = addMonths(cur, 1);
+      }
+    }
+
+    // 3. Crear o actualizar cada cuota mensual
+    for (const target of monthsToSchedule) {
+      const month = target.month;
+      const year = target.year;
       const dueDate = getDueDateForEnrollmentMonth(enrollment, month, year);
+
+      // Calcular importe base aplicando la Regla del 15 de Septiembre
+      let calculatedAmount = enrollment.monthlyFee;
+      if (
+        month === 9 &&
+        year === startYear &&
+        enrollment.modality === Modality.PRESENCIAL &&
+        startMonth === 9 &&
+        startDay >= 15
+      ) {
+        calculatedAmount = Math.round((enrollment.monthlyFee / 2) * 100) / 100;
+      }
 
       const existingPayment = await prisma.paymentStatus.findFirst({
         where: {
           studentId,
+          academicYear,
           month,
-          year
+          year,
+          concept: 'Cuota mensual'
         }
       });
 
@@ -150,31 +298,37 @@ export const ensureStudentPaymentScheduleById = async (prisma: PrismaClient, stu
           data: {
             studentId,
             enrollmentId: enrollment.id,
+            academicYear,
             month,
             year,
-            amount: enrollment.monthlyFee,
+            amount: calculatedAmount,
+            concept: 'Cuota mensual',
+            isCustom: false,
+            isExempt: false,
             dueDate,
             status: PaymentState.PENDING,
             isPaid: false
           }
         });
-      } else if (existingPayment.enrollmentId === enrollment.id && !existingPayment.isPaid) {
-        const existingTime = existingPayment.dueDate ? new Date(existingPayment.dueDate).getTime() : 0;
-        const shouldUpdateAmount = isCurrentOrFutureMonth(month, year) && existingPayment.amount !== enrollment.monthlyFee;
-        if (shouldUpdateAmount || existingTime !== dueDate.getTime()) {
-          await prisma.paymentStatus.update({
-            where: { id: existingPayment.id },
-            data: {
-              amount: shouldUpdateAmount ? enrollment.monthlyFee : existingPayment.amount,
-              dueDate,
-              status: PaymentState.PENDING
-            }
-          });
-        }
-      }
+        generatedPayments.push({ month, year, concept: 'Cuota mensual' });
+      } else {
+        // Si el pago existe y no fue personalizado manualmente, ni está exento, ni está pagado, actualizar dueDate e importe si cambió la cuota
+        if (!existingPayment.isCustom && !existingPayment.isExempt && !existingPayment.isPaid) {
+          const shouldUpdateAmount = isCurrentOrFutureMonth(month, year) && existingPayment.amount !== calculatedAmount;
+          const existingTime = existingPayment.dueDate ? new Date(existingPayment.dueDate).getTime() : 0;
 
-      generatedPayments.push({ month, year });
-      current = addMonths(current, billingInterval);
+          if (shouldUpdateAmount || existingTime !== dueDate.getTime()) {
+            await prisma.paymentStatus.update({
+              where: { id: existingPayment.id },
+              data: {
+                amount: shouldUpdateAmount ? calculatedAmount : existingPayment.amount,
+                dueDate
+              }
+            });
+          }
+        }
+        generatedPayments.push({ month, year, concept: 'Cuota mensual' });
+      }
     }
   }
 
@@ -184,18 +338,25 @@ export const ensureStudentPaymentScheduleById = async (prisma: PrismaClient, stu
 export const getDueDateForMonth = (month: number, year: number) => normalizeMonthDate(year, month);
 
 export const isMonthWithinStudentSchedule = (
-  enrollments: Pick<AcademyEnrollment, 'startDate' | 'endDate'>[],
+  enrollments: Pick<AcademyEnrollment, 'startDate' | 'endDate' | 'billingPeriod'>[],
   month: number,
   year: number
 ) => {
   const targetMonth = normalizeMonthDate(year, month);
-  
+
   return enrollments.some(enrollment => {
     const start = new Date(enrollment.startDate);
     const startMonth = new Date(start.getFullYear(), start.getMonth(), 1, 12, 0, 0, 0);
     const end = enrollment.endDate ? new Date(enrollment.endDate) : new Date();
     const endMonth = new Date(end.getFullYear(), end.getMonth(), 1, 12, 0, 0, 0);
-    
+
+    if (enrollment.billingPeriod === BillingPeriod.QUARTERLY) {
+      const qMonths = getQuarterMonthsForDate(start);
+      if (qMonths.some(m => m.month === month && m.year === year)) {
+        return true;
+      }
+    }
+
     return targetMonth.getTime() >= startMonth.getTime() && targetMonth.getTime() <= endMonth.getTime();
   });
 };

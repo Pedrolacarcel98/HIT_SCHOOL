@@ -136,6 +136,8 @@ const StudentsManagement: React.FC = () => {
   const [newMonthlyFee, setNewMonthlyFee] = useState('35');
   const [newBillingPeriod, setNewBillingPeriod] = useState<'MONTHLY' | 'QUARTERLY'>('MONTHLY');
   const [newStartDate, setNewStartDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [newHasBook, setNewHasBook] = useState(false);
+  const [newBookPrice, setNewBookPrice] = useState('35');
 
   // Modal Ver Ficha
   const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
@@ -470,7 +472,10 @@ const StudentsManagement: React.FC = () => {
           studentId: selectedStudentForAlta.id,
           monthlyFee: Number(newMonthlyFee),
           billingPeriod: newBillingPeriod,
-          startDate: newStartDate
+          modality: selectedStudentForAlta.modality || 'PRESENCIAL',
+          startDate: newStartDate,
+          hasBook: newHasBook,
+          bookPrice: newHasBook ? Number(newBookPrice) : null
         })
       });
 
@@ -1855,6 +1860,36 @@ const StudentsManagement: React.FC = () => {
                   onChange={(e) => setNewStartDate(e.target.value)}
                   style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)' }}
                 />
+              </div>
+
+              <div style={{ padding: '0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: newHasBook ? '#fffbeb' : 'var(--surface-alt)', transition: 'background 0.2s' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 600, color: newHasBook ? '#92400e' : 'var(--text-main)' }}>
+                  <input
+                    type="checkbox"
+                    checked={newHasBook}
+                    onChange={(e) => setNewHasBook(e.target.checked)}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+                  />
+                  <span>📚 Incluir Material / Libro de texto</span>
+                </label>
+
+                {newHasBook && (
+                  <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px dashed #fde68a' }}>
+                    <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.82rem', fontWeight: 600, color: '#92400e' }}>
+                      Precio del Libro / Material (€)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      required={newHasBook}
+                      value={newBookPrice}
+                      onChange={(e) => setNewBookPrice(e.target.value)}
+                      placeholder="35.00"
+                      style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #fde68a', background: '#fff', color: 'var(--text-main)', fontSize: '0.9rem' }}
+                    />
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.75rem' }}>

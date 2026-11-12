@@ -46,6 +46,13 @@ enum MaterialType {
 enum PaymentState {
   PENDING
   PAID
+  EXEMPT
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
 }
 
 enum BillingPeriod {
@@ -181,16 +188,22 @@ model CourseTeacher {
 }
 
 model AcademyEnrollment {
-  id         String    @id @default(uuid())
-  studentId  String
-  startDate  DateTime
-  endDate    DateTime?
-  monthlyFee Int
-  billingPeriod BillingPeriod @default(MONTHLY)
-  student    User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  payments   PaymentStatus[]
+  id            String           @id @default(uuid())
+  studentId     String
+  academicYear  String           @default("2024-2025")
+  startDate     DateTime
+  endDate       DateTime?
+  monthlyFee    Float
+  billingPeriod BillingPeriod    @default(MONTHLY)
+  modality      Modality         @default(PRESENCIAL)
+  status        EnrollmentStatus @default(ACTIVE)
+  hasBook       Boolean          @default(false)
+  bookPrice     Float?
+  student       User             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  payments      PaymentStatus[]
 
   @@index([studentId])
+  @@index([studentId, academicYear, status])
 }
 
 model Assignment {
@@ -343,25 +356,31 @@ model MaterialAssignment {
 }
 
 model PaymentStatus {
-  id         String   @id @default(uuid())
-  studentId  String
+  id           String             @id @default(uuid())
+  studentId    String
   enrollmentId String?
-  markedById String?
-  month      Int
-  year       Int
-  amount     Int      @default(0)
-  dueDate    DateTime @default(now())
-  paidAt     DateTime?
-  status     PaymentState @default(PENDING)
-  isPaid     Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  student    User     @relation("StudentPayments", fields: [studentId], references: [id], onDelete: Cascade)
-  enrollment AcademyEnrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
-  markedBy   User?    @relation("MarkedPayments", fields: [markedById], references: [id])
+  markedById   String?
+  academicYear String             @default("2024-2025")
+  month        Int
+  year         Int
+  amount       Float              @default(0)
+  concept      String             @default("Cuota mensual")
+  isCustom     Boolean            @default(false)
+  isExempt     Boolean            @default(false)
+  notes        String?
+  dueDate      DateTime           @default(now())
+  paidAt       DateTime?
+  status       PaymentState       @default(PENDING)
+  isPaid       Boolean            @default(false)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  student      User               @relation("StudentPayments", fields: [studentId], references: [id], onDelete: Cascade)
+  enrollment   AcademyEnrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  markedBy     User?              @relation("MarkedPayments", fields: [markedById], references: [id])
 
-  @@unique([studentId, month, year])
+  @@unique([studentId, academicYear, month, year, concept])
   @@index([studentId, dueDate])
+  @@index([studentId, academicYear, status])
 }
 
 model FinalEvaluation {

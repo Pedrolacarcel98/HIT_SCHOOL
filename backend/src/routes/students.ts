@@ -352,6 +352,9 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
             month: true,
             year: true,
             amount: true,
+            concept: true,
+            isCustom: true,
+            isExempt: true,
             isPaid: true,
             status: true,
             dueDate: true
