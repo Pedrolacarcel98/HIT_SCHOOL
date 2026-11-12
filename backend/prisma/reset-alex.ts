@@ -3,8 +3,8 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function resetAlex() {
-  const alex = await prisma.user.findUnique({
-    where: { email: 'alumno.independiente@hitschool.com' },
+  const alex = await prisma.user.findFirst({
+    where: { email: 'alumno.independiente@hitschool.com', role: 'STUDENT' },
     include: {
       profile: true,
       academyEnrollments: true,

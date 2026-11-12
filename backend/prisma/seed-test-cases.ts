@@ -10,6 +10,7 @@ import {
   StructuredTaskAssignmentType
 } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import { upsertUserByEmailAndRole } from './userSeedHelpers';
 
 const prisma = new PrismaClient();
 
@@ -22,7 +23,7 @@ async function main() {
   // 0. ADMINISTRADORA (DIRECTORA LAURA)
   // ==========================================
   console.log('--- Creando Administradora ---');
-  const adminUser = await prisma.user.upsert({
+  const adminUser = await upsertUserByEmailAndRole(prisma, {
     where: { email: 'admin@hitschool.com' },
     update: { passwordHash, role: Role.ADMIN, status: UserStatus.ACTIVE },
     create: {
@@ -48,7 +49,7 @@ async function main() {
   // 1. PROFESORES (2 TEACHERS)
   // ==========================================
   console.log('--- Creando Profesores ---');
-  const teacher1 = await prisma.user.upsert({
+  const teacher1 = await upsertUserByEmailAndRole(prisma, {
     where: { email: 'profesor1@hitschool.com' },
     update: { passwordHash, role: Role.TEACHER, status: UserStatus.ACTIVE },
     create: {
@@ -70,7 +71,7 @@ async function main() {
   });
   console.log('✔ Profesor 1:', teacher1.email, teacher1.profile?.firstName);
 
-  const teacher2 = await prisma.user.upsert({
+  const teacher2 = await upsertUserByEmailAndRole(prisma, {
     where: { email: 'profesor2@hitschool.com' },
     update: { passwordHash, role: Role.TEACHER, status: UserStatus.ACTIVE },
     create: {
@@ -96,7 +97,7 @@ async function main() {
   // 2. PADRES (2 PARENTS)
   // ==========================================
   console.log('--- Creando Padres / Tutores ---');
-  const parent1 = await prisma.user.upsert({
+  const parent1 = await upsertUserByEmailAndRole(prisma, {
     where: { email: 'padre.unhijo@hitschool.com' },
     update: { passwordHash, role: Role.PARENT, status: UserStatus.ACTIVE },
     create: {
@@ -118,7 +119,7 @@ async function main() {
   });
   console.log('✔ Padre 1 (1 Hijo):', parent1.email);
 
-  const parent2 = await prisma.user.upsert({
+  const parent2 = await upsertUserByEmailAndRole(prisma, {
     where: { email: 'padre.doshijos@hitschool.com' },
     update: { passwordHash, role: Role.PARENT, status: UserStatus.ACTIVE },
     create: {
@@ -145,7 +146,7 @@ async function main() {
   // ==========================================
   console.log('--- Creando Alumnos con Padres Asignados ---');
   // Hijo único de Padre 1
-  const student1 = await prisma.user.upsert({
+  const student1 = await upsertUserByEmailAndRole(prisma, {
     where: { email: 'hijo.unico@hitschool.com' },
     update: {
       passwordHash,
@@ -177,7 +178,7 @@ async function main() {
   console.log('✔ Alumno Hijo Único:', student1.email, '-> Tutor:', parent1.email);
 
   // Hermano Mayor (Hijo 1 de Padre 2)
-  const student2 = await prisma.user.upsert({
+  const student2 = await upsertUserByEmailAndRole(prisma, {
     where: { email: 'hermano.mayor@hitschool.com' },
     update: {
       passwordHash,
@@ -209,7 +210,7 @@ async function main() {
   console.log('✔ Alumno Hermano Mayor:', student2.email, '-> Tutora:', parent2.email);
 
   // Hermana Menor (Hija 2 de Padre 2)
-  const student3 = await prisma.user.upsert({
+  const student3 = await upsertUserByEmailAndRole(prisma, {
     where: { email: 'hermano.menor@hitschool.com' },
     update: {
       passwordHash,
@@ -244,7 +245,7 @@ async function main() {
   // 4. ALUMNO INDEPENDIENTE (1 INDEPENDENT STUDENT)
   // ==========================================
   console.log('--- Creando Alumno Independiente (Sin Tutor) ---');
-  const studentIndependent = await prisma.user.upsert({
+  const studentIndependent = await upsertUserByEmailAndRole(prisma, {
     where: { email: 'alumno.independiente@hitschool.com' },
     update: {
       passwordHash,

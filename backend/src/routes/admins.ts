@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import { authenticateToken, requireAdmin, AuthRequest } from '../middleware/auth';
-import { sendAccountReactivationEmail } from '../services/email';
+import { sendAccountReactivationEmail, sendAdminWelcomeEmail } from '../services/email';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -60,6 +60,10 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
       select: adminSelect
     });
 
+    sendAdminWelcomeEmail(admin.email, firstName.trim(), temporaryPassword).catch(err => {
+      console.error('Error al enviar email de bienvenida al administrador:', err);
+    });
+
     res.status(201).json({ message: 'Administrador creado con éxito', admin, generatedPassword: temporaryPassword });
   } catch (error: any) {
     if (error.code === 'P2002') return res.status(400).json({ error: 'El correo ya está registrado en el sistema' });
@@ -80,7 +84,7 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
     if (!admin) return res.status(404).json({ error: 'Administrador no encontrado' });
 
     const existingUser = await prisma.user.findFirst({
-      where: { email: email.trim().toLowerCase(), NOT: { id: adminId } }
+      where: { email: email.trim().toLowerCase(), role: 'ADMIN', NOT: { id: adminId } }
     });
     if (existingUser) return res.status(400).json({ error: 'Este correo ya pertenece a otro usuario' });
 

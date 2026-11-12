@@ -1,5 +1,6 @@
 import { PrismaClient, Role, UserStatus, Modality } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import { upsertUserByEmailAndRole } from './userSeedHelpers';
 
 const prisma = new PrismaClient();
 
@@ -8,8 +9,8 @@ async function main() {
   console.log('Inserting second child for Padre Ejemplar...');
 
   // Get the first parent
-  const parent1 = await prisma.user.findUnique({
-    where: { email: 'padre1@test.com' }
+  const parent1 = await prisma.user.findFirst({
+    where: { email: 'padre1@test.com', role: Role.PARENT }
   });
 
   if (!parent1) {
@@ -18,7 +19,7 @@ async function main() {
   }
 
   // Create second child
-  const secondChild = await prisma.user.upsert({
+  const secondChild = await upsertUserByEmailAndRole(prisma, {
     where: { email: 'hijo2_ejemplar@test.com' },
     update: {},
     create: {

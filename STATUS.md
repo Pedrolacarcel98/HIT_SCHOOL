@@ -48,7 +48,23 @@
 
 ## 4. Registro de Sesión
 
-- **Sesión actual:** Pagos, feedback de exámenes autocorregidos, preguntas con imágenes y huecos, y tareas estructuradas asignables con progreso individual.
+- **Sesión actual:** Diagnóstico del botón «Guardar y enviar credenciales» en Gestión de Alumnos.
+- **Acciones realizadas:** En `frontend/src/pages/StudentsManagement.tsx`, el toast de error se eleva por encima del modal y anuncia el error con ARIA; las respuestas no JSON muestran el código HTTP. `npm run build` correcto; permanece el aviso de bundle grande de Vite. La causa concreta del `400` original aún debe leerse en el mensaje visible al repetir el alta.
+- **Próximo paso:** Repetir el alta que falla y usar el mensaje visible para corregir la validación concreta si corresponde.
+
+- **Sesión anterior:** Hotfix de emails compartidos por rol y resolución independiente de cuentas de alumno/tutor.
+- **Acciones realizadas:**
+  - En `backend/prisma/schema.prisma`: email ya no es globalmente único; añadido índice de consulta `(role, email)`.
+  - En `backend/prisma/ensure-user-email-index.sql`: añadido índice único parcial PostgreSQL para roles no `STUDENT`, permitiendo varios alumnos con el mismo email.
+  - En `backend/package.json`, `README.md`, `DEPLOYMENT_WALKTHROUGH.md`, `DEPLOYMENT_GCP_DEBIAN.md` y `.agents/agents/DEVELOPER.md`: centralizada la sincronización en `npm run schema:sync`, que ejecuta `db push` y reaplica el índice parcial.
+  - En rutas de alumnos/tutores/profesores/admin: permitidos emails compartidos entre roles; alta combinada alumno+tutor dentro de una transacción; validaciones de edición acotadas al mismo rol.
+  - En `backend/src/routes/auth.ts` y `frontend/src/pages/Login.tsx`: login por perfil y contraseña; selector si varias cuentas de alumno coinciden; recuperación de alumno por email, nombre y apellidos.
+  - En `backend/src/services/email.ts`: el mensaje de recuperación identifica si la clave corresponde a alumno, tutor o profesor.
+  - Seeds y scripts de mantenimiento migrados a consultas por email y rol.
+  - Validación: `prisma validate`, typecheck backend y scripts Prisma, y build frontend correctos. API smoke test en PostgreSQL desechable confirmó varios alumnos por email, tutor/profesor/admin por rol, selección de cuenta e inscripción combinada. Reset SMTP exacto pendiente de prueba por falta de SMTP configurado.
+- **Próximo paso:** probar el envío de recuperación con SMTP de pruebas y desplegar `npm run schema:sync` en el entorno objetivo antes de publicar el backend.
+
+- **Sesión anterior:** Pagos, feedback de exámenes autocorregidos, preguntas con imágenes y huecos, y tareas estructuradas asignables con progreso individual.
 - **Acciones realizadas:**
   - En `schema.prisma`: Añadido rol `PARENT`, relación autoreferencial `parentId` en `User` y campos extendidos (`dni`, `phone`, `birthDate`, `address`) en `Profile`.
   - En `backend/src/index.ts`: Eliminado el endpoint no autenticado `/api/users` y añadido healthcheck `/api/health`.
@@ -100,6 +116,7 @@
 8. [x] **Paso 8 (Completado):** Sincronizar el motor de calificaciones trimestrales entre panel de alumno y profesor, con medias por modalidad y filtrado de contenido evaluable.
 6. [x] **Paso 6 (Completado):** Consolidar las vistas familiares; selector de hijos, tablón, pagos, calificaciones y tareas estructuradas están integrados en el panel adaptado.
 7. [x] **Paso 7 (Completado):** Sincronizar Prisma y validar el flujo de tareas estructuradas/exámenes con profesor, alumno y tutor.
+9. [x] **Paso 9 (Completado):** Permitir emails compartidos entre tutor, múltiples alumnos y distintos roles; resolver login y recuperación por cuenta; actualizar el procedimiento de sincronización PostgreSQL.
 
 ---
 

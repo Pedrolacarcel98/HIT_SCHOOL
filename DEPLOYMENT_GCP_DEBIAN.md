@@ -195,26 +195,27 @@ cat <<EOF > backend/.env
 DATABASE_URL="postgresql://root:rootpassword@db:5432/hitschool?schema=public"
 JWT_SECRET="$(openssl rand -hex 32)"
 PORT=3000
-FRONTEND_URL="http://${VM_IP}:5173"
-SMTP_HOST="smtp.gmail.com"
-SMTP_PORT=587
-SMTP_SECURE=false
-SMTP_REJECT_UNAUTHORIZED=false
-SMTP_USER="tu_correo_de_notificaciones@gmail.com"
-SMTP_PASSWORD="tu_contraseña_de_aplicacion_gmail"
-SMTP_FROM="HitSchool <tu_correo_de_notificaciones@gmail.com>"
+FRONTEND_URL="https://app.hitschool.es"
+SMTP_HOST="smtp.resend.com"
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_REJECT_UNAUTHORIZED=true
+SMTP_USER="resend"
+SMTP_PASSWORD="tu_resend_api_key"
+RESEND_API_KEY="tu_resend_api_key"
+SMTP_FROM="HitSchool <no-reply@hitschool.es>"
+SMTP_REPLY_TO="Hitschool.laspajanosas@gmail.com"
 EOF
 ```
 
 *(Si no tienes credenciales de correo configuradas ahora mismo, puedes dejar los valores predeterminados de prueba; el sistema funcionará igualmente).*
 
-### 6.3 Configurar `docker-compose.yml` para la IP Pública
-Vite necesita conocer la URL del backend a la que deben llamar los navegadores externos. Sustituiremos `localhost` por la IP pública de la máquina:
+### 6.3 Configurar `docker-compose.yml` para la IP Pública / Dominio
+Vite necesita conocer la URL del backend a la que deben llamar los navegadores externos:
 
 ```bash
 # Reemplazar localhost por la IP pública en el docker-compose.yml
 sed -i "s|VITE_API_URL=http://localhost:3000|VITE_API_URL=http://${VM_IP}:3000|g" docker-compose.yml
-sed -i "s|FRONTEND_URL=http://localhost:5173|FRONTEND_URL=http://${VM_IP}:5173|g" docker-compose.yml
 sed -i "s|N8N_HOST=localhost|N8N_HOST=${VM_IP}|g" docker-compose.yml
 sed -i "s|WEBHOOK_URL=http://localhost:5678/|WEBHOOK_URL=http://${VM_IP}:5678/|g" docker-compose.yml
 ```
@@ -254,7 +255,7 @@ Una vez que el backend esté en ejecución, inicializaremos la estructura relaci
 
 ### 8.1 Sincronizar el esquema de Prisma con PostgreSQL
 ```bash
-docker exec hit_school_backend npx prisma db push
+docker exec hit_school_backend npm run schema:sync
 ```
 
 ### 8.2 Sembrar los datos de prueba maestros (Cursos, Alumnos, Familias y Calificaciones)
@@ -349,18 +350,19 @@ cat <<EOF > backend/.env
 DATABASE_URL="postgresql://root:rootpassword@db:5432/hitschool?schema=public"
 JWT_SECRET="$(openssl rand -hex 32)"
 PORT=3000
-FRONTEND_URL="http://${VM_IP}:5173"
-SMTP_HOST="smtp.gmail.com"
-SMTP_PORT=587
-SMTP_SECURE=false
-SMTP_REJECT_UNAUTHORIZED=false
-SMTP_USER="tu_correo@gmail.com"
-SMTP_PASSWORD="tu_password"
-SMTP_FROM="HitSchool <tu_correo@gmail.com>"
+FRONTEND_URL="https://app.hitschool.es"
+SMTP_HOST="smtp.resend.com"
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_REJECT_UNAUTHORIZED=true
+SMTP_USER="resend"
+SMTP_PASSWORD="tu_resend_api_key"
+RESEND_API_KEY="tu_resend_api_key"
+SMTP_FROM="HitSchool <no-reply@hitschool.es>"
+SMTP_REPLY_TO="Hitschool.laspajanosas@gmail.com"
 EOF
 
 sed -i "s|VITE_API_URL=http://localhost:3000|VITE_API_URL=http://${VM_IP}:3000|g" docker-compose.yml
-sed -i "s|FRONTEND_URL=http://localhost:5173|FRONTEND_URL=http://${VM_IP}:5173|g" docker-compose.yml
 sed -i "s|N8N_HOST=localhost|N8N_HOST=${VM_IP}|g" docker-compose.yml
 sed -i "s|WEBHOOK_URL=http://localhost:5678/|WEBHOOK_URL=http://${VM_IP}:5678/|g" docker-compose.yml
 
@@ -371,7 +373,7 @@ echo "=== 7. Esperando inicialización del backend (15s) ==="
 sleep 15
 
 echo "=== 8. Sincronizando Base de Datos ==="
-docker exec hit_school_backend npx prisma db push
+docker exec hit_school_backend npm run schema:sync
 docker exec hit_school_backend npx ts-node prisma/seed-test-cases.ts
 
 echo "================================================="
