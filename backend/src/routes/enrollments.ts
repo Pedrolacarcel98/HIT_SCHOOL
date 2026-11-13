@@ -6,8 +6,15 @@ import { sendAccountReactivationEmail, sendStudentWelcomeEmail } from '../servic
 import bcrypt from 'bcrypt';
 import { deactivateParentIfNoActiveChildren } from '../services/parentStatus';
 
+class EnrollmentError extends Error {
+  constructor(public status: number, message: string) { super(message); }
+}
+
+export const createEnrollmentsRouter = (prisma: PrismaClient, notifications = {
+  welcome: sendStudentWelcomeEmail,
+  reactivation: sendAccountReactivationEmail
+}) => {
 const router = Router();
-const prisma = new PrismaClient();
 
 // GET /api/enrollments/all - Listado completo de matrículas para Admin
 router.get('/all', authenticateToken, requireAdmin, async (req, res) => {
@@ -71,7 +78,7 @@ router.post('/enroll', authenticateToken, requireTeacher, async (req, res) => {
 
   const normalizedBillingPeriod = billingPeriod || 'MONTHLY';
 
-  if (!monthlyFee || Number(monthlyFee) <= 0 || !startDate) {
+  if (!studentId || !Number.isFinite(Number(monthlyFee)) || Number(monthlyFee) <= 0 || !startDate) {
     return res.status(400).json({ error: 'El importe y la fecha de alta son obligatorios.' });
   }
   if (normalizedBillingPeriod !== 'MONTHLY' && normalizedBillingPeriod !== 'QUARTERLY') {
@@ -79,25 +86,41 @@ router.post('/enroll', authenticateToken, requireTeacher, async (req, res) => {
   }
 
   const enrollmentStartDate = new Date(startDate);
+  if (Number.isNaN(enrollmentStartDate.getTime())) {
+    return res.status(400).json({ error: 'La fecha de alta no es valida.' });
+  }
+  if (modality && !Object.values(Modality).includes(modality)) {
+    return res.status(400).json({ error: 'La modalidad no es valida.' });
+  }
+  if (hasBook && bookPrice !== undefined && (!Number.isFinite(Number(bookPrice)) || Number(bookPrice) < 0)) {
+    return res.status(400).json({ error: 'El precio del libro no es valido.' });
+  }
   const targetAcademicYear = academicYear || getAcademicYearForDate(enrollmentStartDate);
 
   try {
-    const student = await prisma.user.findUnique({
+    const temporaryPassword = `hit${Math.floor(1000 + Math.random() * 9000)}`;
+    const passwordHash = await bcrypt.hash(temporaryPassword, 10);
+    const { enrollment, updatedUser, isFirstEnrollment } = await prisma.$transaction(async transaction => {
+    const student = await transaction.user.findUnique({
       where: { id: studentId, role: 'STUDENT' },
       include: { academyEnrollments: { select: { id: true } } }
     });
     if (!student) {
-      return res.status(404).json({ error: 'Alumno no encontrado.' });
+      throw new EnrollmentError(404, 'Alumno no encontrado.');
     }
 
     if (student.status === 'ACTIVE') {
-      return res.status(400).json({ error: 'El alumno ya está dado de alta.' });
+      throw new EnrollmentError(400, 'El alumno ya está dado de alta.');
     }
 
     const isFirstEnrollment = student.academyEnrollments.length === 0;
-    const temporaryPassword = `hit${Math.floor(1000 + Math.random() * 9000)}`;
+    const activated = await transaction.user.updateMany({
+      where: { id: studentId, role: 'STUDENT', status: { not: 'ACTIVE' } },
+      data: { status: 'ACTIVE' }
+    });
+    if (activated.count !== 1) throw new EnrollmentError(409, 'El alumno ya ha sido activado.');
 
-    const enrollment = await prisma.academyEnrollment.create({
+    const enrollment = await transaction.academyEnrollment.create({
       data: {
         studentId,
         academicYear: targetAcademicYear,
@@ -111,12 +134,12 @@ router.post('/enroll', authenticateToken, requireTeacher, async (req, res) => {
       }
     });
 
-    const updatedUser = await prisma.user.update({
+    const updatedUser = await transaction.user.update({
       where: { id: studentId },
       data: {
         status: 'ACTIVE',
         modality: (modality as Modality) || Modality.PRESENCIAL,
-        passwordHash: await bcrypt.hash(temporaryPassword, 10)
+        passwordHash
       },
       select: {
         id: true,
@@ -127,17 +150,19 @@ router.post('/enroll', authenticateToken, requireTeacher, async (req, res) => {
       }
     });
 
-    await ensureStudentPaymentScheduleById(prisma, studentId);
+    await ensureStudentPaymentScheduleById(transaction, studentId);
+    return { enrollment, updatedUser, isFirstEnrollment };
+    });
 
     try {
       if (isFirstEnrollment) {
-        await sendStudentWelcomeEmail(
+        await notifications.welcome(
           updatedUser.email,
           updatedUser.profile?.firstName || 'alumno',
           temporaryPassword
         );
       } else {
-        await sendAccountReactivationEmail(
+        await notifications.reactivation(
           updatedUser.email,
           updatedUser.profile?.firstName || 'alumno',
           temporaryPassword,
@@ -155,6 +180,7 @@ router.post('/enroll', authenticateToken, requireTeacher, async (req, res) => {
 
     return res.json({ message: 'Alumno dado de alta exitosamente', enrollment, user: updatedUser, isFirstEnrollment });
   } catch (error) {
+    if (error instanceof EnrollmentError) return res.status(error.status).json({ error: error.message });
     console.error('Error dando de alta al alumno:', error);
     return res.status(500).json({ error: 'Error interno del servidor al dar de alta.' });
   }
@@ -330,4 +356,7 @@ router.post('/rollover', authenticateToken, requireAdmin, async (req, res) => {
   }
 });
 
-export default router;
+return router;
+};
+
+export default createEnrollmentsRouter(new PrismaClient());

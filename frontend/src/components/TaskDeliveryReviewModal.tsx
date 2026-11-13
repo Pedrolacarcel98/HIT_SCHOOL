@@ -10,7 +10,8 @@ import {
   BookOpen,
   Download,
   Eye,
-  MessageSquare
+  MessageSquare,
+  RotateCcw
 } from 'lucide-react';
 import ExamReviewModal from './ExamReviewModal';
 import AttachmentViewerModal, { isAttachmentImage, isAttachmentAudio } from './AttachmentViewerModal';
@@ -38,6 +39,7 @@ export interface TaskForReview {
   steps: TaskStepDetail[];
   taskGrade?: number | null;
   taskFeedback?: string | null;
+  gradeMode?: 'AUTO' | 'MANUAL';
 }
 
 export interface StepEvaluationPayload {
@@ -53,7 +55,8 @@ interface TaskDeliveryReviewModalProps {
   onSaveGrade?: (
     overallGrade: number | null,
     overallFeedback: string,
-    stepEvaluations: StepEvaluationPayload[]
+    stepEvaluations: StepEvaluationPayload[],
+    gradeMode?: 'AUTO' | 'MANUAL'
   ) => Promise<void>;
   onReviewExam?: (examStep: {
     title: string;
@@ -142,7 +145,7 @@ const TaskDeliveryReviewModal: React.FC<TaskDeliveryReviewModalProps> = ({
     task.taskGrade !== null && task.taskGrade !== undefined ? String(task.taskGrade) : ''
   );
   const [isManualOverride, setIsManualOverride] = useState(
-    task.taskGrade !== null && task.taskGrade !== undefined
+    task.gradeMode === 'MANUAL' || (!task.gradeMode && task.taskGrade !== null && task.taskGrade !== undefined)
   );
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
@@ -179,14 +182,12 @@ const TaskDeliveryReviewModal: React.FC<TaskDeliveryReviewModalProps> = ({
       if (stepVal !== undefined && stepVal.trim() !== '') {
         const parsed = parseFloat(stepVal);
         if (!isNaN(parsed)) validScores.push(parsed);
-      } else if (s.grade !== null && s.grade !== undefined) {
-        validScores.push(s.grade);
       }
     });
 
-    if (validScores.length === 0) return null;
+    if (validScores.length === 0 || validScores.length !== evaluableSteps.length) return null;
     const avg = validScores.reduce((a, b) => a + b, 0) / validScores.length;
-    return Number(avg.toFixed(1));
+    return Number(avg.toFixed(2));
   }, [evaluableSteps, stepForms]);
 
   // Nota efectiva mostrada
@@ -212,8 +213,7 @@ const TaskDeliveryReviewModal: React.FC<TaskDeliveryReviewModalProps> = ({
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const finalGradeNum =
-      effectiveOverallGrade.trim() !== '' ? parseFloat(effectiveOverallGrade) : autoCalculatedGrade;
+    const finalGradeNum = isManualOverride && customOverallGrade.trim() !== '' ? Number(customOverallGrade) : autoCalculatedGrade;
 
     if (finalGradeNum !== null && (isNaN(finalGradeNum) || finalGradeNum < 0 || finalGradeNum > 10)) {
       setError('La calificación global debe ser un número entre 0 y 10.');
@@ -240,13 +240,13 @@ const TaskDeliveryReviewModal: React.FC<TaskDeliveryReviewModalProps> = ({
         const form = stepForms[s.stepId] || { grade: '', feedback: '' };
         return {
           stepId: s.stepId,
-          grade: form.grade.trim() !== '' ? parseFloat(form.grade) : (s.grade ?? null),
+          grade: form.grade.trim() !== '' ? Number(form.grade) : null,
           feedback: form.feedback.trim() !== '' ? form.feedback.trim() : null
         };
       });
 
       if (onSaveGrade) {
-        await onSaveGrade(finalGradeNum, feedbackInput.trim(), stepPayload);
+        await onSaveGrade(finalGradeNum, feedbackInput.trim(), stepPayload, isManualOverride ? 'MANUAL' : 'AUTO');
       }
       onClose();
     } catch (err: any) {
@@ -505,6 +505,15 @@ const TaskDeliveryReviewModal: React.FC<TaskDeliveryReviewModalProps> = ({
                   </div>
                 )}
 
+                {step.isEvaluable && isExam && !readOnly && (
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginTop: '0.65rem', fontSize: '0.82rem', fontWeight: 600 }}>
+                    Nota del paso (0-10)
+                    <input type="number" min="0" max="10" step="0.01" value={stepForm.grade}
+                      onChange={event => handleStepGradeChange(step.stepId, event.target.value)}
+                      style={{ width: '130px', maxWidth: '100%', padding: '0.5rem', border: '1px solid var(--border)', borderRadius: '6px' }} />
+                  </label>
+                )}
+
                 {/* CASO 3: Paso evaluable MANUAL (Documento PDF, Texto/Redacción, Enlace) */}
                 {(step.isEvaluable || Boolean(step.content)) && !isExam && (
                   <div style={{ marginTop: '0.65rem', padding: '0.85rem 1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
@@ -603,7 +612,7 @@ const TaskDeliveryReviewModal: React.FC<TaskDeliveryReviewModalProps> = ({
 
                     {/* Controles de calificación docente o visualización para este paso manual */}
                     {!readOnly ? (
-                      <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: '0.75rem', alignItems: 'start', paddingTop: '0.65rem', borderTop: '1px solid #e2e8f0' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 190px), 1fr))', gap: '0.75rem', alignItems: 'start', paddingTop: '0.65rem', borderTop: '1px solid #e2e8f0' }}>
                         <div>
                           <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.25rem' }}>
                             Nota del Paso (0-10)
@@ -752,12 +761,13 @@ const TaskDeliveryReviewModal: React.FC<TaskDeliveryReviewModalProps> = ({
               )}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr', gap: '1rem', marginBottom: '1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 190px), 1fr))', gap: '1rem', marginBottom: '1rem' }}>
               <div>
-                <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                <label htmlFor="task-overall-grade" style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)' }}>
                   Nota Final Bloque (0-10)
                 </label>
                 <input
+                  id="task-overall-grade"
                   type="number"
                   step="0.1"
                   min="0"
@@ -765,7 +775,7 @@ const TaskDeliveryReviewModal: React.FC<TaskDeliveryReviewModalProps> = ({
                   placeholder={autoCalculatedGrade !== null ? String(autoCalculatedGrade) : 'Ej: 8.5'}
                   value={effectiveOverallGrade}
                   onChange={(e) => {
-                    setIsManualOverride(true);
+                    setIsManualOverride(e.target.value !== '');
                     setCustomOverallGrade(e.target.value);
                   }}
                   style={{
@@ -779,6 +789,11 @@ const TaskDeliveryReviewModal: React.FC<TaskDeliveryReviewModalProps> = ({
                     color: 'var(--primary)'
                   }}
                 />
+                <button type="button" title="Volver a automática: nota de tarea" disabled={!isManualOverride || isSaving}
+                  onClick={() => setIsManualOverride(false)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.35rem', padding: 0, border: 0, background: 'transparent', color: 'var(--primary)', fontSize: '0.75rem', opacity: isManualOverride ? 1 : 0.45, cursor: 'pointer' }}>
+                  <RotateCcw size={14} /> Volver a automática
+                </button>
               </div>
 
               <div>

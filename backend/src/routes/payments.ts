@@ -13,8 +13,6 @@ import {
   getAcademicYearForDate
 } from '../services/payments';
 
-const router = Router();
-const prisma = new PrismaClient();
 
 const getQueryString = (value: unknown) => {
   if (typeof value === 'string') {
@@ -39,6 +37,9 @@ const parseMonthYear = (monthParam?: string, yearParam?: string) => {
   }
   return { month, year };
 };
+
+export const createPaymentsRouter = (prisma: PrismaClient) => {
+const router = Router();
 
 // GET /api/payments/academic-years - Cursos escolares disponibles
 router.get('/academic-years', authenticateToken, requireTeacher, async (req, res) => {
@@ -538,7 +539,10 @@ router.put('/:studentId', authenticateToken, requireTeacher, async (req: AuthReq
       });
     }
 
-    if (!payment) return res.status(404).json({ error: 'No existe una cuota generada para ese registro.' });
+    if (!payment || payment.studentId !== studentId) return res.status(404).json({ error: 'No existe una cuota generada para ese alumno.' });
+    if (payment.isExempt || payment.status === PaymentState.EXEMPT) {
+      return res.status(400).json({ error: 'Una cuota exenta no se puede marcar como cobrada.' });
+    }
 
     const updatedPayment = await prisma.paymentStatus.update({
       where: { id: payment.id },
@@ -557,4 +561,7 @@ router.put('/:studentId', authenticateToken, requireTeacher, async (req: AuthReq
   }
 });
 
-export default router;
+return router;
+};
+
+export default createPaymentsRouter(new PrismaClient());

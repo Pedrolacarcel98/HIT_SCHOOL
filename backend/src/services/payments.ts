@@ -1,4 +1,4 @@
-import { BillingPeriod, PaymentState, PrismaClient, AcademyEnrollment, Modality } from '@prisma/client';
+import { BillingPeriod, PaymentState, PrismaClient, Prisma, AcademyEnrollment, Modality } from '@prisma/client';
 
 export const DEFAULT_VISIBLE_MONTH_COUNT = 3;
 
@@ -170,7 +170,7 @@ export const getPaymentVisualStatus = (
  * - Genera el concepto 'Material / Libro' si la matrícula tiene libro configurado
  * - Respeta pagos con isCustom o isExempt para mantener la 'memoria'
  */
-export const ensureStudentPaymentScheduleById = async (prisma: PrismaClient, studentId: string) => {
+export const ensureStudentPaymentScheduleById = async (prisma: PrismaClient | Prisma.TransactionClient, studentId: string) => {
   const enrollments = await prisma.academyEnrollment.findMany({
     where: { studentId }
   });
@@ -281,6 +281,7 @@ export const ensureStudentPaymentScheduleById = async (prisma: PrismaClient, stu
     for (const target of monthsToSchedule) {
       const month = target.month;
       const year = target.year;
+      if (month === 7 || month === 8) continue;
       const dueDate = getDueDateForEnrollmentMonth(enrollment, month, year);
       const targetAcademicYear = getAcademicYearForDate(new Date(year, month - 1, 1));
 

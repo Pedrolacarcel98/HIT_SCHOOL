@@ -1,9 +1,6 @@
 import { Router, Response } from 'express';
-import { PrismaClient, Modality } from '@prisma/client';
+import { PrismaClient, Modality, TermGrade } from '@prisma/client';
 import { authenticateToken, requireTeacher, AuthRequest } from '../middleware/auth';
-
-const router = Router();
-const prisma = new PrismaClient();
 
 // Helper para calcular la media de tareas y la nota final
 export const calculateTermOverallGrade = (
@@ -80,6 +77,63 @@ const calculateOnlineSkills = (scoresBySkill: Partial<Record<SkillKey, number[]>
   };
 };
 
+const calculatedGradeKeys = [
+  'middleExamGrade', 'finalExamGrade', 'tasksAverage', 'overallGrade', ...skillKeys
+] as const;
+type CalculatedGradeKey = typeof calculatedGradeKeys[number];
+type GradeOverrides = Partial<Record<CalculatedGradeKey, number>>;
+
+const readOverrides = (value: unknown): GradeOverrides => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const result: GradeOverrides = {};
+  for (const key of calculatedGradeKeys) {
+    const grade = (value as Record<string, unknown>)[key];
+    if (typeof grade === 'number' && Number.isFinite(grade) && grade >= 0 && grade <= 10) result[key] = grade;
+  }
+  return result;
+};
+
+const resolveTermEvaluation = (
+  modality: Modality,
+  record: Partial<TermGrade> | null | undefined,
+  taskScores: number[],
+  scoresBySkill: Partial<Record<SkillKey, number[]>>
+) => {
+  const gradeOverrides = readOverrides(record?.gradeOverrides);
+  const onlineSkills = modality === 'ONLINE' ? calculateOnlineSkills(scoresBySkill) : null;
+  const automaticGrades: Record<CalculatedGradeKey, number | null> = {
+    middleExamGrade: getExamAverage(examSkillKeys.map(skill => record?.[`middle${skill}`] ?? null)) ?? record?.middleExamGrade ?? null,
+    finalExamGrade: getExamAverage(examSkillKeys.map(skill => record?.[`final${skill}`] ?? null)) ?? record?.finalExamGrade ?? null,
+    tasksAverage: averageScores(taskScores),
+    overallGrade: null,
+    grammar: onlineSkills?.grammar ?? record?.grammar ?? null,
+    reading: onlineSkills?.reading ?? record?.reading ?? null,
+    writing: onlineSkills?.writing ?? record?.writing ?? null,
+    listening: onlineSkills?.listening ?? record?.listening ?? null,
+    speaking: onlineSkills?.speaking ?? record?.speaking ?? null
+  };
+  const effective = (key: CalculatedGradeKey) => gradeOverrides[key] ?? automaticGrades[key];
+  automaticGrades.overallGrade = modality === 'ONLINE'
+    ? (gradeOverrides.tasksAverage !== undefined
+      ? effective('tasksAverage')
+      : averageScores(skillKeys.map(effective).filter((grade): grade is number => grade !== null)) ?? effective('tasksAverage'))
+    : calculateTermOverallGrade(modality, effective('middleExamGrade'), effective('finalExamGrade'), effective('tasksAverage')).overallGrade;
+  return {
+    middleExamGrade: effective('middleExamGrade'),
+    finalExamGrade: effective('finalExamGrade'),
+    tasksAverage: effective('tasksAverage'),
+    overallGrade: effective('overallGrade'),
+    grammar: effective('grammar'), reading: effective('reading'), writing: effective('writing'),
+    listening: effective('listening'), speaking: effective('speaking'),
+    automaticGrades,
+    gradeOverrides
+  };
+};
+
+const resolveTaskGrade = (automatic: number | null, delivery?: { grade: number | null; status: string; gradeMode?: string | null }) =>
+  (delivery?.gradeMode === 'MANUAL' || (!delivery?.gradeMode && delivery?.status === 'GRADED')) && typeof delivery?.grade === 'number' && Number.isFinite(delivery.grade)
+    ? delivery.grade : automatic;
+
 const hasEvaluableStructuredStep = (task: {
   steps: Array<{
     requiresSubmission?: boolean;
@@ -102,6 +156,9 @@ const hasEvaluableStructuredStep = (task: {
 
   return hasNormalEvaluableStep || hasStudentContent || hasTaskGrade;
 };
+
+export const createTermGradesRouter = (prisma: PrismaClient) => {
+const router = Router();
 
 // 1. Obtener matriz trimestral de calificaciones para un curso (Profesor)
 router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
@@ -218,6 +275,7 @@ router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: A
         if (evaluableSteps.length > 0 && evaluableGraded.length === evaluableSteps.length) {
           taskGrade = Number((evaluableGraded.reduce((sum, step) => sum + (step.grade || 0), 0) / evaluableGraded.length).toFixed(2));
         }
+        taskGrade = resolveTaskGrade(taskGrade, delivery);
 
         if (taskGrade !== null) {
           studentTasksScores.push(taskGrade);
@@ -241,6 +299,7 @@ router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: A
           dueDate: task.dueDate,
           steps: stepsDetail,
           taskGrade,
+          gradeMode: delivery?.gradeMode || (delivery?.status === 'GRADED' ? 'MANUAL' : 'AUTO'),
           taskFeedback: delivery?.feedback || null,
           isCompleted: allStepsCompleted,
           completedAt,
@@ -249,32 +308,22 @@ router.get('/course/:courseId', authenticateToken, requireTeacher, async (req: A
         };
       });
 
-      const tasksAverage = studentTasksScores.length > 0
-        ? Number((studentTasksScores.reduce((a, b) => a + b, 0) / studentTasksScores.length).toFixed(2))
-        : null;
-
-      const onlineSkills = student.modality === 'ONLINE' ? calculateOnlineSkills(scoresBySkill) : null;
-      const { overallGrade } = calculateTermOverallGrade(
-        student.modality,
-        existingRecord?.middleExamGrade,
-        existingRecord?.finalExamGrade,
-        tasksAverage
-      );
-
       return {
         studentId: student.id,
         fullName: `${student.profile?.firstName || ''} ${student.profile?.lastName || ''}`.trim() || student.email,
         email: student.email,
         modality: student.modality,
-        middleExamGrade: existingRecord?.middleExamGrade ?? null,
-        finalExamGrade: existingRecord?.finalExamGrade ?? null,
-        tasksAverage,
-        overallGrade: onlineSkills?.overallGrade ?? overallGrade,
-        grammar: onlineSkills?.grammar ?? existingRecord?.grammar ?? null,
-        reading: onlineSkills?.reading ?? existingRecord?.reading ?? null,
-        writing: onlineSkills?.writing ?? existingRecord?.writing ?? null,
-        listening: onlineSkills?.listening ?? existingRecord?.listening ?? null,
-        speaking: onlineSkills?.speaking ?? existingRecord?.speaking ?? null,
+        middleGrammar: existingRecord?.middleGrammar ?? null,
+        middleReading: existingRecord?.middleReading ?? null,
+        middleWriting: existingRecord?.middleWriting ?? null,
+        middleListening: existingRecord?.middleListening ?? null,
+        middleSpeaking: existingRecord?.middleSpeaking ?? null,
+        finalGrammar: existingRecord?.finalGrammar ?? null,
+        finalReading: existingRecord?.finalReading ?? null,
+        finalWriting: existingRecord?.finalWriting ?? null,
+        finalListening: existingRecord?.finalListening ?? null,
+        finalSpeaking: existingRecord?.finalSpeaking ?? null,
+        ...resolveTermEvaluation(student.modality, existingRecord, studentTasksScores, scoresBySkill),
         observations: existingRecord?.observations ?? '',
         updatedAt: existingRecord?.updatedAt ?? null,
         tasksCount: evaluableTasks.length,
@@ -316,8 +365,26 @@ router.put('/course/:courseId', authenticateToken, requireTeacher, async (req: A
       speaking
     } = req.body;
 
-    if (!studentId || !term) {
-      return res.status(400).json({ error: 'studentId y term son obligatorios.' });
+    if (!studentId || ![1, 2, 3].includes(Number(term))) {
+      return res.status(400).json({ error: 'studentId y un trimestre entre 1 y 3 son obligatorios.' });
+    }
+    const gradeFields = [...calculatedGradeKeys, ...examSkillKeys.flatMap(skill => [`middle${skill}`, `final${skill}`])];
+    for (const field of gradeFields) {
+      const value = req.body[field];
+      if (value !== undefined && value !== null && value !== '' &&
+        ((typeof value !== 'string' && typeof value !== 'number') || getGradeValue(value) === null)) {
+        return res.status(400).json({ error: `La nota ${field} debe estar entre 0 y 10.` });
+      }
+    }
+    if (req.body.gradeOverrides !== undefined &&
+      (!req.body.gradeOverrides || typeof req.body.gradeOverrides !== 'object' || Array.isArray(req.body.gradeOverrides))) {
+      return res.status(400).json({ error: 'Los ajustes de notas deben ser un objeto.' });
+    }
+    for (const [field, value] of Object.entries(req.body.gradeOverrides || {})) {
+      if (!calculatedGradeKeys.includes(field as CalculatedGradeKey) ||
+        (value !== null && (typeof value !== 'number' || getGradeValue(value) === null))) {
+        return res.status(400).json({ error: `Ajuste de nota no valido: ${field}.` });
+      }
     }
 
     const courseAccess = await prisma.course.findFirst({
@@ -369,12 +436,18 @@ router.put('/course/:courseId', authenticateToken, requireTeacher, async (req: A
 
     const middleSkills = examSkillKeys.map((skill) => resolveExamSkill('middle', skill));
     const finalSkills = examSkillKeys.map((skill) => resolveExamSkill('final', skill));
-    const resolvedMiddleExamGrade = student.modality === 'ONLINE'
-      ? getGradeValue(middleExamGrade)
-      : (middleSkills.some((grade) => grade !== null) ? getExamAverage(middleSkills) : existingTermGrade?.middleExamGrade ?? null);
-    const resolvedFinalExamGrade = student.modality === 'ONLINE'
-      ? getGradeValue(finalExamGrade)
-      : (finalSkills.some((grade) => grade !== null) ? getExamAverage(finalSkills) : existingTermGrade?.finalExamGrade ?? null);
+    const overrides = readOverrides(existingTermGrade?.gradeOverrides);
+    const overrideChanges = req.body.gradeOverrides ?? Object.fromEntries(
+      calculatedGradeKeys.filter(key => req.body[key] !== undefined).map(key => [key, getGradeValue(req.body[key])])
+    );
+    for (const [key, value] of Object.entries(overrideChanges)) {
+      if (value === null) delete overrides[key as CalculatedGradeKey];
+      else overrides[key as CalculatedGradeKey] = value as number;
+    }
+    const examGrades = {
+      middleGrammar: middleSkills[0], middleReading: middleSkills[1], middleWriting: middleSkills[2], middleListening: middleSkills[3], middleSpeaking: middleSkills[4],
+      finalGrammar: finalSkills[0], finalReading: finalSkills[1], finalWriting: finalSkills[2], finalListening: finalSkills[3], finalSpeaking: finalSkills[4]
+    };
 
     // Calcular tareas y promedio continuo en este trimestre
     const tasks = await prisma.structuredTask.findMany({
@@ -399,27 +472,29 @@ router.put('/course/:courseId', authenticateToken, requireTeacher, async (req: A
     });
 
     const taskGrades: number[] = [];
+    const scoresBySkill: Partial<Record<SkillKey, number[]>> = {};
     tasks.forEach((t) => {
       const evaluableSteps = t.steps.filter((s) => s.requiresSubmission || s.material?.type === 'FORM');
       const gradedSubmissions = evaluableSteps
         .map((s) => s.assignment?.submissions[0]?.grade)
         .filter((g): g is number => typeof g === 'number' && !isNaN(g));
-      if (evaluableSteps.length > 0 && gradedSubmissions.length === evaluableSteps.length) {
-        const avg = gradedSubmissions.reduce((a, b) => a + b, 0) / gradedSubmissions.length;
-        taskGrades.push(Number(avg.toFixed(2)));
+      const automatic = evaluableSteps.length > 0 && gradedSubmissions.length === evaluableSteps.length
+        ? averageScores(gradedSubmissions) : null;
+      const taskGrade = resolveTaskGrade(automatic, t.deliveries[0]);
+      if (taskGrade !== null) {
+        taskGrades.push(taskGrade);
+        const skill = getSkillKey(t.category);
+        if (skill) scoresBySkill[skill] = [...(scoresBySkill[skill] || []), taskGrade];
       }
     });
 
-    const tasksAverage = taskGrades.length > 0
-      ? Number((taskGrades.reduce((a, b) => a + b, 0) / taskGrades.length).toFixed(2))
-      : null;
-
-    const { overallGrade } = calculateTermOverallGrade(
-      student.modality,
-      resolvedMiddleExamGrade,
-      resolvedFinalExamGrade,
-      tasksAverage
-    );
+    const evaluation = resolveTermEvaluation(student.modality, {
+      ...existingTermGrade,
+      ...examGrades,
+      middleExamGrade: getExamAverage(middleSkills) ?? (examSkillKeys.some(skill => req.body[`middle${skill}`] !== undefined) ? null : existingTermGrade?.middleExamGrade ?? null),
+      finalExamGrade: getExamAverage(finalSkills) ?? (examSkillKeys.some(skill => req.body[`final${skill}`] !== undefined) ? null : existingTermGrade?.finalExamGrade ?? null),
+      gradeOverrides: overrides
+    }, taskGrades, scoresBySkill);
 
     const termGrade = await prisma.termGrade.upsert({
       where: {
@@ -435,36 +510,28 @@ router.put('/course/:courseId', authenticateToken, requireTeacher, async (req: A
         courseId,
         term: Number(term),
         academicYear,
-        middleExamGrade: resolvedMiddleExamGrade,
-        finalExamGrade: resolvedFinalExamGrade,
+        middleExamGrade: evaluation.automaticGrades.middleExamGrade,
+        finalExamGrade: evaluation.automaticGrades.finalExamGrade,
         middleGrammar: middleSkills[0], middleReading: middleSkills[1], middleWriting: middleSkills[2], middleListening: middleSkills[3], middleSpeaking: middleSkills[4],
         finalGrammar: finalSkills[0], finalReading: finalSkills[1], finalWriting: finalSkills[2], finalListening: finalSkills[3], finalSpeaking: finalSkills[4],
-        tasksAverage,
-        overallGrade,
-        grammar: grammar !== undefined && grammar !== null ? Number(grammar) : null,
-        reading: reading !== undefined && reading !== null ? Number(reading) : null,
-        writing: writing !== undefined && writing !== null ? Number(writing) : null,
-        listening: listening !== undefined && listening !== null ? Number(listening) : null,
-        speaking: speaking !== undefined && speaking !== null ? Number(speaking) : null,
+        tasksAverage: evaluation.automaticGrades.tasksAverage,
+        overallGrade: evaluation.automaticGrades.overallGrade,
+        gradeOverrides: overrides,
         observations: typeof observations === 'string' ? observations.trim() : null
       },
       update: {
-        middleExamGrade: resolvedMiddleExamGrade,
-        finalExamGrade: resolvedFinalExamGrade,
+        middleExamGrade: evaluation.automaticGrades.middleExamGrade,
+        finalExamGrade: evaluation.automaticGrades.finalExamGrade,
         middleGrammar: middleSkills[0], middleReading: middleSkills[1], middleWriting: middleSkills[2], middleListening: middleSkills[3], middleSpeaking: middleSkills[4],
         finalGrammar: finalSkills[0], finalReading: finalSkills[1], finalWriting: finalSkills[2], finalListening: finalSkills[3], finalSpeaking: finalSkills[4],
-        tasksAverage,
-        overallGrade,
-        grammar: grammar !== undefined ? (grammar !== null ? Number(grammar) : null) : undefined,
-        reading: reading !== undefined ? (reading !== null ? Number(reading) : null) : undefined,
-        writing: writing !== undefined ? (writing !== null ? Number(writing) : null) : undefined,
-        listening: listening !== undefined ? (listening !== null ? Number(listening) : null) : undefined,
-        speaking: speaking !== undefined ? (speaking !== null ? Number(speaking) : null) : undefined,
+        tasksAverage: evaluation.automaticGrades.tasksAverage,
+        overallGrade: evaluation.automaticGrades.overallGrade,
+        gradeOverrides: overrides,
         observations: observations !== undefined ? (observations ? String(observations).trim() : null) : undefined
       }
     });
 
-    res.json(termGrade);
+    res.json({ ...termGrade, ...evaluation });
   } catch (error) {
     console.error('Error al guardar nota trimestral:', error);
     res.status(500).json({ error: 'Error al actualizar calificaciones trimestrales.' });
@@ -612,6 +679,7 @@ router.get('/student/:studentId', authenticateToken, async (req: AuthRequest, re
         if (evaluableSteps.length > 0 && graded.length === evaluableSteps.length) {
           finalTaskGrade = Number((graded.reduce((sum, step) => sum + (step.grade || 0), 0) / graded.length).toFixed(2));
         }
+        finalTaskGrade = resolveTaskGrade(finalTaskGrade, delivery);
 
         if (finalTaskGrade !== null) {
           taskScores.push(finalTaskGrade);
@@ -637,6 +705,7 @@ router.get('/student/:studentId', authenticateToken, async (req: AuthRequest, re
           dueDate: task.dueDate,
           steps: stepsFormatted,
           taskGrade: finalTaskGrade,
+          gradeMode: delivery?.gradeMode || (delivery?.status === 'GRADED' ? 'MANUAL' : 'AUTO'),
           taskFeedback: delivery?.feedback || null,
           isCompleted: allStepsCompleted,
           completedAt,
@@ -644,30 +713,20 @@ router.get('/student/:studentId', authenticateToken, async (req: AuthRequest, re
         };
       });
 
-      const tasksAverage = taskScores.length > 0
-        ? Number((taskScores.reduce((a, b) => a + b, 0) / taskScores.length).toFixed(2))
-        : null;
-
-      const onlineSkills = student.modality === 'ONLINE' ? calculateOnlineSkills(scoresBySkill) : null;
-      const { overallGrade } = calculateTermOverallGrade(
-        student.modality,
-        existingTermGrade?.middleExamGrade,
-        existingTermGrade?.finalExamGrade,
-        tasksAverage
-      );
-
       termsData[t] = {
         term: t,
         academicYear,
-        middleExamGrade: existingTermGrade?.middleExamGrade ?? null,
-        finalExamGrade: existingTermGrade?.finalExamGrade ?? null,
-        tasksAverage,
-        overallGrade: onlineSkills?.overallGrade ?? overallGrade,
-        grammar: onlineSkills?.grammar ?? existingTermGrade?.grammar ?? null,
-        reading: onlineSkills?.reading ?? existingTermGrade?.reading ?? null,
-        writing: onlineSkills?.writing ?? existingTermGrade?.writing ?? null,
-        listening: onlineSkills?.listening ?? existingTermGrade?.listening ?? null,
-        speaking: onlineSkills?.speaking ?? existingTermGrade?.speaking ?? null,
+        middleGrammar: existingTermGrade?.middleGrammar ?? null,
+        middleReading: existingTermGrade?.middleReading ?? null,
+        middleWriting: existingTermGrade?.middleWriting ?? null,
+        middleListening: existingTermGrade?.middleListening ?? null,
+        middleSpeaking: existingTermGrade?.middleSpeaking ?? null,
+        finalGrammar: existingTermGrade?.finalGrammar ?? null,
+        finalReading: existingTermGrade?.finalReading ?? null,
+        finalWriting: existingTermGrade?.finalWriting ?? null,
+        finalListening: existingTermGrade?.finalListening ?? null,
+        finalSpeaking: existingTermGrade?.finalSpeaking ?? null,
+        ...resolveTermEvaluation(student.modality, existingTermGrade, taskScores, scoresBySkill),
         observations: existingTermGrade?.observations ?? null,
         updatedAt: existingTermGrade?.updatedAt ?? null,
         tasks: tasksFormatted
@@ -690,4 +749,7 @@ router.get('/student/:studentId', authenticateToken, async (req: AuthRequest, re
   }
 });
 
-export default router;
+return router;
+};
+
+export default createTermGradesRouter(new PrismaClient());

@@ -2,8 +2,15 @@ import {
   getAcademicYearForDate,
   getQuarterMonthsForDate,
   getPaymentVisualStatus,
-  isPaymentOverdue
+  isPaymentOverdue,
+  ensureStudentPaymentScheduleById
 } from './src/services/payments';
+import type { PrismaClient } from '@prisma/client';
+import express from 'express';
+import jwt from 'jsonwebtoken';
+import type { AddressInfo } from 'node:net';
+import { createEnrollmentsRouter } from './src/routes/enrollments';
+import { createPaymentsRouter } from './src/routes/payments';
 
 let passedTests = 0;
 let failedTests = 0;
@@ -115,7 +122,128 @@ const overdueStatus = getPaymentVisualStatus({
 });
 assert(overdueStatus === 'OVERDUE', 'Pago del pasado no pagado devuelve visualStatus OVERDUE');
 
-// 5. Resumen Final
+async function checkGeneratedSchedules() {
+  const scenarios = [
+    { name: 'Monthly 65', billingPeriod: 'MONTHLY', modality: 'PRESENCIAL', fee: 65, start: '2025-09-15T12:00:00', end: '2025-11-30T12:00:00', amounts: [32.5, 65, 65] },
+    { name: 'Quarterly 60 per month', billingPeriod: 'QUARTERLY', modality: 'PRESENCIAL', fee: 60, start: '2025-10-01T12:00:00', end: '2025-12-31T12:00:00', amounts: [60, 60, 60] },
+    { name: 'September plus first quarter', billingPeriod: 'QUARTERLY', modality: 'PRESENCIAL', fee: 60, start: '2025-09-15T12:00:00', end: '2025-12-31T12:00:00', amounts: [30, 60, 60, 60] },
+    { name: 'Online September full fee', billingPeriod: 'MONTHLY', modality: 'ONLINE', fee: 65, start: '2025-09-15T12:00:00', end: '2025-09-30T12:00:00', amounts: [65] },
+    { name: 'No ordinary July or August fees', billingPeriod: 'MONTHLY', modality: 'PRESENCIAL', fee: 65, start: '2025-06-01T12:00:00', end: '2025-08-31T12:00:00', amounts: [65] }
+    ,{ name: 'Editable future rate', billingPeriod: 'MONTHLY', modality: 'PRESENCIAL', fee: 65, start: '2099-09-15T12:00:00', end: '2099-12-31T12:00:00', amounts: [32.5, 65, 65, 65] }
+  ];
+  for (const scenario of scenarios) {
+    const records: any[] = [];
+    const enrollment = {
+      id: 'enrollment', studentId: 'student', monthlyFee: scenario.fee,
+      startDate: new Date(scenario.start), endDate: new Date(scenario.end),
+      academicYear: '2025-2026', billingPeriod: scenario.billingPeriod,
+      modality: scenario.modality, hasBook: false
+    };
+    const database = {
+      academyEnrollment: { findMany: async () => [enrollment] },
+      deletedPaymentRecord: { findFirst: async () => null },
+      paymentStatus: {
+        findFirst: async ({ where }: any) => records.find(record => Object.entries(where).every(([key, value]) => record[key] === value)) || null,
+        create: async ({ data }: any) => { const record = { id: String(records.length + 1), ...data }; records.push(record); return record; },
+        update: async ({ where, data }: any) => Object.assign(records.find(record => record.id === where.id), data)
+      }
+    };
+    await ensureStudentPaymentScheduleById(database as unknown as PrismaClient, 'student');
+    assert(JSON.stringify(records.map(record => record.amount)) === JSON.stringify(scenario.amounts), `${scenario.name}: actual generated amounts ${records.map(record => record.amount)}`);
+    assert(records.every(record => record.isPaid === false && record.status === 'PENDING'), `${scenario.name}: alta generates debt, not received money`);
+    const count = records.length;
+    records[0].isPaid = true;
+    records[0].amount = 17;
+    await ensureStudentPaymentScheduleById(database as unknown as PrismaClient, 'student');
+    assert(records.length === count && records[0].amount === 17, `${scenario.name}: repeat does not duplicate or alter paid fees`);
+    if (scenario.name === 'Editable future rate') {
+      records[1].isCustom = true;
+      records[1].amount = 21;
+      records[2].isExempt = true;
+      records[2].amount = 0;
+      enrollment.monthlyFee = 70;
+      await ensureStudentPaymentScheduleById(database as unknown as PrismaClient, 'student');
+      assert(JSON.stringify(records.map(record => record.amount)) === '[17,21,0,70]', 'Rate edit changes ordinary future fees only, preserving paid, custom and exempt amounts');
+    }
+  }
+}
+
+async function checkEnrollmentTransactions() {
+  let student: any;
+  let enrollments: any[] = [];
+  let payments: any[] = [];
+  let failPayments = false;
+  let notificationsSent = 0;
+  const reset = () => {
+    student = { id: 'student', role: 'STUDENT', status: 'INACTIVE', email: 'student@example.invalid', profile: { firstName: 'Test' } };
+    enrollments = [];
+    payments = [];
+  };
+  reset();
+  const database: any = {
+    user: {
+      findUnique: async () => ({ ...student, academyEnrollments: enrollments }),
+      updateMany: async () => { if (student.status === 'ACTIVE') return { count: 0 }; student.status = 'ACTIVE'; return { count: 1 }; },
+      update: async ({ data }: any) => Object.assign(student, data)
+    },
+    academyEnrollment: {
+      create: async ({ data }: any) => { const enrollment = { id: 'enrollment', ...data }; enrollments.push(enrollment); return enrollment; },
+      findMany: async () => enrollments
+    },
+    deletedPaymentRecord: { findFirst: async () => null },
+    paymentStatus: {
+      findFirst: async ({ where }: any) => payments.find(payment => Object.entries(where).every(([key, value]) => payment[key] === value)) || null,
+      findUnique: async ({ where }: any) => payments.find(payment => payment.id === where.id) || null,
+      update: async ({ where, data }: any) => Object.assign(payments.find(payment => payment.id === where.id), data),
+      create: async ({ data }: any) => { if (failPayments) throw new Error('Simulated payment failure'); const payment = { id: String(payments.length + 1), ...data }; payments.push(payment); return payment; }
+    },
+    $transaction: async (operation: (transaction: any) => Promise<unknown>) => {
+      const before = structuredClone({ student, enrollments, payments });
+      try { return await operation(database); }
+      catch (error) { ({ student, enrollments, payments } = before); throw error; }
+    }
+  };
+  const notify = async () => { notificationsSent++; return true; };
+  const app = express();
+  app.use(express.json());
+  app.use('/enrollments', createEnrollmentsRouter(database as PrismaClient, { welcome: notify, reactivation: async () => { await notify(); } }));
+  app.use('/payments', createPaymentsRouter(database as PrismaClient));
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise<void>(resolve => server.once('listening', resolve));
+  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/enrollments/enroll`;
+  const token = jwt.sign({ id: 'admin', role: 'ADMIN' }, process.env.JWT_SECRET || 'secret');
+  const request = (body: any) => fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  try {
+    for (const billingPeriod of ['MONTHLY', 'QUARTERLY']) {
+      reset();
+      const body = { studentId: 'student', monthlyFee: billingPeriod === 'MONTHLY' ? 65 : 60, billingPeriod, startDate: '2099-10-01', modality: 'PRESENCIAL' };
+      const response = await request(body);
+      assert(response.status === 200 && student.status === 'ACTIVE' && enrollments.length === 1, `${billingPeriod}: actual HTTP signup activates and enrolls`);
+      assert(payments.length === (billingPeriod === 'MONTHLY' ? 1 : 3) && payments.every(payment => payment.amount === body.monthlyFee && !payment.isPaid), `${billingPeriod}: actual HTTP signup generates the correct pending monthly amounts`);
+      assert((await request(body)).status === 400 && enrollments.length === 1, `${billingPeriod}: repeated signup cannot duplicate enrollment`);
+      const mark = (studentId: string, isPaid: boolean) => fetch(url.replace('/enrollments/enroll', `/payments/${studentId}`), {
+        method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentId: payments[0].id, isPaid })
+      });
+      assert((await mark('student', true)).status === 200 && payments[0].isPaid && payments[0].status === 'PAID' && payments[0].paidAt && payments[0].markedById === 'admin', `${billingPeriod}: marking paid stores status, date and administrator`);
+      assert((await mark('student', false)).status === 200 && !payments[0].isPaid && payments[0].status === 'PENDING' && payments[0].paidAt === null, `${billingPeriod}: unmark restores pending and clears paid date`);
+      assert((await mark('other-student', true)).status === 404 && !payments[0].isPaid, `${billingPeriod}: mismatched student/payment cannot change a different student's fee`);
+      payments[0].isExempt = true;
+      assert((await mark('student', true)).status === 400 && !payments[0].isPaid, `${billingPeriod}: exempt fee cannot be charged`);
+    }
+    reset();
+    failPayments = true;
+    const response = await request({ studentId: 'student', monthlyFee: 65, startDate: '2099-10-01' });
+    assert(response.status === 500 && student.status === 'INACTIVE' && enrollments.length === 0 && payments.length === 0, 'Payment-generation failure rolls back activation and enrollment');
+    assert(notificationsSent === 2, 'No notification is sent for failed or repeated signup');
+    assert((await request({ studentId: 'student', monthlyFee: 'invalid', startDate: '2099-10-01' })).status === 400, 'Invalid amount is rejected before activation');
+    assert((await request({ studentId: 'student', monthlyFee: 65, startDate: 'invalid' })).status === 400, 'Invalid date is rejected before activation');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+}
+
+checkGeneratedSchedules().then(checkEnrollmentTransactions).then(() => {
 console.log('\n==================================================');
 console.log(`🏁 RESULTADO: ${passedTests} PRUEBAS SUPERADAS, ${failedTests} FALLOS.`);
 console.log('==================================================\n');
@@ -126,4 +254,5 @@ if (failedTests > 0) {
   console.log('🎉 ¡Todas las reglas de negocio han sido verificadas exitosamente!');
   process.exit(0);
 }
+}).catch(error => { console.error(error); process.exitCode = 1; });
 

@@ -309,7 +309,7 @@ const GradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
   };
 
   // Guardar calificación de tarea completa desde el modal
-  const handleSaveTaskDeliveryGrade = async (grade: number | null, feedback: string) => {
+  const handleSaveTaskDeliveryGrade = async (grade: number | null, feedback: string, stepEvaluations: Array<{ stepId: string; grade: number | null; feedback: string | null }>, gradeMode?: 'AUTO' | 'MANUAL') => {
     if (!reviewingTask || !activeReviewStudent) return;
     try {
       const token = localStorage.getItem('token');
@@ -322,7 +322,9 @@ const GradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
         body: JSON.stringify({
           studentId: activeReviewStudent.id,
           grade,
-          feedback
+          feedback,
+          stepEvaluations,
+          gradeMode
         })
       });
 
@@ -459,7 +461,7 @@ const GradesTab: React.FC<{ courseId: string }> = ({ courseId }) => {
                 Libro de Calificaciones y Evaluaciones
               </h2>
               <p style={{ margin: '0.2rem 0 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                Middle Term, Final Term, tareas continuas y generación de boletines oficiales
+                MIDTERM, Final Term, tareas continuas y generación de boletines oficiales
               </p>
             </div>
           </div>

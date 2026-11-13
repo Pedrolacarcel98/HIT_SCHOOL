@@ -554,37 +554,15 @@ router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
         return res.status(400).json({ error: 'No hay una matrícula activa donde actualizar el importe.' });
       }
 
-      const now = new Date();
-      const currentMonth = now.getMonth() + 1;
-      const currentYear = now.getFullYear();
       const newBillingAmount = billingAmount !== undefined ? Number(billingAmount) : activeEnrollment.monthlyFee;
 
-      await prisma.$transaction([
-        prisma.academyEnrollment.update({
+      await prisma.academyEnrollment.update({
           where: { id: activeEnrollment.id },
           data: {
             billingPeriod: billingPeriod || activeEnrollment.billingPeriod,
             monthlyFee: newBillingAmount
           }
-        }),
-        prisma.paymentStatus.updateMany({
-          where: {
-            studentId,
-            isPaid: false,
-            OR: [
-              { enrollmentId: activeEnrollment.id },
-              { enrollmentId: null }
-            ],
-            AND: [{
-              OR: [
-                { year: { gt: currentYear } },
-                { year: currentYear, month: { gte: currentMonth } }
-              ]
-            }]
-          },
-          data: { amount: newBillingAmount, enrollmentId: activeEnrollment.id }
-        })
-      ]);
+      });
       await ensureStudentPaymentScheduleById(prisma, studentId);
     }
 
