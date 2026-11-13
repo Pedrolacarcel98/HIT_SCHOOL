@@ -80,6 +80,19 @@ Una vez que los contenedores estén levantados, sincroniza el esquema de Prisma 
 docker exec hit_school_backend npm run schema:sync
 ```
 
+### Actualizar una base existente sin borrar datos
+
+Los cambios de notas manuales necesitan dos columnas nuevas: `TermGrade.gradeOverrides` y `TaskDelivery.gradeMode`. Antes de arrancar la nueva versión del backend contra una base existente, realiza una copia de seguridad y verifica que `DATABASE_URL` apunta al destino correcto. Desde `backend/`:
+
+```bash
+npx prisma db execute --file prisma/add-grade-overrides.sql --schema prisma/schema.prisma
+npx prisma generate
+```
+
+El SQL solo añade columnas si no existen; no borra tablas ni modifica las notas históricas. Las tareas históricas calificadas conservan su nota hasta elegir expresamente **Volver a automática**. El SQL se probó dos veces en PostgreSQL 15 temporal y una vez sobre tablas previas con filas históricas; la migración del entorno real sigue pendiente.
+
+**Precaución:** `npm run dev` del backend ejecuta `schema:sync`, que incluye `--accept-data-loss`. No debe usarse como mecanismo de migración de una base con datos. No ejecutes semillas ni el reset de volúmenes sobre una base en uso.
+
 ### Paso 5.2: Cargar datos de prueba (Profesor, Alumno y Recursos Didácticos)
 ```bash
 docker exec hit_school_backend npx prisma db seed
@@ -180,6 +193,137 @@ Sigue esta lista de verificación para comprobar que todo funciona al 100%:
   - Utiliza el **buscador en tiempo real** para filtrar por nombre o correo.
   - Pulsa el botón de **Editar** (icono de lápiz) para modificar los datos de un alumno.
   - Pulsa el botón de **Eliminar** (icono de papelera) y confirma el borrado seguro en cascada.
+
+---
+
+### Regresión de Notas, Chat y Pagos
+
+Desde la raíz del repositorio, estas pruebas ejecutan las rutas HTTP y los servicios reales con almacenamiento simulado y sin enviar correos:
+
+```bash
+npx --prefix backend ts-node --project backend/tsconfig.json backend/test-academic-flows.ts
+npx --prefix backend ts-node --project backend/tsconfig.json backend/test-chat-flows.ts
+npx --prefix backend ts-node --project backend/tsconfig.json backend/test-payment-rules.ts
+npx --prefix backend tsc --project backend/tsconfig.json --noEmit
+npm --prefix frontend run build
+```
+
+Las pruebas académicas cubren administrador/profesor, presencial/online, guardado y lectura, notas cero, conservación de valores manuales, vuelta al cálculo automático y permisos. Las de chat cubren los cuatro roles, separación por hijo y mensajes llegados después de cargar el hilo. Las 55 comprobaciones de pagos incluyen alta mensual/trimestral, tarifas mensuales editables, septiembre, exclusión de nuevas cuotas ordinarias en julio/agosto, conservación de pagos especiales, cobro y vuelta a pendiente, cuotas ajenas/exentas y fallo transaccional simulado. El error `Simulated payment failure` es deliberado: comprueba la reversión del alta, no un fallo de la suite.
+
+Para las pruebas de navegador, instala Chromium una vez:
+
+```bash
+npx --prefix frontend playwright install chromium
+```
+
+En una terminal inicia solo el frontend, sin Docker ni backend real:
+
+```bash
+npm --prefix frontend run dev -- --host 127.0.0.1 --port 4173 --strictPort
+```
+
+En otra terminal:
+
+```bash
+npm --prefix frontend run test:flows
+```
+
+La prueba monta los componentes reales con una API simulada: comprueba 16 escenarios de notas/tareas/chat en escritorio y móvil, además de dos PDF. Las capturas y boletines se guardan en la carpeta temporal del sistema `hitschool-flow-checks`. Se comprueban guardado, reapertura, modo manual/automático, error de guardado y negrita de conversaciones no leídas. No se conecta a los datos del proyecto.
+
+### Integración con PostgreSQL temporal
+
+La prueba real de persistencia se ejecuta en una base desechable y separada. No conecta con `hit_school_db`, no usa volúmenes del proyecto y no envía correos. El test incorpora una protección que solo admite `127.0.0.1:57306/hitschool_test`.
+
+En PowerShell, confirma que el puerto local 57306 está libre y arranca el contenedor temporal:
+
+```powershell
+docker run --rm --detach --name hitschool-regression-pg `
+  -e POSTGRES_USER=hitschool_test `
+  -e POSTGRES_PASSWORD=temporary_only_20261113 `
+  -e POSTGRES_DB=hitschool_test `
+  -p 127.0.0.1:57306:5432 postgres:15-alpine
+```
+
+Entra en `backend/`, configura la conexión a ese puerto e inicializa únicamente la base vacía:
+
+```powershell
+$env:DATABASE_URL = 'postgresql://hitschool_test:temporary_only_20261113@127.0.0.1:57306/hitschool_test'
+npx prisma db push --schema prisma/schema.prisma
+npx prisma db execute --file prisma/add-grade-overrides.sql --schema prisma/schema.prisma
+```
+
+Desde la raíz, apunta la prueba al puerto temporal y ejecuta la integración Prisma real. El test rechaza otros host/base para reducir el riesgo de conectar por error con una instancia distinta. Después elimina solo el contenedor temporal:
+
+```powershell
+$env:DATABASE_URL = 'postgresql://hitschool_test:temporary_only_20261113@127.0.0.1:57306/hitschool_test'
+$env:JWT_SECRET = 'temporary-postgres-integration-secret'
+cd ..
+npx --prefix backend ts-node --project backend/tsconfig.json backend/test-postgres-integration.ts
+docker stop hitschool-regression-pg
+```
+
+En la sesión del 13/11/2026, la integración con PostgreSQL 15 **pasó**: guardado y relectura de competencias y cero manual; feedback sin perder notas; tarea MANUAL en cero y vuelta a AUTO leyendo la nota del paso; chat tutor/admin separado por hijo y `readAt` persistido; cuotas mensual 65 € y trimestral 60 €/mes pendientes; rechazo de alta duplicada; marcado/desmarcado de cobro y rechazo de una cuota perteneciente a otro alumno. SMTP se sustituyó por funciones locales.
+
+También se probó la migración en una segunda base desechable con filas de ejemplo del esquema previo: preservó las notas y el estado históricos, creó `{}` en `gradeOverrides` y dejó `gradeMode` nulo. Se volvió a ejecutar el SQL en la base temporal para comprobar idempotencia. En la instancia local actual, las dos columnas ya existían, por lo que no se ejecutó el SQL sobre `hit_school_db`.
+
+### Datos de verificación añadidos a la base local
+
+Para poder probar las pantallas con las cuentas existentes se añadió a `hit_school_db` un escenario idempotente identificado por **`PRUEBA CAMBIOS 2026-11`**. No se modificaron, regeneraron ni consultaron hashes de contraseña. El seed verifica que los cinco usuarios siguientes existen, están activos y tienen los roles esperados; también verifica el vínculo del alumno con su tutor. `marpargut@hitschool.com` corresponde a dos registros distintos: uno `STUDENT` y otro `PARENT`, como exige el selector de rol.
+
+Se conservan los accesos precargados del apartado anterior:
+
+| Cuenta | Rol en la base | Acceso precargado |
+| :--- | :--- | :--- |
+| `admin@hitschool.com` | `ADMIN` | `1234` |
+| `profesor@hitschool.com` | `TEACHER` | `1234` |
+| `profesor2@hitschool.com` | `TEACHER` | `1234` |
+| `marpargut@hitschool.com` | `STUDENT` | `1234` |
+| `marpargut@hitschool.com` | `PARENT` | `123456` |
+
+Escenario cargado:
+
+- Clase presencial **«PRUEBA CAMBIOS 2026-11 · Clase presencial»**, a cargo de `profesor@hitschool.com`, con `marpargut@hitschool.com` matriculado como alumno.
+- Trimestre 1, año académico de notas `2025-2026`: Midterm 8, Final 9, media de tareas manual 7,25. La global automática esperada es **8,13**.
+- Tarea **MANUAL**: nota global 7,5 y paso 8,5. Tarea **AUTO**: nota de paso/global 6. Si se vuelve a automático en la primera, debe tomar 8,5.
+- Siete mensajes de demostración no leídos distribuidos entre alumno, tutor, profesor, segundo profesor y administración; todos usan el contexto del mismo hijo.
+- Matrícula **mensual** en `2026-2027`: 65 €/mes, octubre–diciembre, tres cuotas `PENDING`.
+- Matrícula **trimestral** en `2027-2028`: 60 €/mes, octubre–diciembre, tres cuotas `PENDING`.
+
+No se ejecutó `docker compose`, `schema:sync`, seeds generales ni reset. Para repetir el seed local idempotente desde PowerShell y desde la raíz del proyecto:
+
+```powershell
+$databaseUrl = docker exec hit_school_backend printenv DATABASE_URL
+$databaseUrl = $databaseUrl -replace '@db:5432/', '@127.0.0.1:5432/'
+$env:DATABASE_URL = $databaseUrl
+npx --prefix backend ts-node --project backend/tsconfig.json backend/seed-change-verification-data.ts
+```
+
+### Recorrido web para dar el visto bueno
+
+1. Abre `http://localhost:5173` y accede con la cuenta del rol indicado. Para el correo duplicado `marpargut@hitschool.com`, usa el selector de rol para entrar primero como alumno y después como tutor.
+2. Con `profesor@hitschool.com`, abre **Mis clases** y entra en **«PRUEBA CAMBIOS 2026-11 · Clase presencial»**. En **Calificaciones**, selecciona trimestre 1 y `2025-2026`. Comprueba la etiqueta **MIDTERM**, su nota 8, Final 9, MEDIA TAREAS 7,25 y global 8,13. Pulsa **Editar Evaluación**, selecciona la media de tareas, bórrala por completo y escribe `6,79`: el campo debe quedarse vacío mientras escribes y conservar el modo manual. Guarda y vuelve a abrir para confirmar que muestra 6,79; también puedes introducir la coma decimal habitual, que se normaliza al enviar a la API. Restablece MEDIA TAREAS a automática: con las tareas demo debe pasar a 6,75. La global automática se vuelve a calcular desde sus componentes.
+3. En el historial del expediente, abre **«PRUEBA CAMBIOS 2026-11 · Tarea presencial MANUAL»**. Comprueba Manual 7,5 frente al paso 8,5; pulsa **Volver a automática** y guarda. La nota de la tarea debe tomar la del paso. Repite con la tarea AUTO, que empieza en 6.
+4. Con `admin@hitschool.com`, repite la edición de nota y revisa que puede acceder a la clase. Con el alumno y el tutor, confirma que ven las notas sin poder editarlas.
+5. Abre **Mensajes** con cada rol. El alumno debe tener un mensaje pendiente del profesor; el profesor uno del alumno; el tutor mensajes pendientes de sus interlocutores; administración, mensajes del alumno y del tutor. Cada conversación pendiente debe resaltarse en negrita; abrirla no debe modificar la contraseña ni los datos del usuario.
+6. Con `admin@hitschool.com`, abre **Gestión de matrículas** (`/teacher/enrollments`). Filtra por `marpargut@hitschool.com` y curso escolar. En `2026-2027` comprueba tres cuotas mensuales pendientes de 65 €. En `2027-2028` comprueba tres cuotas trimestrales pendientes de 60 €/mes.
+7. En **Pagos** (`/teacher/payments`), selecciona esos cursos escolares. Marca una cuota y verifica estado pagado, después desmárcala y verifica que vuelve a pendiente. El escenario trimestral ya parte de 60 €/mes; no hace falta cambiar otra matrícula para probarlo.
+
+Para quitar solo este escenario después de probarlo (clase, tareas/notas asociadas, matrículas demo, sus cuotas y mensajes marcados), sin eliminar ni actualizar las cinco cuentas, ejecuta desde la raíz:
+
+```powershell
+$databaseUrl = docker exec hit_school_backend printenv DATABASE_URL
+$databaseUrl = $databaseUrl -replace '@db:5432/', '@127.0.0.1:5432/'
+$env:DATABASE_URL = $databaseUrl
+npx --prefix backend ts-node --project backend/tsconfig.json backend/cleanup-change-verification-data.ts
+```
+
+El seed y el cleanup incorporan una protección que solo admite `127.0.0.1:5432/hitschool`; no los apuntes al servidor. La base local de desarrollo **sí contiene ahora estos datos de prueba**. La base del servidor no se ha conectado ni modificado.
+
+La incorporación a mitad de trimestre no se modificó por petición expresa y conserva un posible desfase de calendario. El curso académico de notas permanece en `2025-2026`.
+
+La auditoría de dependencias también informa de avisos en `dompurify`, `source-map-js`, `vite` y `xlsx`; su actualización queda separada de estas correcciones funcionales.
+
+El tipado del backend y la compilación del frontend pasan. El lint global sigue bloqueado por tres errores de `rules-of-hooks` en la pantalla de materiales (`MaterialsManagement.tsx`), que no se ha modificado en esta tarea; además muestra advertencias de estilo y efectos React en varios archivos. No debe interpretarse la compilación correcta como un lint global limpio.
 
 ---
 

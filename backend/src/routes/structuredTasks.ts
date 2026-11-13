@@ -120,7 +120,8 @@ export const syncTaskDeliveryOnStepCompletion = async (taskId: string, studentId
       autoGrade = Number((sum / gradedSubmissions.length).toFixed(2));
     }
 
-    const finalGrade = existingDelivery?.grade !== null && existingDelivery?.grade !== undefined
+    const manualGrade = existingDelivery?.gradeMode === 'MANUAL' || (!existingDelivery?.gradeMode && existingDelivery?.status === 'GRADED');
+    const finalGrade = manualGrade && existingDelivery?.grade !== null && existingDelivery?.grade !== undefined
       ? existingDelivery.grade
       : autoGrade;
 
@@ -134,10 +135,12 @@ export const syncTaskDeliveryOnStepCompletion = async (taskId: string, studentId
         taskId,
         studentId,
         grade: finalGrade,
+        gradeMode: manualGrade ? 'MANUAL' : 'AUTO',
         status: allStepsCompleted ? 'COMPLETED' : 'IN_PROGRESS'
       },
       update: {
         grade: finalGrade,
+        gradeMode: manualGrade ? 'MANUAL' : 'AUTO',
         status: allStepsCompleted ? (existingDelivery?.status === 'GRADED' ? 'GRADED' : 'COMPLETED') : 'IN_PROGRESS'
       }
     });
@@ -1042,14 +1045,26 @@ router.get('/:id/student/:studentId', authenticateToken, async (req: AuthRequest
 });
 
 // 13. Calificar entrega global de tarea estructurada y guardar feedback pedagógico paso a paso
-router.post('/:id/grade-delivery', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {
+export const createTaskDeliveryGradingHandler = (database: PrismaClient) => async (req: AuthRequest, res: Response) => {
   const taskId = req.params.id as string;
-  const { studentId, grade, feedback, status, stepEvaluations } = req.body;
+  const { studentId, grade, feedback, status, stepEvaluations, gradeMode } = req.body;
 
   if (!studentId) return res.status(400).json({ error: 'El ID de alumno es obligatorio.' });
+  if (gradeMode !== undefined && gradeMode !== 'AUTO' && gradeMode !== 'MANUAL') {
+    return res.status(400).json({ error: 'El modo de calificacion no es valido.' });
+  }
+  if (gradeMode === 'MANUAL' && (grade === undefined || grade === null || grade === '')) {
+    return res.status(400).json({ error: 'La nota manual es obligatoria.' });
+  }
+  const validGrade = (value: unknown) => value === undefined || value === null || value === '' ||
+    ((typeof value === 'string' || typeof value === 'number') && Number.isFinite(Number(value)) && Number(value) >= 0 && Number(value) <= 10);
+  if (!validGrade(grade) || (stepEvaluations !== undefined && (!Array.isArray(stepEvaluations) ||
+    stepEvaluations.some((item: any) => !item || !validGrade(item.grade))))) {
+    return res.status(400).json({ error: 'Las notas deben estar entre 0 y 10.' });
+  }
 
   try {
-    const task = await prisma.structuredTask.findFirst({
+    const task = await database.structuredTask.findFirst({
       where: {
         id: taskId,
         ...(req.user!.role === 'ADMIN'
@@ -1066,7 +1081,7 @@ router.post('/:id/grade-delivery', authenticateToken, requireTeacher, async (req
       include: {
         course: true,
         steps: {
-          include: { assignment: true }
+          include: { material: { select: { type: true } }, assignment: { include: { submissions: { where: { studentId } } } } }
         }
       }
     });
@@ -1074,7 +1089,7 @@ router.post('/:id/grade-delivery', authenticateToken, requireTeacher, async (req
 
     const parsedGrade = grade !== undefined && grade !== null && grade !== '' ? Number(grade) : null;
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await database.$transaction(async (tx) => {
       // 1. Guardar o actualizar calificaciones individuales de cada paso evaluable si se enviaron
       if (Array.isArray(stepEvaluations) && stepEvaluations.length > 0) {
         for (const item of stepEvaluations) {
@@ -1120,22 +1135,36 @@ router.post('/:id/grade-delivery', authenticateToken, requireTeacher, async (req
         }
       }
 
+      const resolvedMode = gradeMode || (parsedGrade !== null ? 'MANUAL' : 'AUTO');
+      const evaluableSteps = task.steps.filter(step => step.requiresSubmission || step.material?.type === 'FORM');
+      const stepGrades = evaluableSteps.map(step => {
+        const change = Array.isArray(stepEvaluations) ? stepEvaluations.find((item: any) => item.stepId === step.id) : undefined;
+        const value = change ? change.grade : step.assignment?.submissions[0]?.grade;
+        return value === undefined || value === null || value === '' ? null : Number(value);
+      });
+      const automaticGrade = stepGrades.length > 0 && stepGrades.every(value => value !== null)
+        ? Number((stepGrades.reduce<number>((sum, value) => sum + (value ?? 0), 0) / stepGrades.length).toFixed(2)) : null;
+      const effectiveGrade = resolvedMode === 'MANUAL' ? parsedGrade : automaticGrade;
+      if (resolvedMode === 'MANUAL' && effectiveGrade === null) throw new Error('La nota manual es obligatoria.');
+
       // 2. Guardar entrega y nota global de la tarea
       const delivery = await tx.taskDelivery.upsert({
         where: { taskId_studentId: { taskId, studentId } },
         create: {
           taskId,
           studentId,
-          grade: parsedGrade,
+          grade: effectiveGrade,
+          gradeMode: resolvedMode,
           feedback: feedback ? String(feedback).trim() : null,
-          status: status || (parsedGrade !== null ? 'GRADED' : 'COMPLETED'),
-          gradedAt: parsedGrade !== null ? new Date() : null
+          status: status || (effectiveGrade !== null ? 'GRADED' : 'COMPLETED'),
+          gradedAt: effectiveGrade !== null ? new Date() : null
         },
         update: {
-          grade: parsedGrade,
+          grade: effectiveGrade,
+          gradeMode: resolvedMode,
           feedback: feedback !== undefined ? (feedback ? String(feedback).trim() : null) : undefined,
-          status: status || (parsedGrade !== null ? 'GRADED' : undefined),
-          gradedAt: parsedGrade !== null ? new Date() : undefined
+          status: status || (effectiveGrade !== null ? 'GRADED' : 'COMPLETED'),
+          gradedAt: effectiveGrade !== null ? new Date() : null
         }
       });
 
@@ -1147,7 +1176,9 @@ router.post('/:id/grade-delivery', authenticateToken, requireTeacher, async (req
     console.error('Error al calificar entrega de tarea:', error);
     res.status(500).json({ error: 'Error al registrar la calificación de la tarea.' });
   }
-});
+};
+
+router.post('/:id/grade-delivery', authenticateToken, requireTeacher, createTaskDeliveryGradingHandler(prisma));
 
 // 12. Eliminar tarea estructurada
 router.delete('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, res: Response) => {

@@ -151,7 +151,7 @@ export const generateReportCardPDF = (data: ReportCardData) => {
 
   if (data.modality === 'PRESENCIAL') {
     doc.text('Media de tareas (30%):', 115, currentY + 9);
-    doc.text('Middle Term (35%):', 115, currentY + 15);
+    doc.text('MIDTERM (35%):', 115, currentY + 15);
     doc.text('Final Term (35%):', 115, currentY + 21);
 
     doc.setFont('helvetica', 'bold');
@@ -165,7 +165,7 @@ export const generateReportCardPDF = (data: ReportCardData) => {
 
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(darkText[0], darkText[1], darkText[2]);
-    doc.text('100% Automático Continuo', 150, currentY + 10);
+    doc.text('Evaluación Continua', 150, currentY + 10);
     doc.text(data.tasksAverage !== null && data.tasksAverage !== undefined ? `${Number(data.tasksAverage).toFixed(1)} / 10` : '-', 150, currentY + 18);
   }
 

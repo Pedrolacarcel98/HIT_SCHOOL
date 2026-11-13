@@ -3,8 +3,6 @@ import { PrismaClient } from '@prisma/client';
 import { authenticateToken, requireTeacher } from '../middleware/auth';
 import { syncTaskDeliveryOnStepCompletion } from './structuredTasks';
 
-const router = Router();
-const prisma = new PrismaClient();
 interface AuthRequest extends Request {
   user?: any;
 }
@@ -15,6 +13,9 @@ const parsePublishAt = (value: unknown) => {
   if (Number.isNaN(publishAt.getTime()) || publishAt <= new Date()) return { error: 'La fecha de publicación debe ser futura.' };
   return { value: publishAt };
 };
+
+export const createAssignmentsRouter = (prisma: PrismaClient) => {
+const router = Router();
 
 // 1. Obtener tareas para el estudiante logueado (o el alumno seleccionado por el tutor)
 router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => {
@@ -258,7 +259,7 @@ router.post('/submissions/:subId/grade', authenticateToken, requireTeacher, asyn
   const { grade, feedback, questionScores } = req.body;
   
   try {
-    const parsedGrade = grade !== undefined && grade !== null && grade !== '' ? parseFloat(grade) : null;
+    let parsedGrade = grade !== undefined && grade !== null && grade !== '' ? Number(grade) : null;
     if (parsedGrade !== null && (isNaN(parsedGrade) || parsedGrade < 0 || parsedGrade > 10)) {
       return res.status(400).json({ error: 'La calificación debe ser un número entre 0 y 10.' });
     }
@@ -270,6 +271,21 @@ router.post('/submissions/:subId/grade', authenticateToken, requireTeacher, asyn
     if (!currentSubmission) {
       return res.status(404).json({ error: 'Entrega no encontrada.' });
     }
+    if (req.user!.role === 'TEACHER') {
+      const accessibleAssignment = await prisma.assignment.findFirst({
+        where: {
+          id: currentSubmission.assignmentId,
+          OR: [
+            { teacherId: req.user!.id },
+            { course: { modality: 'PRESENCIAL' } },
+            { course: { teacherId: req.user!.id } },
+            { course: { assignedTeachers: { some: { teacherId: req.user!.id } } } }
+          ]
+        }, select: { id: true }
+      });
+      if (!accessibleAssignment) return res.status(403).json({ error: 'No tienes acceso a esta entrega.' });
+    }
+    if (grade === undefined) parsedGrade = currentSubmission.grade;
 
     let updatedContent = currentSubmission.content;
     if (questionScores && typeof questionScores === 'object') {
@@ -336,4 +352,7 @@ router.delete('/:id', authenticateToken, requireTeacher, async (req: AuthRequest
   }
 });
 
-export default router;
+return router;
+};
+
+export default createAssignmentsRouter(new PrismaClient());
