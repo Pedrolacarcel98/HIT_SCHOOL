@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { PrismaClient, Modality, TermGrade } from '@prisma/client';
 import { authenticateToken, requireTeacher, AuthRequest } from '../middleware/auth';
+import { averageScores, calculatedGradeKeys, examSkillKeys, getAutomaticExamGrades, getExamAverage, readOverrides, skillKeys, type CalculatedGradeKey } from '../services/examGrades';
 
 // Helper para calcular la media de tareas y la nota final
 export const calculateTermOverallGrade = (
@@ -36,7 +37,6 @@ export const calculateTermOverallGrade = (
   };
 };
 
-const examSkillKeys = ['Grammar', 'Reading', 'Writing', 'Listening', 'Speaking'] as const;
 type ExamSkillKey = typeof examSkillKeys[number];
 
 const getGradeValue = (value: unknown) => {
@@ -45,9 +45,6 @@ const getGradeValue = (value: unknown) => {
   return Number.isFinite(grade) && grade >= 0 && grade <= 10 ? grade : null;
 };
 
-const getExamAverage = (grades: Array<number | null>) => averageScores(grades.filter((grade): grade is number => grade !== null));
-
-const skillKeys = ['grammar', 'reading', 'writing', 'listening', 'speaking'] as const;
 type SkillKey = typeof skillKeys[number];
 
 const getSkillKey = (category?: string | null): SkillKey | null => {
@@ -61,10 +58,6 @@ const getSkillKey = (category?: string | null): SkillKey | null => {
   }
 };
 
-const averageScores = (scores: number[]) => scores.length > 0
-  ? Number((scores.reduce((sum, score) => sum + score, 0) / scores.length).toFixed(2))
-  : null;
-
 const calculateOnlineSkills = (scoresBySkill: Partial<Record<SkillKey, number[]>>) => {
   const values = skillKeys.map((key) => averageScores(scoresBySkill[key] || [])).filter((value): value is number => value !== null);
   return {
@@ -77,22 +70,6 @@ const calculateOnlineSkills = (scoresBySkill: Partial<Record<SkillKey, number[]>
   };
 };
 
-const calculatedGradeKeys = [
-  'middleExamGrade', 'finalExamGrade', 'tasksAverage', 'overallGrade', ...skillKeys
-] as const;
-type CalculatedGradeKey = typeof calculatedGradeKeys[number];
-type GradeOverrides = Partial<Record<CalculatedGradeKey, number>>;
-
-const readOverrides = (value: unknown): GradeOverrides => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-  const result: GradeOverrides = {};
-  for (const key of calculatedGradeKeys) {
-    const grade = (value as Record<string, unknown>)[key];
-    if (typeof grade === 'number' && Number.isFinite(grade) && grade >= 0 && grade <= 10) result[key] = grade;
-  }
-  return result;
-};
-
 const resolveTermEvaluation = (
   modality: Modality,
   record: Partial<TermGrade> | null | undefined,
@@ -102,8 +79,7 @@ const resolveTermEvaluation = (
   const gradeOverrides = readOverrides(record?.gradeOverrides);
   const onlineSkills = modality === 'ONLINE' ? calculateOnlineSkills(scoresBySkill) : null;
   const automaticGrades: Record<CalculatedGradeKey, number | null> = {
-    middleExamGrade: getExamAverage(examSkillKeys.map(skill => record?.[`middle${skill}`] ?? null)) ?? record?.middleExamGrade ?? null,
-    finalExamGrade: getExamAverage(examSkillKeys.map(skill => record?.[`final${skill}`] ?? null)) ?? record?.finalExamGrade ?? null,
+    ...getAutomaticExamGrades(record),
     tasksAverage: averageScores(taskScores),
     overallGrade: null,
     grammar: onlineSkills?.grammar ?? record?.grammar ?? null,

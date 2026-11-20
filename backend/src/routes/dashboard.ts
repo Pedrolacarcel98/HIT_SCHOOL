@@ -1,13 +1,14 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient, StructuredTaskAssignmentType } from '@prisma/client';
 import { authenticateToken, requireTeacher } from '../middleware/auth';
-
-const router = Router();
-const prisma = new PrismaClient();
+import { getEffectiveExamGrades } from '../services/examGrades';
 
 interface AuthRequest extends Request {
   user?: any;
 }
+
+export const createDashboardRouter = (prisma: PrismaClient) => {
+const router = Router();
 
 // ==========================================
 // Dashboard Teacher
@@ -274,6 +275,22 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => 
         average: courseGrades[title].total / courseGrades[title].count
       }));
 
+      const examRecords = await prisma.termGrade.findMany({
+        where: { studentId: student.id, courseId: { in: courseIds } },
+        include: { course: { select: { title: true } } },
+        orderBy: [{ academicYear: 'desc' }, { term: 'asc' }]
+      });
+      const examGrades = examRecords.flatMap(record => {
+        const grades = getEffectiveExamGrades(record);
+        return grades.middleExamGrade === null && grades.finalExamGrade === null ? [] : [{
+          courseId: record.courseId,
+          courseTitle: record.course.title,
+          term: record.term,
+          academicYear: record.academicYear,
+          ...grades
+        }];
+      });
+
       return {
         student: {
           id: student.id,
@@ -288,7 +305,8 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => 
           pendingCount: pendingTasksCount,
           upcoming: upcomingTasks.slice(0, 3)
         },
-        grades: averages
+        grades: averages,
+        examGrades
       };
     }));
 
@@ -300,4 +318,7 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => 
   }
 });
 
-export default router;
+return router;
+};
+
+export default createDashboardRouter(new PrismaClient());

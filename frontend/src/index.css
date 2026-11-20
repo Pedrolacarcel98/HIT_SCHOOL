@@ -2490,6 +2490,51 @@ th {
   }
 }
 
+.dashboard-exam-grades {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.dashboard-exam-grades h4 {
+  margin: 0;
+  color: #6b21a8;
+  font-size: 0.8rem;
+}
+
+.dashboard-exam-grade {
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #f3e8ff;
+  border-radius: 8px;
+  background: #fff;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-exam-grade__title {
+  color: var(--text-main);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.dashboard-exam-grade__term {
+  margin-top: 0.2rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.dashboard-exam-grade__scores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  margin-top: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.dashboard-exam-grade__scores strong {
+  color: var(--primary-text);
+}
+
 /* Resumen trimestral: 2 columnas en móvil, 4 en escritorio */
 .grades-summary-grid {
   display: grid;
@@ -2498,10 +2543,137 @@ th {
   margin-top: 1rem;
 }
 
+.exam-grades-button {
+  padding: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  text-align: center;
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.exam-grades-button--active {
+  border-color: #34d399;
+  background: rgba(236, 253, 245, 0.2);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.1);
+}
+
+.exam-grades-button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.exam-grades-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  margin-top: 0.4rem;
+  color: var(--primary);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.exam-grades-details:not([hidden]) {
+  margin-top: 0.75rem;
+  padding: 1rem;
+  border: 1px solid rgba(229, 231, 235, 0.8);
+  border-radius: 1rem;
+  background: rgba(249, 250, 251, 0.7);
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.exam-grades-details h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.75rem;
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.exam-grades-details h3 svg {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.exam-grades-skills {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.exam-grades-skill {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid #f3f4f6;
+  border-radius: 0.75rem;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.exam-grades-skills dt {
+  color: #6b7280;
+  font-size: 0.75rem;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.exam-grades-skills dd {
+  margin: 0.25rem 0 0;
+  color: #1f2937;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.exam-grades-skill-denominator {
+  color: #9ca3af;
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.exam-grades-progress {
+  height: 0.375rem;
+  margin-top: 0.5rem;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: #f3f4f6;
+}
+
+.exam-grades-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: #10b981;
+}
+
+@media (min-width: 640px) {
+  .exam-grades-skills {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (min-width: 768px) {
   .grades-summary-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 1rem;
+  }
+
+  .exam-grades-skills {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exam-grades-button,
+  .exam-grades-details {
+    transition: none;
   }
 }
 
@@ -2879,6 +3051,26 @@ input, select, textarea {
   color: var(--primary-text);
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
+}
+
+.quick-action-pill--unread,
+.quick-action-pill--unread:hover {
+  border-color: #6ee7b7;
+  background: rgba(236, 253, 245, 0.7);
+  color: #064e3b;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 0 0 2px rgba(16, 185, 129, 0.1);
+}
+
+.quick-action-chat-count,
+.quick-action-notification {
+  padding: 0.125rem 0.5rem;
+  border: 1px solid #fecdd3;
+  border-radius: 9999px;
+  background: #ffe4e6;
+  color: #e11d48;
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 .dashboard-bento {

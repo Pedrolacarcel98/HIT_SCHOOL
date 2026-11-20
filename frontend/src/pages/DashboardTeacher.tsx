@@ -16,8 +16,9 @@ import {
   CircleDollarSign,
   HelpCircle
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import PWAInstallButton from '../components/PWAInstallButton';
+import QuickActionNotification, { ChatUnreadBadge, type DashboardNotifications } from '../components/QuickActionNotification';
 
 interface DashboardTeacherData {
   activeStudents: number;
@@ -78,6 +79,7 @@ const DashboardTeacher: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const { hasNewGrades, unreadChatCount } = useOutletContext<DashboardNotifications>();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -266,15 +268,14 @@ const DashboardTeacher: React.FC = () => {
           <BookOpen size={15} color="var(--primary)" /> Mis Clases
         </button>
 
-        {!isAdmin && (
-          <button 
-            onClick={() => navigate('/teacher/grades')} 
-            className="quick-action-pill"
-            type="button"
-          >
-            <CheckSquare size={15} color="#7c3aed" /> Calificaciones
-          </button>
-        )}
+        <button
+          onClick={() => navigate('/teacher/grades')}
+          className={`quick-action-pill${hasNewGrades ? ' quick-action-pill--unread' : ''}`}
+          type="button"
+        >
+          <CheckSquare size={15} color={hasNewGrades ? '#059669' : '#7c3aed'} /> Calificaciones
+          {hasNewGrades && <QuickActionNotification label="Hay nuevas entregas" />}
+        </button>
 
         <button 
           onClick={() => navigate('/teacher/materials')} 
@@ -304,10 +305,11 @@ const DashboardTeacher: React.FC = () => {
 
         <button 
           onClick={() => navigate('/teacher/chat')} 
-          className="quick-action-pill"
+          className={`quick-action-pill${unreadChatCount > 0 ? ' quick-action-pill--unread' : ''}`}
           type="button"
         >
-          <MessageSquare size={15} color={isAdmin ? 'var(--primary)' : '#0f766e'} /> Mensajes
+          <MessageSquare size={15} color={unreadChatCount > 0 ? '#059669' : isAdmin ? 'var(--primary)' : '#0f766e'} /> Mensajes
+          {unreadChatCount > 0 && <ChatUnreadBadge count={unreadChatCount} />}
         </button>
       </section>
 

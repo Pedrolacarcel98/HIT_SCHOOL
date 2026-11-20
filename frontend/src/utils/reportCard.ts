@@ -138,11 +138,15 @@ export const generateReportCardPDF = (data: ReportCardData) => {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(24);
   doc.text(overallStr, 22, currentY + 22);
+  const overallEndX = 22 + doc.getTextWidth(overallStr);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(mutedText[0], mutedText[1], mutedText[2]);
-  doc.text(`/ 10  •  ${getQualitativeGrade(data.overallGrade)}`, 48, currentY + 20);
+  const overallDetail = data.overallGrade === null || data.overallGrade === undefined
+    ? 'En proceso'
+    : `/ 10  •  ${getQualitativeGrade(data.overallGrade)}`;
+  doc.text(overallDetail, overallEndX + 3, currentY + 20);
 
   // Columnas desglosadas a la derecha
   doc.setFont('helvetica', 'normal');
