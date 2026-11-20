@@ -68,11 +68,17 @@ router.get('/teacher', authenticateToken, requireTeacher, async (req: AuthReques
     });
 
     // Overdue payments is exclusive to ADMIN; teachers receive 0
+    const tenDaysAgo = new Date();
+    tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
+
     const overduePayments = isTeacher ? 0 : await prisma.paymentStatus.count({
       where: {
         isPaid: false,
+        isExempt: false,
+        status: { not: 'EXEMPT' },
+        student: { status: 'ACTIVE' },
         dueDate: {
-          lt: new Date()
+          lt: tenDaysAgo
         }
       }
     });

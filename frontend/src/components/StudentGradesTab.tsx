@@ -196,7 +196,7 @@ const StudentGradesTab: React.FC<{ courseId: string; courseTitle?: string }> = (
         {!isOnline && currentTermInfo && (
           <div className="grades-summary-grid">
             {[
-              ['MIDDLE TERM', currentTermInfo.middleExamGrade, 'Examen parcial (35%)'],
+              ['MIDTERM', currentTermInfo.middleExamGrade, 'Examen parcial (35%)'],
               ['FINAL TERM', currentTermInfo.finalExamGrade, 'Examen final (35%)'],
               ['MEDIA TAREAS', currentTermInfo.tasksAverage, 'Prácticas (30%)'],
               ['NOTA GLOBAL', hasBothExamGrades ? currentTermInfo.overallGrade : null, 'Nota ponderada']

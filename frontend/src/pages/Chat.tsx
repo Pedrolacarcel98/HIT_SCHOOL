@@ -11,7 +11,7 @@ interface ContactUser {
   email: string;
   avatarUrl?: string | null;
   courseTitle?: string;
-  role: 'TEACHER' | 'STUDENT' | 'PARENT';
+  role: 'TEACHER' | 'ADMIN' | 'STUDENT' | 'PARENT';
   studentName?: string;
   studentId?: string;
   subtitle?: string;
@@ -22,7 +22,7 @@ interface ContactUser {
 interface ChatMessage {
   id: string;
   senderId: string;
-  senderRole: 'TEACHER' | 'STUDENT' | 'PARENT';
+  senderRole: 'TEACHER' | 'ADMIN' | 'STUDENT' | 'PARENT' | 'TUTOR';
   senderName?: string;
   recipientId?: string;
   recipientName?: string;
@@ -31,6 +31,7 @@ interface ChatMessage {
   content: string;
   createdAt: string;
   updatedAt?: string;
+  readAt?: string | null;
 }
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -78,6 +79,10 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesViewportRef = useRef<HTMLDivElement>(null);
   const shouldScrollAfterMessagesRef = useRef(false);
+  const activeConversationRef = useRef('');
+  const loadedConversationRef = useRef('');
+  const messagesRequestRef = useRef(0);
+  const readingMessageIdsRef = useRef(new Set<string>());
   const { selectedStudent, selectedStudentId } = useParent();
 
   const sortContacts = (items: ContactUser[]) => [...items].sort((a, b) => {
@@ -136,8 +141,9 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
   }, [role, selectedStudentId, userRole]);
 
   const selectedContact = useMemo(() => {
-    return contacts.find(c => (c.contactKey || c.id) === selectedContactId) || contacts.find(c => c.id === selectedContactId) || null;
-  }, [contacts, selectedContactId]);
+    const contact = contacts.find(c => (c.contactKey || c.id) === selectedContactId) || contacts.find(c => c.id === selectedContactId) || null;
+    return userRole === 'PARENT' && contact?.studentId !== selectedStudentId ? null : contact;
+  }, [contacts, selectedContactId, selectedStudentId, userRole]);
 
   const targetStudentIdForChat = useMemo(() => {
     if (selectedContact?.studentId) {
@@ -154,6 +160,9 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
     }
     return '';
   }, [selectedContact, selectedStudentId, userRole, currentUserId]);
+
+  const conversationKey = selectedContact ? `${selectedContactId}:${targetStudentIdForChat}` : '';
+  activeConversationRef.current = conversationKey;
 
   const filteredContacts = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
@@ -173,6 +182,8 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
       setMessages([]);
       return;
     }
+    const requestId = ++messagesRequestRef.current;
+    const requestedConversation = conversationKey;
 
     try {
       if (!silent) setError('');
@@ -184,27 +195,29 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
 
       if (res.ok) {
         const data = await res.json() as ChatMessage[];
+        if (activeConversationRef.current !== requestedConversation || requestId !== messagesRequestRef.current) return;
+        loadedConversationRef.current = requestedConversation;
         shouldScrollAfterMessagesRef.current = !silent || isAtBottom();
         setMessages(data);
       } else if (!silent) {
         throw new Error('No se pudo cargar la conversación.');
       }
     } catch (err) {
-      if (!silent) {
+      if (!silent && activeConversationRef.current === requestedConversation) {
         setError(err instanceof Error ? err.message : 'Error al cargar mensajes.');
       }
     }
   };
 
   useEffect(() => {
+    setMessages([]);
+    loadedConversationRef.current = '';
     if (!selectedContact) {
-      setMessages([]);
       return;
     }
 
     // Carga inicial
     loadMessages();
-    markConversationRead(selectedContact.id, targetStudentIdForChat);
 
     // Polling en segundo plano cada 3.5 segundos para mensajes nuevos en vivo
     const interval = setInterval(() => {
@@ -212,37 +225,60 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
     }, 3500);
 
     return () => clearInterval(interval);
-  }, [selectedContact?.id, selectedContact?.contactKey, targetStudentIdForChat]);
+  }, [conversationKey]);
 
   useEffect(() => {
     if (shouldScrollAfterMessagesRef.current) {
       scrollToBottom();
       shouldScrollAfterMessagesRef.current = false;
     }
-  }, [messages]);
+    const markVisibleMessages = () => {
+      if (document.visibilityState !== 'visible' || !selectedContact || loadedConversationRef.current !== conversationKey) return;
+      const messageIds = messages.filter(message => message.senderId === selectedContact.id &&
+        message.recipientId === currentUserId && !message.readAt && !readingMessageIdsRef.current.has(message.id))
+        .slice(0, 1000).map(message => message.id);
+      if (messageIds.length) void markConversationRead(selectedContact.id, targetStudentIdForChat, messageIds, conversationKey);
+    };
+    markVisibleMessages();
+    document.addEventListener('visibilitychange', markVisibleMessages);
+    window.addEventListener('focus', markVisibleMessages);
+    return () => {
+      document.removeEventListener('visibilitychange', markVisibleMessages);
+      window.removeEventListener('focus', markVisibleMessages);
+    };
+  }, [messages, conversationKey]);
 
-  const markConversationRead = async (partnerId: string, studentId: string) => {
+  const markConversationRead = async (partnerId: string, studentId: string, messageIds: string[], requestedConversation: string) => {
+    messageIds.forEach(id => readingMessageIdsRef.current.add(id));
     try {
       const token = localStorage.getItem('token');
-      await fetch(`${apiUrl}/api/chat/read`, {
+      const response = await fetch(`${apiUrl}/api/chat/read`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ partnerId, studentId: studentId || null })
+        body: JSON.stringify({ partnerId, studentId: studentId || null, messageIds })
       });
+      if (!response.ok) throw new Error('No se pudieron marcar los mensajes como leidos.');
+      const result = await response.json() as { unreadCount: number };
+      if (activeConversationRef.current !== requestedConversation) return;
+      const readIds = new Set(messageIds);
+      setMessages(current => current.map(message => readIds.has(message.id) ? { ...message, readAt: new Date().toISOString() } : message));
       setContacts(current => current.map(contact => {
         const contactKey = contact.contactKey || contact.id;
-        return contactKey === selectedContactId || contact.id === partnerId
-          ? { ...contact, unreadCount: 0 }
+        return contactKey === selectedContactId
+          ? { ...contact, unreadCount: result.unreadCount }
           : contact;
       }));
+      await loadContacts(true);
     } catch (err) {
       console.error('No se pudieron marcar los mensajes como leídos:', err);
+      if (activeConversationRef.current === requestedConversation) setError('No se pudieron marcar los mensajes como leidos. Se reintentara.');
+    } finally {
+      messageIds.forEach(id => readingMessageIdsRef.current.delete(id));
     }
   };
 
-  const selectContact = (contactKey: string, contact: ContactUser) => {
+  const selectContact = (contactKey: string) => {
     setSelectedContactId(contactKey);
-    markConversationRead(contact.id, contact.studentId || (contact.role === 'STUDENT' ? contact.id : (userRole === 'PARENT' ? selectedStudentId : currentUserId)) || '');
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -397,7 +433,7 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
                 return (
                   <button
                     key={contactKey}
-                    onClick={() => selectContact(contactKey, contact)}
+                    onClick={() => selectContact(contactKey)}
                     style={{
                       width: '100%',
                       display: 'flex',
@@ -417,7 +453,7 @@ const Chat: React.FC<{ role: ChatRole }> = ({ role }) => {
                     <Avatar name={getDisplayName(contact, userRole)} />
                     <div style={{ minWidth: 0, flex: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-                        <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.92rem', color: isSelected ? 'var(--primary-text)' : 'var(--text-main)' }}>
+                        <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.92rem', fontWeight: (contact.unreadCount || 0) > 0 ? 700 : 400, color: isSelected ? 'var(--primary-text)' : 'var(--text-main)' }}>
                           {getDisplayName(contact, userRole)}
                         </strong>
                         {contact.role === 'PARENT' && (

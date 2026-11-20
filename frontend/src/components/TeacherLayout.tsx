@@ -105,6 +105,7 @@ const TeacherLayout: React.FC = () => {
     { label: 'Gestión Profesores', path: '/teacher/teachers', icon: <UserRoundCog size={20} />, iconColor: '#5369ad' },
     ...(userRole === 'ADMIN' ? [{ label: 'Gestión Admin', path: '/teacher/admins', icon: <ShieldCheck size={20} />, iconColor: '#4f46e5' }] : []),
     { label: 'Gestión Tutores', path: '/teacher/parents', icon: <Users size={20} />, iconColor: '#0f9f7a' },
+    ...(userRole === 'ADMIN' ? [{ label: 'Matrículas', path: '/teacher/enrollments', icon: <GraduationCap size={20} />, iconColor: '#ea580c' }] : []),
     ...(userRole === 'ADMIN' ? [{ label: 'Control de Pagos', path: '/teacher/payments', icon: <CircleDollarSign size={20} />, iconColor: '#d14f72' }] : []),
     { label: 'Chat Alumnos', path: '/teacher/chat', icon: <MessageCircle size={20} />, iconColor: '#12966b' },
   ];

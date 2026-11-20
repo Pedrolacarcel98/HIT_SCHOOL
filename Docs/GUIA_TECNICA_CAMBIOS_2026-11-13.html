@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>HitSchool Academy | Guía técnica de cambios y flujos</title>
+  <meta name="description" content="Funcionamiento técnico de notas manuales, tareas, chat, matrículas y pagos. Estado del código a 13 de noviembre de 2026.">
+  <style>
+    :root{--ink:#294f40;--green:#438d6c;--deep:#285d45;--mint:#e7f5eb;--line:#bbdfca;--paper:#fbfefc;--text:#45515a;--muted:#6b7d75;--amber:#ae761a;--yellow:#fff9e9;--body-size:10.5pt}
+    *{box-sizing:border-box}html{background:#e8efea}body{margin:0;color:var(--text);font-family:'Trebuchet MS','Segoe UI',sans-serif;font-size:var(--body-size);line-height:1.43;letter-spacing:0}
+    .page{position:relative;width:210mm;height:297mm;margin:20px auto;background:#fff;padding:17mm 17mm 20mm;break-after:page;box-shadow:0 6px 24px #294f4012}
+    .page:before{content:'';position:absolute;inset:5mm 6mm;border:1.2px solid var(--line);border-radius:8mm;pointer-events:none}.page:last-child{break-after:auto}.page-content{position:relative}
+    .brand{display:inline-block;background:var(--green);color:white;border-radius:20px;padding:5px 13px;font-size:8.2pt;font-weight:bold}.eyebrow{margin:12px 0 3px;color:var(--green);font-size:9pt;font-weight:bold;text-transform:uppercase}
+    h1,h2,h3{font-family:'Arial Rounded MT Bold','Trebuchet MS',sans-serif;color:var(--deep);line-height:1.15;letter-spacing:0}h1{font-size:36pt;margin:18px 0}h2{font-size:24pt;margin:8px 0 13px}h3{font-size:13.6pt;margin:0 0 7px}h4{font-size:11pt;color:var(--deep);margin:12px 0 5px}
+    p{margin:0 0 10px}.lead{font-size:12.4pt;line-height:1.45;color:#567566}.small{font-size:9pt}.tiny{font-size:8.2pt}.muted{color:var(--muted)}strong{color:var(--ink)}a{color:var(--deep);text-decoration:none}
+    .banner{background:var(--mint);border:1.5px dashed #7ebd9b;border-radius:8mm;padding:9mm;margin:10mm 0 8mm}.cover .banner{padding:10mm 9mm}.cover h1{font-size:35pt}.cover .subtitle{font-size:19pt;color:var(--green);font-weight:bold;line-height:1.2}
+    .card{background:var(--paper);border:1px solid #d5eadd;border-left:5px solid #82c5a1;border-radius:6mm;padding:14px 17px;margin:12px 0;break-inside:avoid}.card p:last-child,.card ul:last-child,.card ol:last-child{margin-bottom:0}.warn{background:var(--yellow);border-color:#f0d998;border-left-color:#e4aa37}.warn h3{color:#8f5b0d}.plain{border-left-width:1px;background:white}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.grid .card{margin:0}.tag{display:inline-block;border-radius:5px;padding:2px 6px;background:var(--mint);color:var(--deep);font-size:8.4pt;font-weight:bold}.tag.amber{background:#fff0c8;color:#8f5b0d}
+    ul,ol{padding-left:20px;margin:6px 0 10px}li{margin:4px 0}li::marker{color:var(--green);font-weight:bold}.steps{counter-reset:step;list-style:none;padding-left:0}.steps li{position:relative;padding-left:30px;margin:11px 0}.steps li:before{counter-increment:step;content:counter(step);position:absolute;left:0;top:0;width:22px;height:22px;border-radius:50%;background:var(--mint);color:var(--deep);font-weight:bold;text-align:center;line-height:22px}
+    table{width:100%;border-collapse:separate;border-spacing:0;margin:10px 0 13px;font-size:9.1pt;line-height:1.3;table-layout:fixed}th{background:var(--mint);color:var(--deep);text-align:left;padding:8px 9px;font-weight:bold}td{padding:8px 9px;border-bottom:1px solid #e1ece5;vertical-align:top;overflow-wrap:anywhere}tbody tr:nth-child(even)td{background:#fafcfb}.compact td,.compact th{padding:6px 8px}
+    code{font-family:Consolas,'Courier New',monospace;font-size:.88em;color:#315b48;overflow-wrap:anywhere}pre{font-family:Consolas,'Courier New',monospace;white-space:pre-wrap;overflow-wrap:anywhere;background:#f0f6f2;border:1px solid #d6e5dc;border-radius:7px;padding:11px 13px;font-size:8.5pt;line-height:1.38;color:#2d4d3e;margin:10px 0 12px;break-inside:avoid}
+    .formula{background:var(--mint);border-radius:9px;padding:12px 15px;color:var(--deep);font-size:13pt;font-weight:bold;text-align:center;margin:12px 0}.flow{display:flex;align-items:stretch;gap:7px;margin:13px 0}.flow>div{flex:1;min-width:0;background:#f3faf5;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:9pt;text-align:center}.flow .arrow{flex:0;align-self:center;border:none;background:none;padding:0;color:var(--green);font-size:16pt}.flow b{display:block;color:var(--deep);margin-bottom:5px}
+    .footer{position:absolute;bottom:9mm;left:17mm;right:17mm;padding-top:7px;border-top:1px dashed var(--line);display:flex;justify-content:space-between;align-items:center;font-size:7.7pt;color:#6b9780}.rule{height:1px;background:var(--line);margin:13px 0}.source{font-size:8.2pt;color:var(--muted);margin-top:11px;overflow-wrap:anywhere}.toc td:first-child{width:11%;color:var(--green);font-weight:bold}.cover-meta{margin-top:9mm;display:grid;grid-template-columns:1fr 1fr;gap:12px}.cover-meta div{border-top:2px solid var(--line);padding-top:8px;font-size:9pt}
+    @page{size:A4;margin:0}@media print{html,body{background:white}.page{margin:0;box-shadow:none}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  </style>
+</head>
+<body>
+
+<article class="page cover" id="portada"><div class="page-content">
+  <span class="brand">HITSCHOOL ACADEMY · DOCUMENTACIÓN TÉCNICA</span>
+  <div class="banner">
+    <p class="eyebrow">Cambios de gestión y docencia</p>
+    <h1>HitSchool<br>Así funciona ahora</h1>
+    <p class="subtitle">Notas, tareas, chat,<br>matrículas y pagos</p>
+    <p class="lead" style="margin-top:18px">Guía detallada de los flujos de pantalla, contratos de API, reglas de cálculo, persistencia y controles añadidos.</p>
+  </div>
+  <div class="card">
+    <h3>Del gesto de la profesora al dato guardado</h3>
+    <p>Cada bloque explica qué hace la persona usuaria, qué petición envía la interfaz, qué decide el backend y qué información conserva el modelo de datos. Incluye ejemplos, situaciones límite y referencias al código.</p>
+  </div>
+  <div class="card warn">
+    <h3>Implementado no significa desplegado</h3>
+    <p>Esta guía describe la copia de trabajo revisada el <strong>13 de noviembre de 2026</strong>. La persistencia y la migración se probaron en PostgreSQL temporal y se añadieron datos rotulados de prueba a la base Docker local. <strong>Las cuentas de acceso y la base del servidor no se modificaron.</strong></p>
+  </div>
+  <div class="cover-meta"><div><strong>Edición y alcance</strong><br>13/11/2026 · Incluye fixture local; PostgreSQL del servidor remoto pendiente.</div><div><strong>Audiencia</strong><br>Administración, profesorado y mantenimiento técnico de la plataforma.</div></div>
+</div></article>
+
+<article class="page" id="indice"><div class="page-content">
+  <span class="brand">MAPA DEL DOCUMENTO</span><p class="eyebrow">01 · Lectura y alcance</p><h2>Qué ha cambiado</h2>
+  <p>El objetivo no es sustituir los cálculos automáticos, sino añadir flexibilidad docente y hacer coherentes la pantalla, la API y el dato persistido. En pagos se han corregido fallos concretos sin rediseñar el sistema de facturación.</p>
+  <table class="compact"><thead><tr><th style="width:28%">Área</th><th>Cambio principal</th><th style="width:18%">Páginas</th></tr></thead><tbody>
+    <tr><td>Etiquetas</td><td>«Midterm» en expedientes, vistas de notas y boletines. Sin renombrar campos internos.</td><td>4, 6, 8</td></tr>
+    <tr><td>Cálculos y medias</td><td>Valores manuales separados de automáticos, incluido el cero, y reinicio individual.</td><td>4–7</td></tr>
+    <tr><td>Guardado de notas</td><td>Devuelve competencias antes omitidas; una misma resolución al guardar y consultar.</td><td>7–10</td></tr>
+    <tr><td>Tareas y exámenes</td><td>Edición numérica, conservación al guardar comentarios y modo de nota global de tarea.</td><td>8–10</td></tr>
+    <tr><td>Chat</td><td>Negrita solo para pendientes y lectura limitada a mensajes realmente cargados.</td><td>11–12</td></tr>
+    <tr><td>Alta y pagos</td><td>Alta transaccional, protección de cargos especiales y controles al registrar cobros.</td><td>13–17</td></tr>
+    <tr><td>Entrega técnica</td><td>Migración aditiva, pruebas repetibles, datos locales de verificación, límites y mapa de archivos.</td><td>18–22</td></tr>
+  </tbody></table>
+  <div class="grid"><div class="card"><h3>Lectura funcional</h3><p>Empieza por las páginas 6, 11, 13, 15 y 17: muestran acciones, efectos y ejemplos de uso.</p></div><div class="card"><h3>Lectura técnica</h3><p>Continúa con contratos API, modelos y transacciones en las páginas 7–10, 12, 14 y 18.</p></div></div>
+  <div class="card warn"><h3>Decisiones y estado local</h3><ul><li>Curso de notas por defecto: <code>2025-2026</code>.</li><li>Alta: genera deuda pendiente; el cobro se marca después.</li><li>La tarifa trimestral se introduce como importe mensual.</li><li>No se ha cambiado la incorporación a mitad de trimestre.</li><li>Docker local está activo; la base contiene registros demo identificados. El servidor remoto no se ha tocado.</li></ul></div>
+  <p class="small muted">Los estados «probado» de esta guía corresponden a pruebas simuladas o navegador con API interceptada, salvo que se indique lo contrario. No equivalen a una certificación del entorno desplegado.</p>
+</div></article>
+
+<article class="page" id="arquitectura"><div class="page-content">
+  <span class="brand">ARQUITECTURA Y RESPONSABILIDADES</span><p class="eyebrow">02 · Del navegador a Prisma</p><h2>Un flujo, varias capas</h2>
+  <div class="flow"><div><b>React</b>Formulario y estado de edición</div><span class="arrow">→</span><div><b>HTTP + JWT</b>Identidad, rol y petición JSON</div><span class="arrow">→</span><div><b>Express</b>Validación y reglas de negocio</div><span class="arrow">→</span><div><b>Prisma</b>Lecturas, escrituras y transacciones</div></div>
+  <div class="card"><h3>La interfaz no sustituye al servidor</h3><p>El editor muestra cálculos para facilitar la edición, pero el backend valida y resuelve las notas efectivas. Al guardar correctamente se vuelve a consultar el expediente para recuperar su representación completa. Los permisos no dependen de que un botón esté oculto.</p></div>
+  <table><thead><tr><th style="width:22%">Rol</th><th>Notas</th><th>Chat</th></tr></thead><tbody>
+    <tr><td><code>ADMIN</code></td><td>Edición de las clases y entregas permitidas por las rutas administrativas.</td><td>Interlocutor de alumnos y tutores; usa la pantalla compartida del personal.</td></tr>
+    <tr><td><code>TEACHER</code></td><td>Presenciales accesibles; online propias o asignadas. Las entregas verifican su acceso.</td><td>Interlocutor de alumnos y tutores.</td></tr>
+    <tr><td><code>STUDENT</code></td><td>Consulta de sus notas; no puede usar las rutas de escritura docente.</td><td>Recibe y envía mensajes al personal.</td></tr>
+    <tr><td><code>PARENT</code></td><td>Consulta con comprobación del vínculo familiar.</td><td>Conversaciones contextualizadas por hijo.</td></tr>
+  </tbody></table>
+  <h3>Entidades que no conviene confundir</h3>
+  <table class="compact"><tbody><tr><td style="width:36%"><code>Enrollment</code></td><td>Vínculo del alumno con una clase; interviene en las notas de ese curso.</td></tr><tr><td><code>AcademyEnrollment</code></td><td>Matrícula económica: fecha de alta, tarifa, periodicidad, modalidad y libro.</td></tr><tr><td><code>Submission</code> / <code>TaskDelivery</code></td><td>Nota del paso o entrega individual / nota global y feedback de una tarea.</td></tr><tr><td><code>TermGrade</code></td><td>Evaluación por alumno, clase, trimestre y curso académico.</td></tr><tr><td><code>PaymentStatus</code></td><td>Obligación de pago y estado de cobro; no es una operación bancaria.</td></tr></tbody></table>
+  <p class="source">Base técnica: React 19 + TypeScript; Express; Prisma con PostgreSQL. Las factorías de rutas permiten probar los mismos handlers con una dependencia de datos simulada.</p>
+</div></article>
+
+<article class="page" id="calculos"><div class="page-content">
+  <span class="brand">NOTAS · CÁLCULO AUTOMÁTICO</span><p class="eyebrow">03 · Las reglas de partida</p><h2>Cómo salen las medias</h2>
+  <div class="card"><h3>Midterm y Final en presencial</h3><p>La media del examen se calcula con las competencias informadas: Grammar, Reading, Writing, Listening y Speaking. No se convierte una competencia vacía en cero. Si no hay competencias, se conserva la compatibilidad con la nota de examen existente cuando corresponda.</p></div>
+  <div class="formula">Trimestral = 0,35 × Midterm + 0,35 × Final + 0,30 × Tareas</div>
+  <p>La fórmula presencial automática necesita ambas notas de examen. Si falta alguna, la global automática queda sin calificar. Si existen los dos exámenes pero no hay media de tareas, la fórmula actual utiliza cero para ese componente; <strong>no se han redistribuido los porcentajes</strong>.</p>
+  <div class="grid"><div class="card"><h3>Ejemplo presencial</h3><p>Midterm = 8; Final = 9; tareas = 7.</p><p><strong>2,80 + 3,15 + 2,10 = 8,05.</strong></p><p class="small">Un valor manual superior puede sustituir este resultado; no altera los porcentajes guardados en el código.</p></div><div class="card"><h3>Pasos → tarea → trimestre</h3><p>Para el cálculo trimestral, una tarea automática aporta su media cuando están calificados todos sus pasos evaluables. Un paso evaluable exige entrega o contiene un formulario.</p></div></div>
+  <h3>Online: competencias y evaluación continua</h3>
+  <ol><li>Se calcula la media de tareas por competencia reconocida.</li><li>La global automática es la media de las competencias que tienen nota, tomando sus valores efectivos.</li><li>Si no hay competencias disponibles, se utiliza la media de tareas como alternativa.</li><li>Si se fija manualmente <code>tasksAverage</code>, ese valor pasa a ser la base de la global automática online. Una global manual sigue teniendo prioridad.</li></ol>
+  <div class="card"><h3>Por qué 10, 10 y 0 pueden dar 5</h3><p>Dos tareas de Grammar con 10 y una de Reading con 0 dan Grammar = 10 y Reading = 0. La global por competencias es <strong>(10 + 0) / 2 = 5</strong>; la media de las tres tareas sería 6,67. Ahora guardar y consultar utilizan la misma resolución que la vista automática existente.</p></div>
+  <p class="small"><strong>Categorías:</strong> <code>GRAMMAR_VOCABULARY</code> alimenta Grammar; Reading, Writing, Listening y Speaking tienen sus categorías propias. <code>MOCK_EXAM</code> y categorías no mapeadas pueden contribuir a la media de tareas, pero no crean una sexta competencia. En las ramas de notas, <code>HIBRIDO</code> sigue el cálculo no online.</p>
+  <p class="source">Redondeo habitual del backend: dos decimales. Algunas vistas y el boletín presentan un decimal. La presentación no cambia el valor que usa la API.</p>
+</div></article>
+
+<article class="page" id="manuales"><div class="page-content">
+  <span class="brand">NOTAS · PRIORIDAD MANUAL</span><p class="eyebrow">04 · Automática y manual no son el mismo dato</p><h2>Qué valor prevalece</h2>
+  <div class="formula">Valor efectivo = ajuste manual, si existe; si no, valor automático</div>
+  <p>El ajuste se guarda en <code>TermGrade.gradeOverrides</code>. No se deduce que una nota sea manual simplemente porque difiera de la media. La API devuelve tanto la resolución efectiva como la información necesaria para distinguir los modos.</p>
+  <table><thead><tr><th style="width:31%">Campo</th><th>Significado</th></tr></thead><tbody><tr><td><code>tasksAverage</code>, <code>overallGrade</code>…</td><td>Valores efectivos que se muestran y usan como resultado.</td></tr><tr><td><code>automaticGrades</code></td><td>Cálculos disponibles para cada campo. Una media superior puede incorporar ajustes manuales de sus componentes.</td></tr><tr><td><code>gradeOverrides</code></td><td>Solo los ajustes explícitos vigentes: número entre 0 y 10.</td></tr></tbody></table>
+  <div class="card"><h3>Un cero manual no es un dato vacío</h3><p>La resolución utiliza una comprobación nula (<code>??</code>), no una comprobación de verdad/falsedad. Por ello, un ajuste de <strong>0</strong> no desaparece ni se sustituye por una media automática.</p></div>
+  <div class="card"><h3>Editar una casilla sin que cambie de modo</h3><p>Las medias usan un campo de texto con teclado decimal. Puedes seleccionar el contenido, borrarlo y escribir el reemplazo: el campo vacío permanece en modo manual durante la edición. Acepta <code>6,79</code> y <code>6.79</code>; antes de enviar el backend se normaliza al formato numérico <code>6.79</code>. Si guardas el campo manual vacío o con un valor no válido, la interfaz pide una nota entre 0 y 10; usa <strong>«Volver a automática»</strong> para cambiar de modo.</p></div>
+  <table class="compact"><thead><tr><th style="width:27%">Petición</th><th>Efecto sobre el ajuste</th></tr></thead><tbody><tr><td><code>7.5</code></td><td>Guarda 7,5 como valor manual.</td></tr><tr><td><code>0</code></td><td>Guarda cero como valor manual válido.</td></tr><tr><td><code>null</code></td><td>Elimina el ajuste de ese campo: vuelve a automática.</td></tr><tr><td>Clave omitida</td><td>Conserva el ajuste existente de ese campo.</td></tr></tbody></table>
+  <h3>Los ajustes son independientes</h3>
+  <p>Si la profesora cambia la media de Midterm, la global automática usa ese Midterm efectivo. Si además fija una global manual, esa global no se mueve aunque cambien competencias, exámenes o tareas. Reiniciar la media de tareas no borra el ajuste de la global.</p>
+  <div class="card warn"><h3>«Automática» es local a cada campo</h3><p>Volver a automática en la global recalcula con los componentes efectivos actuales. No elimina los ajustes manuales que sigan activos en Midterm, Final, tareas o competencias.</p></div>
+</div></article>
+
+<article class="page" id="uso-notas"><div class="page-content">
+  <span class="brand">NOTAS · OPERACIÓN EN PANTALLA</span><p class="eyebrow">05 · Un caso de clase presencial</p><h2>Editar sin perder el cálculo</h2>
+  <ol class="steps"><li><strong>Abrir el expediente de la clase.</strong> La pantalla carga el alumno, la clase y el trimestre seleccionado. La consulta incluye <code>courseId</code> para evitar tratar la evaluación de varias clases como una sola.</li><li><strong>Pulsar «Editar Evaluación».</strong> El formulario recupera las competencias, los valores efectivos y los ajustes manuales. La edición se bloquea si ha fallado la carga inicial.</li><li><strong>Introducir la nota necesaria.</strong> Competencias y notas directas siguen siendo editables; las medias muestran el modo «Manual» o «Automática».</li><li><strong>Guardar.</strong> Se envían las competencias, observaciones y cambios explícitos de <code>gradeOverrides</code>. La API valida y persiste la evaluación.</li><li><strong>Recargar la evaluación.</strong> Tras éxito, el editor se cierra y se consulta de nuevo el expediente completo. Una respuesta de error no debe aparentar un guardado correcto.</li></ol>
+  <div class="card"><h3>Alumno que hace las tareas en el aula</h3><p>Puede no tener entregas online con las que calcular una media. La profesora introduce, por ejemplo, <strong>7 en «Media de tareas»</strong>. En presencial, si Midterm es 8 y Final es 9, la global automática resulta 8,05. El trabajo presencial no exige inventar entregas para fijar ese componente.</p></div>
+  <div class="card"><h3>Más tarde aparecen entregas online</h3><p>Su media automática puede ser 6. El ajuste manual de tareas continúa en 7 hasta pulsar <strong>«Volver a automática» en ese campo y guardar</strong>. Entonces se elimina la clave manual y la global usa el 6, salvo que la propia global tenga otro ajuste.</p></div>
+  <h3>Qué cambia visualmente</h3>
+  <ul><li>«Middle Term» pasa a <strong>«Midterm»</strong>; los campos <code>middle*</code> no se renombran.</li><li>Se editan medias de Midterm/Final, tareas, global y competencias online calculadas.</li><li>Los errores de carga y guardado se muestran de forma visible.</li><li>Se retira la media local de respaldo que mezclaba entregas de otros trimestres.</li><li>Los controles se adaptan a escritorio y móvil; se ha probado su uso en ambos.</li></ul>
+</div></article>
+
+<article class="page" id="api-notas"><div class="page-content">
+  <span class="brand">NOTAS · CONTRATO HTTP</span><p class="eyebrow">06 · Leer y escribir la misma evaluación</p><h2>API de calificaciones</h2>
+  <table class="compact"><thead><tr><th style="width:59%">Ruta</th><th>Responsabilidad</th></tr></thead><tbody><tr><td><code>GET /api/term-grades/course/:courseId</code></td><td>Matriz de la clase. Acepta trimestre y curso académico.</td></tr><tr><td><code>GET /api/term-grades/student/:studentId</code></td><td>Expediente del alumno; la pantalla envía <code>?courseId=…</code>.</td></tr><tr><td><code>PUT /api/term-grades/course/:courseId</code></td><td>Guarda competencias, observaciones y ajustes del alumno y trimestre.</td></tr></tbody></table>
+  <p class="small">Se requiere <code>Authorization: Bearer &lt;token&gt;</code>. Los ejemplos son parciales: no sustituyen todos los campos que devuelve una consulta real.</p>
+  <pre>PUT /api/term-grades/course/clase-id
+{
+  "studentId": "alumno-id",
+  "term": 1,
+  "academicYear": "2025-2026",
+  "middleGrammar": 8,
+  "observations": "Trabajo realizado en clase",
+  "gradeOverrides": {
+    "tasksAverage": 7,
+    "overallGrade": null
+  }
+}</pre>
+  <p>El ejemplo fija tareas en 7 y elimina solo el ajuste de la global. Las otras claves omitidas se conservan. Se comprueba que el alumno está matriculado en la clase antes de crear o actualizar su <code>TermGrade</code>.</p>
+  <pre>Respuesta conceptual, con el resto de datos ya informados:
+{
+  "tasksAverage": 7,
+  "overallGrade": 8.05,
+  "gradeOverrides": { "tasksAverage": 7 },
+  "automaticGrades": {
+    "tasksAverage": 6,
+    "overallGrade": 8.05
+  }
+}</pre>
+  <div class="card"><h3>Compatibilidad y validación</h3><p>Con un objeto <code>gradeOverrides</code> explícito, los cambios de calculados se toman de ese objeto. Sin él, la ruta admite campos calculados planos por compatibilidad. Se valida trimestre 1–3, notas finitas 0–10 y claves de ajuste permitidas. Las lecturas y la respuesta del guardado usan <code>resolveTermEvaluation</code>.</p></div>
+  <p class="source">Campos ajustables: middleExamGrade, finalExamGrade, tasksAverage, overallGrade, grammar, reading, writing, listening y speaking.</p>
+</div></article>
+
+<article class="page" id="entregas"><div class="page-content">
+  <span class="brand">NOTAS · ENTREGAS Y EXÁMENES</span><p class="eyebrow">07 · La nota no es la respuesta del alumno</p><h2>Calificar y comentar</h2>
+  <div class="flow"><div><b>Editar nota</b>Valor numérico elegido por el docente</div><span class="arrow">→</span><div><b>POST /grade</b>Validación y acceso a la entrega</div><span class="arrow">→</span><div><b>Submission</b>Nota y feedback persistidos</div></div>
+  <pre>POST /api/assignments/submissions/entrega-id/grade
+{ "grade": 3.5, "feedback": "Revisado presencialmente" }
+
+Solo comentarios, sin sustituir la nota:
+{ "feedback": "Añadida una aclaración" }</pre>
+  <div class="card"><h3>Qué se ha corregido</h3><ul><li>Los exámenes disponen de acceso a <strong>«Editar nota»</strong>, además de revisar sus respuestas.</li><li>El formulario numérico ya no impone de nuevo la puntuación autocorregida al guardar una nota elegida por el docente.</li><li>Si <code>grade</code> no se envía, el backend conserva la nota actual al guardar feedback.</li><li>La conversión usa <code>Number</code>; una cadena como <code>"8invalid"</code> no se acepta como un 8 parcial.</li><li>Los ceros se guardan como notas válidas; un valor explícitamente vacío o nulo no significa lo mismo que omitir la clave.</li></ul></div>
+  <h3>Permisos efectivos, no solo botones</h3>
+  <p><code>requireTeacher</code> admite <code>ADMIN</code> y <code>TEACHER</code>. Para un profesor se verifica además la asignación: autor de la tarea, clase presencial, titular de la clase o docente asignado. Una entrega sin acceso devuelve 403 antes de actualizar la nota. El administrador mantiene su acceso administrativo.</p>
+  <div class="card plain"><h3>Revisión de preguntas y edición numérica son rutas distintas</h3><p>La revisión de examen puede enviar <code>questionScores</code> y actualizar la puntuación guardada en el contenido JSON. La edición numérica cambia <code>Submission.grade</code>; no vuelve a entregar el examen ni cambia por sí sola las respuestas del alumno.</p><p>Si pertenece a una tarea estructurada, el guardado invoca la sincronización de su entrega global. Esta respeta el modo manual/automático de la tarea.</p></div>
+  <p class="source">El botón «Volver a automática» de esta intervención afecta a medias calculadas y a la nota global de tarea; no es un botón para repetir el examen del alumno.</p>
+</div></article>
+
+<article class="page" id="tareas"><div class="page-content">
+  <span class="brand">TAREAS · NOTA GLOBAL Y PASOS</span><p class="eyebrow">08 · Un bloque docente completo</p><h2>Manual o automática</h2>
+  <p>El expediente permite abrir <strong>«Evaluar tarea»</strong> cuando dispone de los datos de esa tarea del trimestre. El modal reúne los pasos, sus notas y comentarios, la nota global y el feedback del bloque. También permite editar la nota de un paso de examen.</p>
+  <div class="grid"><div class="card"><h3><code>gradeMode: AUTO</code></h3><p>La nota efectiva de la tarea se calcula desde sus pasos evaluables. Para la media trimestral deben estar todos calificados. Los cambios posteriores de esos pasos se reflejan en la nota automática.</p></div><div class="card"><h3><code>gradeMode: MANUAL</code></h3><p>Se usa la nota global que introduce el docente. Puede ser cero. No se sustituye por la media de pasos al sincronizar la tarea.</p></div></div>
+  <pre>POST /api/structured-tasks/tarea-id/grade-delivery
+{
+  "studentId": "alumno-id",
+  "grade": 9,
+  "gradeMode": "MANUAL",
+  "feedback": "Evaluación global presencial",
+  "stepEvaluations": [
+    { "stepId": "paso-id", "grade": 5, "feedback": null }
+  ]
+}</pre>
+  <ol class="steps"><li>Se valida la tarea accesible para el docente y el rango de todas las notas enviadas.</li><li>En una transacción se crean o actualizan las entregas de pasos y su feedback.</li><li>Se resuelve el modo global. En AUTO se toma la media; en MANUAL se exige una nota.</li><li>Se guarda <code>TaskDelivery.grade</code>, <code>gradeMode</code>, estado y fecha de calificación.</li><li>Al consultar la evaluación trimestral, una tarea manual aporta su nota global, no una media alternativa que la ignore.</li></ol>
+  <div class="card"><h3>Volver a automática, de verdad</h3><p>Con pasos 6 y 8, la automática es 7. Una global manual de 9 prevalece. Si se pulsa «Volver a automática» y se guarda, se persiste AUTO; si después el segundo paso pasa a 10, la nota automática será 8.</p></div>
+  <p class="small muted">Compatibilidad: una tarea antigua con modo nulo y estado GRADED conserva su nota como manual hasta un reinicio explícito. No se intenta adivinar ni reescribir todo el historial durante la migración.</p>
+</div></article>
+
+<article class="page" id="persistencia"><div class="page-content">
+  <span class="brand">NOTAS · CONSISTENCIA DE DATOS</span><p class="eyebrow">09 · Guardar no basta: hay que poder releer</p><h2>Evitar pérdidas silenciosas</h2>
+  <div class="card warn"><h3>El fallo de las competencias</h3><p>El guardado ya persistía las diez competencias de Midterm y Final, pero las respuestas de lectura no las incluían. Al reabrir aparecían vacías; un nuevo guardado podía convertir esos vacíos en nulos. Ahora las consultas de clase y alumno devuelven esos diez campos.</p></div>
+  <table class="compact"><thead><tr><th style="width:40%">Familia de campos</th><th>Datos conservados en la lectura</th></tr></thead><tbody><tr><td><code>middle*</code></td><td>Grammar, Reading, Writing, Listening y Speaking de Midterm.</td></tr><tr><td><code>final*</code></td><td>Las cinco competencias del examen Final.</td></tr><tr><td>Medias y global</td><td>Valores efectivos, automáticos y ajustes explícitos.</td></tr><tr><td>Observaciones y tareas</td><td>Texto docente y desglose de tareas que fundamenta la evaluación.</td></tr></tbody></table>
+  <h3>El recorrido que se ha comprobado</h3>
+  <div class="flow"><div><b>Guardar</b>PUT con competencias y ajustes</div><span class="arrow">→</span><div><b>Consultar</b>GET de clase y alumno</div><span class="arrow">→</span><div><b>Reabrir</b>Valores completos, incluido cero</div><span class="arrow">→</span><div><b>Comentar</b>Sin borrar notas omitidas</div></div>
+  <p>Las pruebas HTTP recorren el mismo router y autenticación que usa la aplicación, con una dependencia de almacenamiento simulada. El navegador comprueba que los controles recuperan el valor tras reabrir. Esto acredita la coherencia del flujo probado, <strong>no todavía una escritura en PostgreSQL desplegado</strong>.</p>
+  <h3>Claves de aislamiento</h3>
+  <ul><li><code>TermGrade</code> se identifica por alumno + clase + trimestre + curso académico.</li><li>Las rutas de expediente usadas por la interfaz envían la clase concreta.</li><li>Las notas formales mantienen el año por defecto <code>2025-2026</code>, por decisión expresa.</li><li>La media local que mezclaba entregas de diferentes trimestres deja de actuar como sustituto silencioso cuando la API no tiene media.</li></ul>
+  <p class="small"><strong>Alcance anual:</strong> el año filtra los registros formales <code>TermGrade</code>. Las tareas se seleccionan por clase y trimestre; esta entrega no añade un filtro anual nuevo a las tareas. Reutilizar la misma clase entre cursos exige comprobar su histórico.</p>
+  <div class="card"><h3>Precaución para nuevos consumidores de la API</h3><p>Un listado histórico o un cuadro global no debe interpretar una evaluación multiclase como si fuera la de una clase concreta. Para editar y verificar un expediente utiliza siempre el <code>courseId</code> correcto y un año explícito cuando corresponda.</p></div>
+</div></article>
+
+<article class="page" id="chat-pantalla"><div class="page-content">
+  <span class="brand">CHAT · COMPORTAMIENTO VISIBLE</span><p class="eyebrow">10 · Cuándo un mensaje pasa a leído</p><h2>Negrita con significado</h2>
+  <p>La lista de conversaciones es compartida por los cuatro roles. Antes todos los nombres aparecían destacados; ahora el estilo refleja el contador de mensajes recibidos pendientes de ese hilo.</p>
+  <table><thead><tr><th style="width:33%">Situación</th><th>Resultado</th></tr></thead><tbody><tr><td><code>unreadCount &gt; 0</code></td><td>Nombre en negrita, peso 700, con contador de pendientes.</td></tr><tr><td><code>unreadCount = 0</code></td><td>Peso normal, 400. La selección de la conversación mantiene su propio fondo.</td></tr><tr><td>Abrir solo el listado</td><td>No marca mensajes como leídos.</td></tr><tr><td>Falla la carga del hilo</td><td>No se limpia el contador como si se hubieran mostrado los mensajes.</td></tr><tr><td>Se carga el hilo visible</td><td>Se solicita marcar los mensajes entrantes cargados que continúan sin leer.</td></tr></tbody></table>
+  <ol class="steps"><li>Se elige un contacto y se calcula su contexto de alumno, cuando existe.</li><li>Se consulta el historial. Las respuestas tardías de otra conversación se descartan mediante la clave activa y el identificador de petición.</li><li>Después de renderizar, si el documento está visible, se seleccionan mensajes entrantes sin <code>readAt</code>.</li><li>Se envían sus identificadores al servidor. Solo después de una respuesta correcta se actualiza el estado local y se refrescan contactos.</li></ol>
+  <div class="card"><h3>Mensajes nuevos con el hilo abierto</h3><p>El polling vuelve a cargar cada 3,5 segundos. El efecto de mensajes vuelve a aplicar el marcado cuando el documento está visible. Los eventos de foco y cambio de visibilidad permiten retomar el proceso. Los identificadores en curso evitan duplicaciones simultáneas de la misma solicitud.</p></div>
+  <div class="card warn"><h3>Qué significa «visible» aquí</h3><p>Se comprueba la visibilidad de la pestaña/documento y que el hilo se haya cargado. No se certifica que cada burbuja individual haya entrado en el área visible por scroll. La negrita se aplica al listado, no a las burbujas.</p></div>
+</div></article>
+
+<article class="page" id="chat-api"><div class="page-content">
+  <span class="brand">CHAT · API, CONTEXTO Y CONCURRENCIA</span><p class="eyebrow">11 · No leer lo que todavía no se ha mostrado</p><h2>Lectura por identificadores</h2>
+  <pre>GET /api/chat?partnerId=docente-id&amp;studentId=hijo-id
+
+POST /api/chat/read
+{
+  "partnerId": "docente-id",
+  "studentId": "hijo-id",
+  "messageIds": ["mensaje-1", "mensaje-2"]
+}
+
+Respuesta: { "unreadCount": 1 }</pre>
+  <p>La respuesta anterior no tiene por qué ser cero: puede haber llegado un mensaje posterior a la carga. El backend actualiza solo los identificadores enviados que coinciden con el emisor, el destinatario autenticado, el contexto del alumno y <code>readAt: null</code>.</p>
+  <div class="card"><h3>Ejemplo de una carrera que ya no limpia mensajes nuevos</h3><ol><li>El GET devuelve mensajes 1 y 2.</li><li>Llega el mensaje 3 antes del POST de lectura.</li><li>La interfaz envía únicamente 1 y 2.</li><li>El 3 queda pendiente: <code>unreadCount = 1</code> hasta cargarlo y procesarlo.</li></ol></div>
+  <h3>Conversaciones de familias</h3>
+  <p>La clave de agrupación no es solo la persona: incluye el alumno contextual. Un tutor puede tener dos hijos y mantener dos hilos con el mismo docente. El estado local ya no pone a cero todos los contactos con ese interlocutor. El envío y consulta tutor–administrador conservan ahora el mismo contexto que tutor–profesor.</p>
+  <table class="compact"><thead><tr><th style="width:48%">Ruta o campo</th><th>Función</th></tr></thead><tbody><tr><td><code>GET /api/chat/contacts</code></td><td>Contactos, contador por hilo y última actividad.</td></tr><tr><td><code>GET /api/chat/unread-count</code></td><td>Total pendiente del usuario, empleado por los avisos del layout.</td></tr><tr><td><code>ChatMessage.readAt</code></td><td>Persistencia de lectura por mensaje y destinatario.</td></tr><tr><td><code>messageIds</code></td><td>Lista obligatoria; como máximo 1.000 identificadores por petición de lectura.</td></tr></tbody></table>
+  <p class="small muted">No se ha hecho una migración masiva de mensajes antiguos sin contexto de alumno ni un rediseño general de los permisos de conversación. Los avisos globales conservan su actualización por polling.</p>
+</div></article>
+
+<article class="page" id="alta-conceptos"><div class="page-content">
+  <span class="brand">MATRÍCULAS Y PAGOS · CONCEPTOS</span><p class="eyebrow">12 · Crear deuda no es cobrar dinero</p><h2>Del alumno a sus cuotas</h2>
+  <div class="flow"><div><b>Ficha</b>Usuario alumno inicialmente inactivo</div><span class="arrow">→</span><div><b>Dar de alta</b>Matrícula económica y activación</div><span class="arrow">→</span><div><b>Cuotas</b>Importes pendientes</div><span class="arrow">→</span><div><b>Registrar cobro</b>Acción posterior desde pagos</div></div>
+  <div class="card"><h3>Primera pantalla: ficha del alumno</h3><p><code>POST /api/students</code> crea la identidad, perfil y, cuando procede, el vínculo con un tutor. Esta operación no equivale por sí sola a crear una matrícula económica ni a registrar un pago recibido.</p></div>
+  <div class="card"><h3>Segunda acción: formalizar el alta</h3><p>El modal envía fecha, modalidad, periodicidad e importe. La ruta <code>POST /api/enrollments/enroll</code> crea la matrícula y genera los registros que correspondan. Nacen con <code>status: PENDING</code> e <code>isPaid: false</code>.</p></div>
+  <h3>Cómo interpretar el importe</h3>
+  <table><thead><tr><th style="width:31%">Tarifa de ejemplo</th><th>Interpretación real</th></tr></thead><tbody><tr><td>Mensual: 65 €</td><td>65 € por cada mes ordinario generado, salvo reglas específicas como septiembre.</td></tr><tr><td>Trimestral: 60 €</td><td>60 € por cada mes del trimestre generado. Octubre, noviembre y diciembre completos suman 180 €.</td></tr><tr><td>Precio del libro</td><td>Concepto separado, si está activado y tiene un precio positivo.</td></tr></tbody></table>
+  <p><strong>60 y 65 no son precios obligatorios.</strong> Son ejemplos de tarifas editables. El campo interno <code>monthlyFee</code> continúa representando el importe mensual también con periodicidad <code>QUARTERLY</code>; no se divide entre tres ni añade por sí solo un descuento.</p>
+  <div class="card warn"><h3>Sin cobro bancario automático</h3><p>Estas rutas registran obligaciones y la confirmación administrativa del cobro. No se ha añadido una pasarela, domiciliación, cargo en tarjeta, pago parcial ni un cobro inicial dentro del alta.</p></div>
+</div></article>
+
+<article class="page" id="alta-transaccion"><div class="page-content">
+  <span class="brand">MATRÍCULAS · ALTA TRANSACCIONAL</span><p class="eyebrow">13 · No dejar una activación a medias</p><h2>Todo el alta o nada</h2>
+  <p>Antes, crear matrícula, activar al alumno y generar cuotas eran operaciones separadas. Un error podía dejar un alumno activo sin calendario completo, y el reintento normal se rechazaba por estar ya activo.</p>
+  <pre>POST /api/enrollments/enroll
+{
+  "studentId": "alumno-id",
+  "monthlyFee": 60,
+  "billingPeriod": "QUARTERLY",
+  "modality": "PRESENCIAL",
+  "startDate": "2026-10-01",
+  "hasBook": true,
+  "bookPrice": 35
+}</pre>
+  <ol class="steps"><li><strong>Validación previa.</strong> Identificador, importe finito positivo, fecha válida, periodicidad permitida, modalidad y precio del libro.</li><li><strong>Preparar contraseña.</strong> Se genera la temporal y su hash antes de entrar en la transacción.</li><li><strong>Consultar y activar.</strong> Dentro de <code>prisma.$transaction</code> se verifica el alumno y se hace una actualización condicional para activar solo si aún no está activo.</li><li><strong>Crear matrícula y actualizar cuenta.</strong> Se guardan tarifa, modalidad, periodicidad y credenciales cifradas.</li><li><strong>Generar cuotas con la misma transacción.</strong> <code>ensureStudentPaymentScheduleById</code> acepta el cliente transaccional.</li><li><strong>Confirmar y notificar.</strong> El SMTP se intenta después del commit: bienvenida en primera matrícula, reactivación en las siguientes.</li></ol>
+  <div class="grid"><div class="card"><h3>Si falla una cuota</h3><p>La transacción revierte también activación y matrícula. La prueba HTTP inyecta ese fallo y verifica que no se envía la notificación.</p></div><div class="card warn"><h3>Si falla el correo</h3><p>El alta confirmada se conserva. El fallo se registra; no se deshacen matrícula ni pagos. La entrega del email requiere comprobación SMTP separada.</p></div></div>
+  <p class="small muted">Una repetición del alta de un alumno ya activo se rechaza; la activación condicional también evita que dos procesos activen la misma cuenta como si ambos fueran el primero. Las pruebas reales de concurrencia en PostgreSQL siguen pendientes.</p>
+</div></article>
+
+<article class="page" id="calendario"><div class="page-content">
+  <span class="brand">PAGOS · CALENDARIO E IMPORTES</span><p class="eyebrow">14 · Lo que genera el servicio</p><h2>Meses, septiembre y fechas</h2>
+  <table class="compact"><thead><tr><th style="width:31%">Regla</th><th>Funcionamiento actual</th></tr></thead><tbody><tr><td>Mensual</td><td>Recorre desde el mes inicial hasta el fin de matrícula o el mes actual. Un inicio futuro contempla al menos su mes inicial.</td></tr><tr><td>Trimestres</td><td>Octubre–diciembre, enero–marzo y abril–junio. Se crean cuotas mensuales separadas, no un cargo único por trimestre.</td></tr><tr><td>Septiembre trimestral</td><td>Se trata por separado y el generador también prepara octubre–diciembre.</td></tr><tr><td>Julio y agosto</td><td>El generador ya no crea nuevas cuotas ordinarias de esos meses. No borra automáticamente registros que ya existan ni prohíbe un concepto extraordinario explícito.</td></tr><tr><td>Curso económico</td><td>Se calcula a partir de septiembre. No se ha cambiado al valor fijo de notas.</td></tr></tbody></table>
+  <div class="card"><h3>La regla del 15 de septiembre</h3><p>La cuota se reduce al 50 % si el mes generado es septiembre del año de inicio, el alta empezó en septiembre, el día de inicio es 15 o posterior y la modalidad es exactamente <code>PRESENCIAL</code>.</p><p><strong>Ejemplos:</strong> 65 € → 32,50 €; 60 € → 30 €. Antes del día 15, en otro mes, online o híbrido no se aplica esta reducción. No es un prorrateo diario general.</p></div>
+  <h3>Vencimiento e impago visual</h3>
+  <ul><li>El vencimiento usa el día del alta a las 12:00 locales.</li><li>Si ese día no existe, se ajusta al último del mes: por ejemplo, un día 31 en febrero.</li><li>Con fecha válida, se considera vencido al superar el vencimiento más diez días.</li><li>Pagados y exentos no se clasifican como impago. <code>OVERDUE</code> es un estado visual calculado; no es un nuevo valor persistido del enum de pagos.</li></ul>
+  <div class="card warn"><h3>Incorporación a mitad de trimestre: sin cambios</h3><p>Se ha respetado la exclusión pedida. El helper conserva los meses restantes del trimestre inicial, pero el recorrido posterior puede omitir enero si empezó en noviembre y avanza en saltos de tres meses. Completar bloques también puede incluir meses posteriores a una fecha de fin intermedia. No se confirma ese calendario completo; requiere revisión aparte.</p></div>
+</div></article>
+
+<article class="page" id="tarifas"><div class="page-content">
+  <span class="brand">PAGOS · SINCRONIZACIÓN SEGURA</span><p class="eyebrow">15 · Cambiar tarifa sin cambiar el libro</p><h2>Qué se recalcula y qué no</h2>
+  <p>La edición de la tarifa desde alumnos actualizaba de forma amplia los importes de pagos no cobrados. Eso podía pisar libros, conceptos personalizados o cuotas exentas. Ahora actualiza la tarifa de matrícula y delega la sincronización en el generador, que conoce esas excepciones.</p>
+  <table><thead><tr><th style="width:36%">Registro existente</th><th>Tratamiento durante la sincronización</th></tr></thead><tbody><tr><td>Cuota ordinaria no pagada</td><td>El importe puede cambiar si corresponde al mes actual o a uno futuro. Su vencimiento puede sincronizarse.</td></tr><tr><td>Cuota de un mes pasado</td><td>No se reescribe su importe solo por cambiar ahora la tarifa.</td></tr><tr><td><code>isPaid = true</code></td><td>No se recalcula el importe ni el vencimiento por esta sincronización ordinaria.</td></tr><tr><td><code>isCustom = true</code></td><td>Se conserva el importe personalizado.</td></tr><tr><td><code>isExempt = true</code></td><td>Se conserva la exención y no se transforma en deuda ordinaria nueva.</td></tr><tr><td>Eliminado expresamente</td><td>El registro de eliminación evita que el generador lo recree automáticamente.</td></tr></tbody></table>
+  <div class="card"><h3>Ejemplo de modificación de tarifa</h3><p>Hay un mes pagado por 17 €, un mes personalizado de 21 €, uno exento de 0 € y una cuota ordinaria futura de 65 €. Al cambiar la tarifa a 70 €, las pruebas conservan <strong>17, 21 y 0</strong>; solo la última pasa a <strong>70</strong>.</p></div>
+  <h3>Libro y conceptos extraordinarios</h3>
+  <p>El alta puede crear «Material / Libro» como concepto separado y personalizado. La pantalla conserva herramientas para añadir conceptos, editar importes puntuales, eximir y eliminar. Esta intervención no ha rediseñado su facturación ni convertido un libro en cuota mensual.</p>
+  <div class="card warn"><h3>Consultar pagos puede escribir datos</h3><p>Las rutas de consulta financiera ejecutan sincronización para generar o completar cuotas. Abrir la pantalla de pagos no equivale necesariamente a una operación de solo lectura sobre la base de datos. Por eso las pruebas reales se harán en un destino separado.</p></div>
+  <p class="source">La idempotencia secuencial se ha probado en memoria: repetir la sincronización no duplica esas cuotas de prueba. La concurrencia real y las matrículas históricas requieren PostgreSQL.</p>
+</div></article>
+
+<article class="page" id="cobros"><div class="page-content">
+  <span class="brand">PAGOS · COBROS Y HERRAMIENTAS</span><p class="eyebrow">16 · Estados y operaciones administrativas</p><h2>Registrar el dinero recibido</h2>
+  <pre>PUT /api/payments/alumno-id
+{ "paymentId": "cuota-id", "isPaid": true }</pre>
+  <table class="compact"><thead><tr><th style="width:32%">Acción</th><th>Actualización</th></tr></thead><tbody><tr><td>Marcar pagado</td><td><code>isPaid=true</code>, <code>status=PAID</code>, fecha de servidor <code>paidAt</code> y usuario en <code>markedById</code>.</td></tr><tr><td>Desmarcar</td><td><code>isPaid=false</code>, <code>status=PENDING</code> y <code>paidAt=null</code>. La deuda puede volver a verse vencida si supera su fecha.</td></tr><tr><td>Cuota de otro alumno</td><td>404, sin modificarla: se comprueba la pertenencia al alumno de la URL.</td></tr><tr><td>Cuota exenta</td><td>400: no se registra como cobrada mientras esté exenta.</td></tr></tbody></table>
+  <div class="card"><h3>«Marcar todo pagado» no significa solo meses vencidos</h3><p><code>PUT /api/payments/:studentId/pay-all</code> marca los registros pendientes no exentos del alumno. Con curso seleccionado, filtra por ese curso. Incluye cuotas futuras que ya estén generadas; no se ha añadido una selección por rango ni un pago parcial.</p></div>
+  <h3>Funciones conservadas del documento de referencia</h3>
+  <table class="compact"><thead><tr><th style="width:37%">Herramienta</th><th>Implementación existente / alcance de esta entrega</th></tr></thead><tbody><tr><td>Editar importe puntual</td><td><code>PUT /api/payments/item/:id</code>; deja el concepto como personalizado.</td></tr><tr><td>Eliminar completamente</td><td><code>DELETE /api/payments/item/:id</code>; conserva memoria de la eliminación para no regenerar.</td></tr><tr><td>Eximir</td><td>Marca el registro como exento; no cuenta como pendiente ordinario.</td></tr><tr><td>Añadir concepto</td><td><code>POST /api/payments/:studentId/extra</code>; herramienta administrativa existente.</td></tr><tr><td>Facturas, bajas y selector de curso</td><td>Se mantienen las pantallas y generación de recibos existentes. Su comprobación integral no forma parte de las 55 aserciones nuevas.</td></tr></tbody></table>
+  <p class="small"><strong>Permisos:</strong> operaciones especiales y «todo pagado» requieren ADMIN. La API histórica de marcado individual y algunas consultas admiten TEACHER mediante <code>requireTeacher</code>. No se ha cambiado esa política ni debe deducirse un permiso de la apariencia de la interfaz.</p>
+</div></article>
+
+<article class="page" id="migracion"><div class="page-content">
+  <span class="brand">ENTREGA TÉCNICA · DATOS</span><p class="eyebrow">17 · Antes de usar el backend actualizado</p><h2>Migración aditiva pendiente</h2>
+  <p>El código necesita dos columnas nuevas. Sin ellas, el cliente actualizado puede fallar al consultar los modelos correspondientes. Añadirlas al esquema de Prisma no las crea por sí solo en una base ya existente. Se validó el cambio en PostgreSQL 15 aislado; aplicarlo al entorno real requiere respaldo, destino confirmado y ventana de despliegue.</p>
+  <pre>ALTER TABLE "TermGrade"
+ADD COLUMN IF NOT EXISTS "gradeOverrides"
+JSONB NOT NULL DEFAULT '{}';
+
+ALTER TABLE "TaskDelivery"
+ADD COLUMN IF NOT EXISTS "gradeMode" TEXT;</pre>
+  <table class="compact"><tbody><tr><td style="width:37%"><code>gradeOverrides</code></td><td>Objeto JSON de ajustes por campo. Por defecto vacío: no fuerza todas las notas antiguas a modo manual.</td></tr><tr><td><code>gradeMode</code></td><td>Texto AUTO/MANUAL validado en la ruta. El nulo identifica datos históricos tratados de forma compatible.</td></tr><tr><td>SQL repetible</td><td><code>IF NOT EXISTS</code> evita volver a crear una columna existente. No borra tablas ni realiza un backfill masivo.</td></tr></tbody></table>
+  <h3>Secuencia que se ejecutó en aislamiento</h3>
+  <ol class="steps"><li>Crear PostgreSQL temporal separado, sin volumen ni conexión a la base de HitSchool.</li><li>Sincronizar el esquema actual en la base vacía, sin <code>--accept-data-loss</code>.</li><li>Ejecutar dos veces el SQL aditivo en el esquema nuevo.</li><li>Probar también las columnas sobre tablas previas con filas históricas; verificar valores conservados y defaults.</li><li>Ejecutar las rutas con Prisma real y notificaciones SMTP sustituidas por funciones locales.</li></ol>
+  <pre>Desde backend/, con el destino verificado:
+npx prisma db execute --file prisma/add-grade-overrides.sql \
+  --schema prisma/schema.prisma
+npx prisma generate</pre>
+  <div class="card warn"><h3>No usar el arranque de desarrollo como migración segura</h3><p>El script <code>backend dev</code> ejecuta <code>schema:sync</code>, que contiene <code>prisma db push --accept-data-loss</code>. No debe utilizarse para actualizar a ciegas una base con datos. En el PostgreSQL Docker local, las columnas ya existían, por lo que no se ejecutó el SQL aditivo; sí se añadieron solo fixtures rotulados. No se ejecutaron semillas generales ni resets.</p></div>
+</div></article>
+
+<article class="page" id="pruebas"><div class="page-content">
+  <span class="brand">VERIFICACIÓN · EVIDENCIA DISPONIBLE</span><p class="eyebrow">19 · Qué se ha comprobado</p><h2>Pruebas simuladas y reales</h2>
+  <table class="compact"><thead><tr><th style="width:31%">Prueba</th><th>Evidencia y límite</th></tr></thead><tbody><tr><td>Notas HTTP simuladas</td><td>ADMIN/TEACHER × presencial/online; PUT/GET, competencias, cero, ajustes, reset, feedback y permisos. Router y JWT reales, Prisma simulado.</td></tr><tr><td>Chat HTTP simulado</td><td>Alumno/tutor frente a profesor/admin en ambos sentidos, hijos y llegada concurrente.</td></tr><tr><td>Pagos: 55 aserciones</td><td>Servicio y rutas con datos simulados: tarifas, septiembre, verano, cobros, cuotas ajenas/exentas y reversión del alta.</td></tr><tr><td>PostgreSQL 15 aislado</td><td>Persistencia de TermGrade, TaskDelivery, ChatMessage, PaymentStatus, altas mensuales/trimestrales. Cinco grupos de integración pasan; SMTP sustituido.</td></tr><tr><td>SQL sobre legado</td><td>Columnas nuevas repetibles y filas históricas conservadas en una segunda base desechable de esquema previo.</td></tr><tr><td>Navegador: 16 escenarios</td><td>Chromium real; 1366×900 y 390×844; notas/tareas y chat. API interceptada.</td></tr><tr><td>Dos boletines PDF</td><td>Se genera presencial y online, comprobando etiqueta y valores manuales, incluido cero.</td></tr><tr><td>Validación estática</td><td>TypeScript backend, build frontend, validación del esquema y diff de espacios: pasan.</td></tr></tbody></table>
+  <h3>Comandos reproducibles desde la raíz</h3>
+  <pre>npx --prefix backend ts-node --project backend/tsconfig.json backend/test-academic-flows.ts
+npx --prefix backend ts-node --project backend/tsconfig.json backend/test-chat-flows.ts
+npx --prefix backend ts-node --project backend/tsconfig.json backend/test-payment-rules.ts
+npx --prefix backend tsc --project backend/tsconfig.json --noEmit
+npm --prefix frontend run build</pre>
+  <p class="small">Para navegador, instalar una vez <code>npx --prefix frontend playwright install chromium</code>; iniciar el frontend en una terminal y las pruebas en otra:</p>
+  <pre>npm --prefix frontend run dev -- --host 127.0.0.1 --port 4173 --strictPort
+npm --prefix frontend run test:flows</pre>
+  <p class="small">Capturas y PDF de prueba: directorio temporal del sistema <code>hitschool-flow-checks</code>. El log <code>Simulated payment failure</code> es intencionado: prueba la reversión del alta. El <code>npm test</code> original del backend es un placeholder; no es la suite usada aquí.</p>
+  <div class="card warn"><h3>La frontera de esta evidencia</h3><p>Las pruebas PostgreSQL de integración usaron una base temporal sin volumen y SMTP simulado. Además se cargaron fixtures rotulados en la base Docker local para la comprobación manual web. Esto no demuestra el estado del servidor remoto ni la migración en producción. No se han probado cargas concurrentes, reinicio durante una operación ni todos los datos históricos.</p></div>
+</div></article>
+
+<article class="page" id="datos-demo"><div class="page-content">
+  <span class="brand">GUÍA DE VALIDACIÓN · DATOS LOCALES</span><p class="eyebrow">20 · Escenario ya preparado</p><h2>Qué buscar en la web</h2>
+  <div class="card warn"><h3>Los accesos precargados no se tocaron</h3><p>El seed no actualiza usuarios, roles, hashes ni contraseñas. Usa las credenciales ya publicadas en la guía de despliegue. El correo <code>marpargut@hitschool.com</code> corresponde a dos usuarios activos diferentes, uno <code>STUDENT</code> y otro <code>PARENT</code>.</p></div>
+  <table class="compact" style="font-size:8.7pt;margin:7px 0"><thead><tr><th style="width:37%">Pantalla</th><th>Escenario y resultado inicial esperado</th></tr></thead><tbody>
+    <tr><td>Mis clases → Calificaciones</td><td><code>PRUEBA CAMBIOS 2026-11 · Clase presencial</code>; T1, 2025-2026. Midterm 8, Final 9, tareas manual 7,25, global automática 8,13.</td></tr>
+    <tr><td>Expediente → Historial</td><td>Tarea MANUAL 7,5 con paso 8,5; tarea AUTO 6. Al reiniciar la primera, toma la nota del paso.</td></tr>
+    <tr><td>Mensajes</td><td>Los cuatro roles tienen al menos un mensaje entrante demo sin leer. El tutor recibe mensajes asociados a su hijo.</td></tr>
+    <tr><td>Gestión de matrículas</td><td><code>2026-2027</code>: octubre–diciembre, mensual 65 €. <code>2027-2028</code>: octubre–diciembre, trimestral 60 €/mes.</td></tr>
+    <tr><td>Pagos</td><td>Seis cuotas demo pendientes: tres a 65 € y tres a 60 €. Marcar y desmarcar una para comprobar ambos estados.</td></tr>
+  </tbody></table>
+  <h3>Comprobaciones sugeridas</h3>
+  <ol class="steps"><li>Entrar como <code>profesor@hitschool.com</code> y cambiar una nota, guardarla y volver a abrirla. Probar también el retorno a automática.</li><li>Entrar como admin para comprobar permisos de edición y el selector de periodicidad.</li><li>Entrar como alumno y como tutor con el rol correspondiente para comprobar lectura y chat pendientes.</li><li>En matrículas, seleccionar cada curso escolar y verificar los importes mensuales y trimestrales.</li><li>En pagos, marcar y desmarcar; la cuota y su fecha deben quedar registradas en el entorno local.</li></ol>
+  <h3>Carga y limpieza local</h3>
+  <pre>Desde la raíz, PowerShell:
+$databaseUrl = docker exec hit_school_backend printenv DATABASE_URL
+$databaseUrl = $databaseUrl -replace '@db:5432/', '@127.0.0.1:5432/'
+$env:DATABASE_URL = $databaseUrl
+npx --prefix backend ts-node --project backend/tsconfig.json backend/seed-change-verification-data.ts
+
+Para quitar solo los registros marcados, sin borrar cuentas:
+npx --prefix backend ts-node --project backend/tsconfig.json backend/cleanup-change-verification-data.ts</pre>
+  <p class="small muted">Los scripts solo admiten <code>127.0.0.1:5432/hitschool</code>. No los apuntes al servidor. El seed es idempotente y etiqueta sus filas; cleanup borra solo la clase, sus pagos y mensajes rotulados. El backend Docker local arranca con <code>db push --accept-data-loss</code>: evita reiniciarlo como forma de migrar bases con datos.</p>
+</div></article>
+
+<article class="page" id="limites"><div class="page-content">
+  <span class="brand">LÍMITES Y SIGUIENTE VALIDACIÓN</span><p class="eyebrow">21 · Sin confirmaciones por suposición</p><h2>Qué no debe darse por hecho</h2>
+  <div class="card warn"><h3>Bloqueos y exclusiones conocidos</h3><ul><li><strong>Servidor:</strong> la persistencia se probó en PostgreSQL temporal y la interfaz usa fixtures en Docker local. No se ha tocado la base del servidor remoto.</li><li><strong>Mitad de trimestre:</strong> no se ha modificado; el salto posterior de calendario puede omitir meses. No se presenta como resuelto.</li><li><strong>Históricos y reactivaciones:</strong> libros de cursos anteriores, exenciones y posibles carreras de generación necesitan una revisión específica con datos representativos.</li><li><strong>Mensajes antiguos sin alumno:</strong> no se han reclasificado masivamente ni se garantiza que todos los historiales legados encajen en los nuevos contextos.</li><li><strong>Permisos financieros:</strong> las rutas que históricamente admiten TEACHER no se han convertido silenciosamente en ADMIN-only.</li></ul></div>
+  <h3>Advertencias ajenas a las correcciones funcionales</h3>
+  <table class="compact"><thead><tr><th style="width:28%">Comprobación</th><th>Resultado que debe conservarse en el informe</th></tr></thead><tbody><tr><td>Lint global</td><td>Tres errores de <code>rules-of-hooks</code> en <code>MaterialsManagement.tsx</code>, pantalla no modificada; también existen advertencias en varios archivos. No está limpio.</td></tr><tr><td>Build</td><td>Pasa, con aviso de tamaño de bundle superior a 500 kB. No se ha introducido una reorganización del empaquetado.</td></tr><tr><td>Auditoría npm</td><td>Avisos en <code>dompurify</code> (crítico), <code>source-map-js</code>, <code>vite</code> y <code>xlsx</code> (altos). No se han aplicado actualizaciones automáticas fuera del alcance.</td></tr></tbody></table>
+  <h3>Antes de aplicar al servidor</h3>
+  <ol class="steps"><li>Preparar y verificar una copia de seguridad.</li><li>Confirmar explícitamente <code>DATABASE_URL</code> y el destino.</li><li>Aplicar solo el SQL aditivo en ventana de despliegue controlada; no usar <code>schema:sync</code> con <code>--accept-data-loss</code>.</li><li>Verificar columnas, prueba de lectura y escritura acotada, logs y restauración prevista.</li><li>Informar por separado del resultado en el destino real.</li></ol>
+  <p class="small muted">Se ha mantenido la separación entre «cambio implementado», «prueba PostgreSQL desechable pasada» y «funcionamiento verificado en el servidor real». Solo las dos primeras están acreditadas.</p>
+</div></article>
+
+<article class="page" id="mapa-codigo"><div class="page-content">
+  <span class="brand">REFERENCIA TÉCNICA · MAPA DE CAMBIOS</span><p class="eyebrow">22 · Dónde está cada responsabilidad</p><h2>Archivos y puntos de entrada</h2>
+  <table class="compact tiny" style="margin:5px 0;font-size:7.8pt"><thead><tr><th style="width:52%">Archivo o grupo</th><th>Responsabilidad en estos cambios</th></tr></thead><tbody>
+    <tr><td><code>backend/src/routes/termGrades.ts</code></td><td>Resolución común, ajustes, competencias y medias; <code>createTermGradesRouter</code>.</td></tr>
+    <tr><td><code>backend/src/routes/assignments.ts</code></td><td>Nota individual, feedback sin borrado y acceso por clase; factoría de pruebas.</td></tr>
+    <tr><td><code>backend/src/routes/structuredTasks.ts</code></td><td>Sincronización global; <code>createTaskDeliveryGradingHandler</code>, pasos y modo de tarea.</td></tr>
+    <tr><td><code>backend/src/routes/chat.ts</code></td><td>Contexto tutor/admin, lectura por IDs y contador restante; <code>createChatRouter</code>.</td></tr>
+    <tr><td><code>backend/src/routes/enrollments.ts</code></td><td>Alta transaccional y SMTP posterior; <code>createEnrollmentsRouter</code>.</td></tr>
+    <tr><td><code>backend/src/routes/students.ts</code></td><td>La edición de tarifa deja de sobrescribir cargos especiales.</td></tr>
+    <tr><td><code>backend/src/routes/payments.ts</code></td><td>Identidad cuota/alumno y protección de exentos; <code>createPaymentsRouter</code>.</td></tr>
+    <tr><td><code>backend/src/services/payments.ts</code></td><td>Cliente transaccional y exclusión de nuevas cuotas ordinarias de julio/agosto.</td></tr>
+    <tr><td><code>backend/prisma/schema.prisma</code><br><code>backend/prisma/add-grade-overrides.sql</code></td><td>Campos nuevos; SQL probado en PostgreSQL aislado. El esquema Docker local ya incluye columnas; servidor remoto pendiente.</td></tr>
+    <tr><td><code>frontend/src/components/ExpedienteAcademico.tsx</code></td><td>Editor, ajustes, reset, errores, notas de exámenes y apertura de evaluación global de tareas.</td></tr>
+    <tr><td><code>frontend/src/components/TaskDeliveryReviewModal.tsx</code></td><td>Pasos, modo global, reset y controles adaptados a móvil.</td></tr>
+    <tr><td><code>frontend/src/components/GradesTab.tsx</code></td><td>Etiqueta y contrato de guardado de pasos/modo conservados en esta superficie.</td></tr>
+    <tr><td><code>frontend/src/components/StudentGradesTab.tsx</code><br><code>frontend/src/pages/StudentGrades.tsx</code></td><td>Etiqueta Midterm en lectura de alumno/familia.</td></tr>
+    <tr><td><code>frontend/src/pages/Chat.tsx</code></td><td>Negrita, carga visible, IDs, protección frente a respuestas tardías y contexto de hijo.</td></tr>
+    <tr><td><code>frontend/src/utils/reportCard.ts</code></td><td>Midterm y texto neutral de evaluación continua en el boletín.</td></tr>
+    <tr><td><code>backend/test-academic-flows.ts</code><br><code>backend/test-chat-flows.ts</code><br><code>backend/test-payment-rules.ts</code><br><code>backend/test-postgres-integration.ts</code></td><td>Pruebas HTTP/servicios simuladas y una integración adicional con PostgreSQL efímero real.</td></tr>
+    <tr><td><code>backend/seed-change-verification-data.ts</code><br><code>backend/cleanup-change-verification-data.ts</code></td><td>Seed idempotente y limpieza segura de fixtures de la base Docker local; no toca accesos.</td></tr>
+    <tr><td><code>frontend/test-flows.mjs</code><br><code>frontend/package.json</code> y lockfile</td><td>Playwright, comando reproducible, capturas y dos PDF.</td></tr>
+    <tr><td><code>DEPLOYMENT_WALKTHROUGH.md</code></td><td>Migración, reproducción de pruebas, advertencias y límites.</td></tr>
+  </tbody></table>
+  <p class="small"><strong>Terminología:</strong> automática = cálculo vigente; manual = ajuste explícito; efectiva = valor que prevalece; pendiente = obligación no cobrada; exenta = obligación dispensada; transacción = grupo de escrituras que confirma o revierte conjuntamente.</p>
+</div></article>
+
+<script>
+  const pages = Array.from(document.querySelectorAll('.page'));
+  pages.forEach((page, index) => {
+    const footer = document.createElement('footer');
+    footer.className = 'footer';
+    footer.innerHTML = '<span>HitSchool Academy · Flujos y cambios · 13/11/2026</span><span>' + (index + 1) + ' / ' + pages.length + '</span>';
+    page.appendChild(footer);
+  });
+</script>
+</body>
+</html>

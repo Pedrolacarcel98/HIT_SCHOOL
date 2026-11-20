@@ -2,8 +2,8 @@ import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 
+export const createChatRouter = (prisma: PrismaClient) => {
 const router = Router();
-const prisma = new PrismaClient();
 
 const addUnreadCounts = async (contacts: any[], userId: string) => {
   const relevantMessages = await prisma.chatMessage.findMany({
@@ -226,11 +226,12 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       select: { id: true, role: true }
     });
 
-    const isParentTeacherChat = (req.user.role === 'PARENT' && partnerUser?.role === 'TEACHER') ||
+    const isParentTeacherChat = (req.user.role === 'PARENT' && (partnerUser?.role === 'TEACHER' || partnerUser?.role === 'ADMIN')) ||
       ((req.user.role === 'TEACHER' || req.user.role === 'ADMIN') && partnerUser?.role === 'PARENT');
 
     const isTeacherOrAdmin = req.user.role === 'TEACHER' || req.user.role === 'ADMIN';
-    const conversationStudentId = reqStudentId || (partnerUser?.role === 'STUDENT' ? partnerId : '');
+    const conversationStudentId = req.user.role === 'STUDENT' ? req.user.id :
+      partnerUser?.role === 'STUDENT' ? partnerId : reqStudentId;
     const whereCondition: any = isTeacherOrAdmin && conversationStudentId
       ? {
           studentId: conversationStudentId,
@@ -246,8 +247,8 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
           ]
         };
 
-    if (!isTeacherOrAdmin && isParentTeacherChat && reqStudentId) {
-      whereCondition.studentId = reqStudentId;
+    if (!isTeacherOrAdmin && conversationStudentId && (isParentTeacherChat || req.user.role === 'STUDENT')) {
+      whereCondition.studentId = conversationStudentId;
     }
 
     const messages = await prisma.chatMessage.findMany({
@@ -293,6 +294,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
         recipientEmail: message.recipient.email,
         studentId: message.studentId,
         content: message.content,
+        readAt: message.readAt,
         createdAt: message.createdAt,
         updatedAt: message.updatedAt.getTime() !== message.createdAt.getTime() ? message.updatedAt : undefined
       };
@@ -309,18 +311,23 @@ router.post('/read', authenticateToken, async (req: AuthRequest, res: Response) 
   if (!req.user || !partnerId || !(await canChat(req.user.id, req.user.role, partnerId))) {
     return res.status(403).json({ error: 'No tienes acceso a esta conversación.' });
   }
+  const messageIds: unknown = req.body?.messageIds;
+  if (!Array.isArray(messageIds) || messageIds.length > 1000 || messageIds.some(id => typeof id !== 'string')) {
+    return res.status(400).json({ error: 'Debes indicar los mensajes mostrados de la conversacion.' });
+  }
 
-  await prisma.chatMessage.updateMany({
-    where: {
+  const conversation = {
       senderId: partnerId,
       recipientId: req.user.id,
       studentId,
       readAt: null
-    },
+  };
+  await prisma.chatMessage.updateMany({
+    where: { ...conversation, id: { in: messageIds as string[] } },
     data: { readAt: new Date() }
   });
 
-  return res.json({ unreadCount: 0 });
+  return res.json({ unreadCount: await prisma.chatMessage.count({ where: conversation }) });
 });
 
 router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
@@ -340,7 +347,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 
   let targetStudentId: string | null = null;
 
-  if (req.user.role === 'PARENT' && recipientUser?.role === 'TEACHER') {
+  if (req.user.role === 'PARENT' && (recipientUser?.role === 'TEACHER' || recipientUser?.role === 'ADMIN')) {
     targetStudentId = reqStudentId || null;
   } else if ((req.user.role === 'TEACHER' || req.user.role === 'ADMIN') && recipientUser?.role === 'PARENT') {
     targetStudentId = reqStudentId || null;
@@ -431,4 +438,7 @@ router.delete('/:id', authenticateToken, async (req: AuthRequest, res: Response)
   res.json({ message: 'Mensaje eliminado.' });
 });
 
-export default router;
+return router;
+};
+
+export default createChatRouter(new PrismaClient());

@@ -1,0 +1,5 @@
+ALTER TABLE "TermGrade"
+ADD COLUMN IF NOT EXISTS "gradeOverrides" JSONB NOT NULL DEFAULT '{}';
+
+ALTER TABLE "TaskDelivery"
+ADD COLUMN IF NOT EXISTS "gradeMode" TEXT;

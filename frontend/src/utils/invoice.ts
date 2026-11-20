@@ -5,6 +5,11 @@ const ACADEMY_OWNER = 'Laura Gómez Ruiz';
 const ACADEMY_DNI = '30236969L';
 const ACADEMY_ADDRESS = 'Calle Concepcion Soto 36 Bajo, 41219 Las Pajanosas';
 
+export interface InvoiceItem {
+  concept: string;
+  amount: number;
+}
+
 export interface InvoiceData {
   invoiceNumber?: string;
   issueDate?: string;
@@ -16,6 +21,8 @@ export interface InvoiceData {
   year: number;
   monthLabel: string; // ej: "Julio 2026"
   amount: number; // ej: 35
+  concept?: string;
+  items?: InvoiceItem[];
   paidAt?: string | Date | null;
 }
 
@@ -130,25 +137,41 @@ export const generateInvoicePDF = (data: InvoiceData) => {
   doc.text('CONCEPTO / DESCRIPCIÓN', 20, tableTop + 6.5);
   doc.text('IMPORTE', 190, tableTop + 6.5, { align: 'right' });
 
-  // Fila única con el concepto del mes e importe
-  doc.setFillColor(255, 255, 255);
-  doc.rect(15, tableTop + 10, 180, 16, 'F');
-  doc.setDrawColor(230, 230, 230);
-  doc.line(15, tableTop + 26, 195, tableTop + 26);
+  // Filas con los conceptos del mes e importes
+  const items: InvoiceItem[] = data.items && data.items.length > 0
+    ? data.items
+    : [{
+        concept: data.concept ? `${data.concept} - ${data.monthLabel}` : `Cuota Mensual - ${data.monthLabel}`,
+        amount: typeof data.amount === 'number' && !isNaN(data.amount) ? data.amount : 35
+      }];
 
-  const conceptText = `Cuota Mensual - ${data.monthLabel}`;
-  const numAmount = typeof data.amount === 'number' && !isNaN(data.amount) ? data.amount : 35;
-  const formattedAmount = `${numAmount},00 EUR`;
+  let currentRowY = tableTop + 10;
+  const rowHeight = 12;
 
-  doc.setTextColor(darkText[0], darkText[1], darkText[2]);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9.5);
-  doc.text(conceptText, 20, tableTop + 20);
-  doc.setFont('helvetica', 'bold');
-  doc.text(formattedAmount, 190, tableTop + 20, { align: 'right' });
+  items.forEach((item, index) => {
+    const isEven = index % 2 === 0;
+    doc.setFillColor(isEven ? 255 : 250, isEven ? 255 : 252, isEven ? 255 : 250);
+    doc.rect(15, currentRowY, 180, rowHeight, 'F');
+    doc.setDrawColor(230, 230, 230);
+    doc.line(15, currentRowY + rowHeight, 195, currentRowY + rowHeight);
+
+    const formattedItemAmount = `${item.amount.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR`;
+
+    doc.setTextColor(darkText[0], darkText[1], darkText[2]);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text(item.concept, 20, currentRowY + 7.5);
+    doc.setFont('helvetica', 'bold');
+    doc.text(formattedItemAmount, 190, currentRowY + 7.5, { align: 'right' });
+
+    currentRowY += rowHeight;
+  });
+
+  const totalCalculated = items.reduce((sum, item) => sum + item.amount, 0);
+  const formattedTotal = `${totalCalculated.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR`;
 
   // 6. Bloque de Resumen (Derecha)
-  const totalTop = tableTop + 35;
+  const totalTop = currentRowY + 8;
   doc.setFillColor(245, 248, 245);
   doc.roundedRect(115, totalTop, 80, 22, 2, 2, 'F');
 
@@ -156,13 +179,13 @@ export const generateInvoicePDF = (data: InvoiceData) => {
   doc.setFontSize(9);
   doc.setTextColor(darkText[0], darkText[1], darkText[2]);
   doc.text('Base Imponible:', 120, totalTop + 8);
-  doc.text(formattedAmount, 190, totalTop + 8, { align: 'right' });
+  doc.text(formattedTotal, 190, totalTop + 8, { align: 'right' });
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10.5);
   doc.text('TOTAL FACTURA:', 120, totalTop + 16);
   doc.setTextColor(greenCorporate[0], greenCorporate[1], greenCorporate[2]);
-  doc.text(formattedAmount, 190, totalTop + 16, { align: 'right' });
+  doc.text(formattedTotal, 190, totalTop + 16, { align: 'right' });
 
   // 7. Pie de Página y Texto legal de exención de IVA
   const noteTop = totalTop + 32;

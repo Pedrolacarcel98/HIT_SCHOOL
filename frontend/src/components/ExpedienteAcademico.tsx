@@ -12,6 +12,7 @@ import {
   ExternalLink,
   Eye,
   FileText,
+  RotateCcw,
   X
 } from 'lucide-react';
 import ExamReviewModal from './ExamReviewModal';
@@ -19,6 +20,8 @@ import type { ReviewQuestion } from './ExamReviewModal';
 import AttachmentViewerModal from './AttachmentViewerModal';
 import type { AttachmentData } from './AttachmentViewerModal';
 import ModalityBadge from './ModalityBadge';
+import TaskDeliveryReviewModal from './TaskDeliveryReviewModal';
+import type { TaskForReview, StepEvaluationPayload } from './TaskDeliveryReviewModal';
 
 export interface FinalEvaluationData {
   id?: string;
@@ -43,12 +46,18 @@ export interface FinalEvaluationData {
   finalSpeaking?: number | null;
   tasksAverage?: number | null;
   observations?: string | null;
+  automaticGrades?: Partial<Record<CalculatedEvaluationField, number | null>>;
+  gradeOverrides?: Partial<Record<CalculatedEvaluationField, number>>;
 }
+
+type CalculatedEvaluationField = 'middleExamGrade' | 'finalExamGrade' | 'tasksAverage' | 'overallGrade' |
+  'grammar' | 'reading' | 'writing' | 'listening' | 'speaking';
 
 export interface TermEvaluationData extends FinalEvaluationData {
   term: number;
   tasksAverage?: number | null;
-  tasks?: Array<{ taskId: string; title: string; taskGrade: number | null; isCompleted: boolean }>;
+  tasks?: Array<{ taskId: string; title: string; taskGrade: number | null; isCompleted: boolean;
+    steps?: TaskForReview['steps']; taskFeedback?: string | null; gradeMode?: 'AUTO' | 'MANUAL' }>;
 }
 
 export interface CourseData {
@@ -214,6 +223,8 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
   const [selectedTerm, setSelectedTerm] = useState(1);
   const [termEvaluation, setTermEvaluation] = useState<TermEvaluationData | null>(null);
   const [loadingEvaluation, setLoadingEvaluation] = useState(false);
+  const [evaluationError, setEvaluationError] = useState('');
+  const [evaluationLoadFailed, setEvaluationLoadFailed] = useState(false);
 
   // Modales
   const [evaluatingSubmission, setEvaluatingSubmission] = useState<{
@@ -230,6 +241,7 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
   const [isSavingGrade, setIsSavingGrade] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [viewingAttachment, setViewingAttachment] = useState<AttachmentData | null>(null);
+  const [reviewingTask, setReviewingTask] = useState<TaskForReview | null>(null);
   const [reviewingExam, setReviewingExam] = useState<{
     subId: string;
     title: string;
@@ -258,8 +270,11 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
     listening: '',
     speaking: '',
     overallGrade: '',
+    tasksAverage: '',
     observations: ''
   });
+  const [evaluationOverrides, setEvaluationOverrides] = useState<Partial<Record<CalculatedEvaluationField, number | null>>>({});
+  const [manualEvaluationFields, setManualEvaluationFields] = useState<Partial<Record<CalculatedEvaluationField, boolean>>>({});
   const [expandedExamSections, setExpandedExamSections] = useState({ middle: false, final: false });
   const [isSavingEvaluation, setIsSavingEvaluation] = useState(false);
 
@@ -280,22 +295,13 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
     [classSubmissions]
   );
 
-  // Media de tareas calculada estrictamente sobre la clase actual
-  const gradedClassSubs = useMemo(
-    () => classSubmissions.filter(s => s.grade !== null && s.grade !== undefined),
-    [classSubmissions]
-  );
-
-  const localTasksAverage = useMemo(() => {
-    if (gradedClassSubs.length === 0) return null;
-    return Number((gradedClassSubs.reduce((acc, curr) => acc + (curr.grade || 0), 0) / gradedClassSubs.length).toFixed(1));
-  }, [gradedClassSubs]);
-
   // Carga de evaluación trimestral aislada por clase
   const fetchEvaluation = async () => {
     if (!studentId) return;
     try {
       setLoadingEvaluation(true);
+      setEvaluationError('');
+      setEvaluationLoadFailed(false);
       const token = localStorage.getItem('token');
       const targetCourseId = classId || student?.enrolledCourses?.[0]?.id;
       if (!targetCourseId) {
@@ -310,11 +316,13 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
         const selectedTermData = data.terms?.[selectedTerm] || null;
         setTermEvaluation(selectedTermData);
       } else {
-        setTermEvaluation(null);
+        throw new Error('No se pudo cargar la evaluacion. Vuelve a seleccionar el trimestre para reintentar.');
       }
     } catch (err) {
       console.error('Error al obtener evaluación del alumno:', err);
       setTermEvaluation(null);
+      setEvaluationLoadFailed(true);
+      setEvaluationError(err instanceof Error ? err.message : 'No se pudo cargar la evaluacion.');
     } finally {
       setLoadingEvaluation(false);
     }
@@ -324,13 +332,15 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
     fetchEvaluation();
   }, [studentId, classId, selectedTerm]);
 
-  const effectiveTasksAverage = typeof termEvaluation?.tasksAverage === 'number'
-    ? termEvaluation.tasksAverage
-    : localTasksAverage;
+  const effectiveTasksAverage = termEvaluation?.tasksAverage ?? null;
 
   const displayedTermOverall = termEvaluation?.overallGrade;
 
   const openEvaluationModal = () => {
+    setEvaluationError('');
+    const savedOverrides = { ...termEvaluation?.gradeOverrides };
+    setEvaluationOverrides(savedOverrides);
+    setManualEvaluationFields(Object.fromEntries(Object.keys(savedOverrides).map(field => [field, true])));
     if (termEvaluation) {
       setEvaluationForm({
         middleExamGrade: termEvaluation.middleExamGrade !== null && termEvaluation.middleExamGrade !== undefined ? String(termEvaluation.middleExamGrade) : '',
@@ -351,6 +361,7 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
         listening: termEvaluation.listening !== null && termEvaluation.listening !== undefined ? String(termEvaluation.listening) : '',
         speaking: termEvaluation.speaking !== null && termEvaluation.speaking !== undefined ? String(termEvaluation.speaking) : '',
         overallGrade: termEvaluation.overallGrade !== null && termEvaluation.overallGrade !== undefined ? String(termEvaluation.overallGrade) : '',
+        tasksAverage: termEvaluation.tasksAverage !== null && termEvaluation.tasksAverage !== undefined ? String(termEvaluation.tasksAverage) : '',
         observations: termEvaluation.observations || ''
       });
     } else {
@@ -365,6 +376,7 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
         listening: '',
         speaking: '',
         overallGrade: '',
+        tasksAverage: '',
         observations: ''
       });
     }
@@ -376,10 +388,42 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
     e.preventDefault();
     const targetCourseId = classId || course?.id || student?.enrolledCourses?.[0]?.id;
     if (!targetCourseId) return;
+    for (const field of Object.keys(manualEvaluationFields) as CalculatedEvaluationField[]) {
+      if (!manualEvaluationFields[field]) continue;
+      const rawGrade = evaluationForm[field].trim().replace(',', '.');
+      const grade = Number(rawGrade);
+      if (rawGrade === '' || !Number.isFinite(grade) || grade < 0 || grade > 10) {
+        setEvaluationError(`Introduce una nota entre 0 y 10 para ${field}, o vuelve a automática.`);
+        return;
+      }
+    }
 
     try {
       setIsSavingEvaluation(true);
+      setEvaluationError('');
       const token = localStorage.getItem('token');
+      const normalizedEvaluationForm = {
+        ...evaluationForm,
+        middleExamGrade: evaluationForm.middleExamGrade.replace(',', '.'),
+        finalExamGrade: evaluationForm.finalExamGrade.replace(',', '.'),
+        middleGrammar: evaluationForm.middleGrammar.replace(',', '.'),
+        middleReading: evaluationForm.middleReading.replace(',', '.'),
+        middleWriting: evaluationForm.middleWriting.replace(',', '.'),
+        middleListening: evaluationForm.middleListening.replace(',', '.'),
+        middleSpeaking: evaluationForm.middleSpeaking.replace(',', '.'),
+        finalGrammar: evaluationForm.finalGrammar.replace(',', '.'),
+        finalReading: evaluationForm.finalReading.replace(',', '.'),
+        finalWriting: evaluationForm.finalWriting.replace(',', '.'),
+        finalListening: evaluationForm.finalListening.replace(',', '.'),
+        finalSpeaking: evaluationForm.finalSpeaking.replace(',', '.'),
+        grammar: evaluationForm.grammar.replace(',', '.'),
+        reading: evaluationForm.reading.replace(',', '.'),
+        writing: evaluationForm.writing.replace(',', '.'),
+        listening: evaluationForm.listening.replace(',', '.'),
+        speaking: evaluationForm.speaking.replace(',', '.'),
+        overallGrade: evaluationForm.overallGrade.replace(',', '.'),
+        tasksAverage: evaluationForm.tasksAverage.replace(',', '.')
+      };
       const res = await fetch(`${apiUrl}/api/term-grades/course/${targetCourseId}`, {
         method: 'PUT',
         headers: {
@@ -389,7 +433,8 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
         body: JSON.stringify({
           studentId,
           term: selectedTerm,
-          ...evaluationForm
+          ...normalizedEvaluationForm,
+          gradeOverrides: evaluationOverrides
         })
       });
       if (res.ok) {
@@ -397,12 +442,96 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
         setTermEvaluation(updated);
         setIsEvaluationModalOpen(false);
         if (onGradeSaved) onGradeSaved();
+        await fetchEvaluation();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'No se pudo guardar la evaluacion.');
       }
     } catch (err) {
       console.error('Error al guardar evaluación trimestral:', err);
+      setEvaluationError(err instanceof Error ? err.message : 'No se pudo guardar la evaluacion.');
     } finally {
       setIsSavingEvaluation(false);
     }
+  };
+
+  const getAutomaticEvaluationGrade = (field: CalculatedEvaluationField): number | null => {
+    if (field === 'middleExamGrade' || field === 'finalExamGrade') {
+      const prefix = field === 'middleExamGrade' ? 'middle' : 'final';
+      const values = ['Grammar', 'Reading', 'Writing', 'Listening', 'Speaking']
+        .map(skill => evaluationForm[`${prefix}${skill}` as keyof typeof evaluationForm])
+        .filter(value => value.trim() !== '').map(Number)
+        .filter(value => Number.isFinite(value) && value >= 0 && value <= 10);
+      return values.length ? Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2)) : null;
+    }
+    if (field === 'overallGrade') {
+      const tasks = getEffectiveEvaluationGrade('tasksAverage');
+      if (studentModality === 'ONLINE') {
+        if (evaluationOverrides.tasksAverage != null) return tasks;
+        const skills = (['grammar', 'reading', 'writing', 'listening', 'speaking'] as const)
+          .map(getEffectiveEvaluationGrade).filter((value): value is number => value !== null);
+        return skills.length ? Number((skills.reduce((sum, value) => sum + value, 0) / skills.length).toFixed(2)) : tasks;
+      }
+      const middle = getEffectiveEvaluationGrade('middleExamGrade');
+      const final = getEffectiveEvaluationGrade('finalExamGrade');
+      return middle !== null && final !== null ? Number((middle * 0.35 + final * 0.35 + (tasks ?? 0) * 0.3).toFixed(2)) : null;
+    }
+    return termEvaluation?.automaticGrades?.[field] ?? null;
+  };
+
+  const getEffectiveEvaluationGrade = (field: CalculatedEvaluationField): number | null =>
+    evaluationOverrides[field] ?? getAutomaticEvaluationGrade(field);
+
+  const renderCalculatedGrade = (field: CalculatedEvaluationField, label: string) => {
+    const manual = manualEvaluationFields[field] === true;
+    return (
+      <div key={field} style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+        <label htmlFor={`evaluation-${field}`} style={{ minHeight: '2.5rem', display: 'block', fontSize: '0.82rem', lineHeight: '1.2rem', fontWeight: 600, color: 'var(--text-main)' }}>
+          {label} <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>({manual ? 'Manual' : 'Automática'})</span>
+        </label>
+        <input
+          id={`evaluation-${field}`} type="text" inputMode="decimal" autoComplete="off"
+          data-manual={manual ? 'true' : 'false'}
+          value={manual ? evaluationForm[field] : getAutomaticEvaluationGrade(field) ?? ''}
+          onChange={event => {
+            const value = event.target.value;
+            setEvaluationForm(current => ({ ...current, [field]: value }));
+            setManualEvaluationFields(current => ({ ...current, [field]: true }));
+            const parsed = Number(value.trim().replace(',', '.'));
+            setEvaluationOverrides(current => ({
+              ...current,
+              [field]: value.trim() === '' ? null : Number.isFinite(parsed) ? parsed : null
+            }));
+          }}
+          disabled={isSavingEvaluation} placeholder="Sin calificar"
+          style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)' }}
+        />
+        <button type="button" title={`Volver a automática: ${label}`} disabled={!manual || isSavingEvaluation}
+          onClick={() => {
+            setManualEvaluationFields(current => ({ ...current, [field]: false }));
+            setEvaluationOverrides(current => ({ ...current, [field]: null }));
+            setEvaluationForm(current => ({ ...current, [field]: String(getAutomaticEvaluationGrade(field) ?? '') }));
+          }}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', alignSelf: 'flex-start', border: 0, background: 'transparent', color: 'var(--primary)', padding: '0.2rem 0', cursor: manual ? 'pointer' : 'default', opacity: manual ? 1 : 0.45, fontSize: '0.75rem', textAlign: 'left' }}>
+          <RotateCcw size={14} /> Volver a automática
+        </button>
+      </div>
+    );
+  };
+
+  const handleSaveTaskGrade = async (grade: number | null, feedback: string, stepEvaluations: StepEvaluationPayload[], gradeMode?: 'AUTO' | 'MANUAL') => {
+    if (!reviewingTask) return;
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${apiUrl}/api/structured-tasks/${reviewingTask.taskId}/grade-delivery`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ studentId, grade, feedback, stepEvaluations, gradeMode })
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'No se pudo guardar la nota de la tarea.');
+    }
+    await fetchEvaluation();
+    onGradeSaved?.();
   };
 
   const openGradingModal = (sub: FlatSubmission) => {
@@ -424,11 +553,7 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
     e.preventDefault();
     if (!evaluatingSubmission) return;
 
-    const savedExam = parseSavedExam(evaluatingSubmission.content);
-    const calculatedExamGrade = savedExam?.score !== null && savedExam?.score !== undefined && savedExam.total
-      ? (savedExam.score / savedExam.total) * 10
-      : null;
-    const numGrade = calculatedExamGrade ?? (gradeInput.trim() !== '' ? parseFloat(gradeInput) : null);
+    const numGrade = gradeInput.trim() !== '' ? Number(gradeInput) : null;
     if (numGrade !== null && (isNaN(numGrade) || numGrade < 0 || numGrade > 10)) {
       setSaveError('La calificación debe ser un número entre 0 y 10.');
       return;
@@ -507,7 +632,7 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`
       },
-      body: JSON.stringify({ grade: reviewingExam.score, feedback: updatedFeedback })
+      body: JSON.stringify({ feedback: updatedFeedback })
     });
 
     if (!res.ok) {
@@ -524,9 +649,6 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
   const studentEmail = student?.email || '';
   const studentModality = student?.modality || 'PRESENCIAL';
   const classTitle = course?.title || (classId ? `Clase: ${classId}` : null);
-
-  const gradingExamData = evaluatingSubmission ? parseSavedExam(evaluatingSubmission.content) : null;
-  const isAutocorrectedExam = Boolean(gradingExamData?.total && gradingExamData.score !== null && gradingExamData.score !== undefined);
 
   return (
     <div
@@ -618,6 +740,7 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
           <button
             type="button"
             onClick={openEvaluationModal}
+            disabled={loadingEvaluation || evaluationLoadFailed}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
             style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.45rem 0.8rem', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 600, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-main)', cursor: 'pointer' }}
           >
@@ -660,11 +783,13 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
           })}
         </div>
 
+        {evaluationError && <p role="alert" style={{ color: 'var(--danger, #b91c1c)', fontSize: '0.85rem' }}>{evaluationError}</p>}
+
         {/* Resumen de Calificaciones Presencial (2x2 en móvil, 4 cols en desktop) */}
         {studentModality !== 'ONLINE' && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3 mb-3 grades-eval-cards-grid">
             {[
-              ['MIDDLE TERM', termEvaluation?.middleExamGrade, 'Examen parcial (35%)', false],
+              ['MIDTERM', termEvaluation?.middleExamGrade, 'Examen parcial (35%)', false],
               ['FINAL TERM', termEvaluation?.finalExamGrade, 'Examen final (35%)', false],
               ['MEDIA TAREAS', effectiveTasksAverage, `Prácticas de ${classTitle ? 'clase' : 'curso'} (30%)`, false],
               ['CALIFICACIÓN', displayedTermOverall, 'Nota ponderada', true]
@@ -809,7 +934,8 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
               const blockKey = `${first.structuredTaskId}:${first.studentId}`;
               const isExpanded = expandedStructuredTaskKey === blockKey;
               const gradedSteps = ordered.filter(s => s.grade !== null && s.grade !== undefined);
-              const groupAvg = gradedSteps.length > 0
+              const termTask = termEvaluation?.tasks?.find(task => task.taskId === first.structuredTaskId);
+              const groupAvg = termTask ? termTask.taskGrade : gradedSteps.length > 0
                 ? gradedSteps.reduce((sum, s) => sum + (s.grade || 0), 0) / gradedSteps.length
                 : null;
               const dueDate = first.dueDate;
@@ -837,7 +963,15 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3" style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                    <div className="flex items-center gap-3" style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap', maxWidth: '100%' }}>
+                      {termTask?.steps && (
+                        <button type="button" className="btn-secondary" onClick={event => {
+                          event.stopPropagation();
+                          setReviewingTask({ ...termTask, steps: termTask.steps || [] });
+                        }} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.78rem', padding: '0.35rem 0.55rem' }}>
+                          <Edit3 size={14} /> Evaluar tarea
+                        </button>
+                      )}
                       <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200" style={{ padding: '0.3rem 0.7rem', borderRadius: '16px', background: groupAvg !== null && groupAvg >= 5 ? '#eaf4ef' : '#fef7e8', color: groupAvg !== null && groupAvg >= 5 ? '#24583e' : '#8d5b12', border: `1px solid ${groupAvg !== null && groupAvg >= 5 ? '#bfe0d0' : '#fae0b0'}`, fontWeight: 700, fontSize: '0.85rem' }}>
                         {groupAvg !== null ? `Nota tarea: ${groupAvg.toFixed(1)} / 10` : 'Pendiente'}
                       </span>
@@ -903,7 +1037,7 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
                                     {isSubmissionPending(sub) ? `Corregir (${examData.openTextCount || 1} pend.)` : 'Ver Test'}
                                   </button>
                                 )}
-                                {isEvaluable && !isExam && (
+                                {isEvaluable && (
                                   <button
                                     type="button"
                                     onClick={(e) => { e.stopPropagation(); openGradingModal(sub); }}
@@ -911,7 +1045,7 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
                                     title="Evaluar este paso"
                                   >
                                     <Edit3 size={13} />
-                                    <span>Evaluar</span>
+                                    <span>{isExam ? 'Editar nota' : 'Evaluar'}</span>
                                   </button>
                                 )}
                               </div>
@@ -1028,6 +1162,10 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
                             <FileText size={13} className="inline mr-1" />
                             {isSubmissionPending(sub) ? 'Corregir Examen' : 'Revisar Test'}
                           </button>
+                          <button type="button" onClick={() => openGradingModal(sub)} className="btn-secondary"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}>
+                            <Edit3 size={13} /> Editar nota
+                          </button>
                         </div>
                       ) : (
                         <div>
@@ -1136,7 +1274,7 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
             </div>
 
             <form onSubmit={handleSaveGrade} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              {!isAutocorrectedExam && (
+              {(
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-main)' }}>
                     Calificación Numérica (0 - 10)
@@ -1226,6 +1364,9 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
       {/* =========================================================================
           MODAL DE REVISIÓN DE EXAMEN TIPO TEST
          ========================================================================= */}
+      {reviewingTask && <TaskDeliveryReviewModal task={reviewingTask} studentName={studentFullName}
+        onClose={() => setReviewingTask(null)} onSaveGrade={handleSaveTaskGrade} audioMode="backend-proxy" />}
+
       {reviewingExam && createPortal(
         <ExamReviewModal
           title={reviewingExam.title}
@@ -1281,7 +1422,7 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
               {studentModality !== 'ONLINE' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
                   {([
-                    ['middle', 'MIDDLE TERM (35%)'],
+                    ['middle', 'MIDTERM (35%)'],
                     ['final', 'FINAL TERM (35%)']
                   ] as const).map(([exam, label]) => {
                     const skillFields = [
@@ -1291,24 +1432,20 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
                       [`${exam}Listening`, 'Listening'],
                       [`${exam}Writing`, 'Writing']
                     ] as const;
-                    const enteredGrades = skillFields
-                      .map(([field]) => (evaluationForm as any)[field].trim())
-                      .filter((value) => value !== '')
-                      .map(Number)
-                      .filter((grade) => Number.isFinite(grade) && grade >= 0 && grade <= 10);
-                    const average = enteredGrades.length > 0 ? (enteredGrades.reduce((sum, grade) => sum + grade, 0) / enteredGrades.length).toFixed(1) : null;
+                    const average = getEffectiveEvaluationGrade(exam === 'middle' ? 'middleExamGrade' : 'finalExamGrade');
 
                     return (
                       <div key={exam} style={{ border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-alt)', overflow: 'hidden' }}>
                         <button type="button" onClick={() => setExpandedExamSections((current) => ({ ...current, [exam]: !current[exam] }))} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', padding: '0.85rem 1rem', border: 'none', background: 'transparent', color: 'var(--text-main)', cursor: 'pointer', textAlign: 'left' }}>
                           <span style={{ fontSize: '0.88rem', fontWeight: 700 }}>{label}</span>
-                          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--primary)' }}>{average ? `Media: ${average} / 10` : 'Añadir destrezas'}</span>
+                          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--primary)' }}>{average !== null ? `Media: ${average} / 10` : 'Añadir destrezas'}</span>
                         </button>
                         {expandedExamSections[exam] && (
                           <div style={{ padding: '0 1rem 1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '0.75rem' }}>
+                            {renderCalculatedGrade(exam === 'middle' ? 'middleExamGrade' : 'finalExamGrade', `Media ${label}`)}
                             {skillFields.map(([field, skill]) => (
                               <label key={field} style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)' }}>
-                                {skill}
+                                <span style={{ minHeight: '2.5rem', display: 'block', lineHeight: '1.2rem' }}>{skill}</span>
                                 <input
                                   type="number"
                                   step="0.1"
@@ -1330,33 +1467,22 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
               )}
 
               {studentModality === 'ONLINE' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  {[
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '1rem' }}>
+                  {([
                     ['grammar', 'Grammar'],
                     ['reading', 'Reading'],
                     ['writing', 'Writing'],
                     ['listening', 'Listening'],
-                    ['speaking', 'Speaking'],
-                    ['overallGrade', 'Nota Global']
-                  ].map(([field, label]) => (
-                    <div key={field}>
-                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.3rem' }}>
-                        {label}
-                      </label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        max="10"
-                        value={(evaluationForm as any)[field]}
-                        onChange={e => setEvaluationForm({ ...evaluationForm, [field]: e.target.value })}
-                        placeholder="0 - 10"
-                        style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', outline: 'none' }}
-                      />
-                    </div>
-                  ))}
+                    ['speaking', 'Speaking']
+                  ] as const).map(([field, label]) => renderCalculatedGrade(field, label))}
                 </div>
               )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '1rem' }}>
+                {renderCalculatedGrade('tasksAverage', 'Media de tareas')}
+                {renderCalculatedGrade('overallGrade', 'Calificación trimestral')}
+              </div>
+              {evaluationError && <p role="alert" style={{ color: 'var(--danger, #b91c1c)', margin: 0 }}>{evaluationError}</p>}
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.3rem' }}>
