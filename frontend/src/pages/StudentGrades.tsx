@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import TaskDeliveryReviewModal, { type TaskForReview } from '../components/TaskDeliveryReviewModal';
 import StudentCompetencyGrades from '../components/StudentCompetencyGrades';
+import StudentExamGrades from '../components/StudentExamGrades';
 import { generateReportCardPDF, type ReportCardData, type ReportCardTaskItem } from '../utils/reportCard';
 import { getCategoryLabel } from '../utils/skillCategories';
 import { useParent } from '../context/ParentContext';
@@ -52,7 +53,6 @@ const StudentGrades: React.FC = () => {
 
   const currentTermInfo = termGradesData?.[selectedTerm];
   const isOnline = studentInfo?.modality === 'ONLINE';
-  const hasBothExamGrades = typeof currentTermInfo?.middleExamGrade === 'number' && typeof currentTermInfo?.finalExamGrade === 'number';
   // Descargar Boletín Trimestral PDF
   const handleDownloadReportCard = () => {
     if (!currentTermInfo || !studentInfo) return;
@@ -176,20 +176,7 @@ const StudentGrades: React.FC = () => {
         />}
 
         {!isOnline && currentTermInfo && (
-          <div className="grades-summary-grid">
-            {[
-              ['MIDTERM', currentTermInfo.middleExamGrade, 'Examen parcial (35%)'],
-              ['FINAL TERM', currentTermInfo.finalExamGrade, 'Examen final (35%)'],
-              ['MEDIA TAREAS', currentTermInfo.tasksAverage, 'Prácticas (30%)'],
-              ['NOTA GLOBAL', hasBothExamGrades ? currentTermInfo.overallGrade : null, 'Nota ponderada']
-            ].map(([label, value, subtitle]) => (
-              <div key={label} style={{ padding: '0.75rem', background: label === 'NOTA GLOBAL' ? 'var(--primary-light)' : 'var(--surface)', borderRadius: '8px', border: `1px solid ${label === 'NOTA GLOBAL' ? 'var(--primary-border)' : 'var(--border)'}`, textAlign: 'center' }}>
-                <span style={{ fontSize: '0.7rem', color: label === 'NOTA GLOBAL' ? 'var(--primary-text)' : 'var(--text-muted)', display: 'block', fontWeight: 700 }}>{label}</span>
-                <strong style={{ fontSize: '1.1rem', color: label === 'NOTA GLOBAL' ? 'var(--primary-text)' : 'var(--text-main)', display: 'block', marginTop: '0.2rem' }}>{typeof value === 'number' ? `${value.toFixed(1)} / 10` : '- / 10'}</strong>
-                <small style={{ display: 'block', marginTop: '0.15rem', color: 'var(--text-muted)', fontSize: '0.68rem' }}>{subtitle}</small>
-              </div>
-            ))}
-          </div>
+          <StudentExamGrades key={`${selectedStudentId}-${selectedTerm}`} grades={currentTermInfo} />
         )}
 
         {/* Observaciones del profesor */}

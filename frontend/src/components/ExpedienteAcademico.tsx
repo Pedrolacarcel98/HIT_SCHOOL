@@ -21,6 +21,7 @@ import AttachmentViewerModal from './AttachmentViewerModal';
 import type { AttachmentData } from './AttachmentViewerModal';
 import ModalityBadge from './ModalityBadge';
 import TaskDeliveryReviewModal from './TaskDeliveryReviewModal';
+import StudentExamGrades from './StudentExamGrades';
 import type { TaskForReview, StepEvaluationPayload } from './TaskDeliveryReviewModal';
 
 export interface FinalEvaluationData {
@@ -332,9 +333,7 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
     fetchEvaluation();
   }, [studentId, classId, selectedTerm]);
 
-  const effectiveTasksAverage = termEvaluation?.tasksAverage ?? null;
 
-  const displayedTermOverall = termEvaluation?.overallGrade;
 
   const openEvaluationModal = () => {
     setEvaluationError('');
@@ -787,72 +786,13 @@ const ExpedienteAcademico: React.FC<ExpedienteAcademicoProps> = ({
 
         {/* Resumen de Calificaciones Presencial (2x2 en móvil, 4 cols en desktop) */}
         {studentModality !== 'ONLINE' && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3 mb-3 grades-eval-cards-grid">
-            {[
-              ['MIDTERM', termEvaluation?.middleExamGrade, 'Examen parcial (35%)', false],
-              ['FINAL TERM', termEvaluation?.finalExamGrade, 'Examen final (35%)', false],
-              ['MEDIA TAREAS', effectiveTasksAverage, `Prácticas de ${classTitle ? 'clase' : 'curso'} (30%)`, false],
-              ['CALIFICACIÓN', displayedTermOverall, 'Nota ponderada', true]
-            ].map(([label, val, subtitle, isOverall]) => (
-              <div
-                key={String(label)}
-                className={`p-2.5 sm:p-3 rounded-lg border text-center grades-eval-card ${
-                  isOverall
-                    ? 'bg-emerald-50 border-emerald-300'
-                    : 'bg-white border-slate-200'
-                }`}
-                style={{
-                  borderRadius: '8px',
-                  border: isOverall ? '1px solid var(--primary-border, #bfe0d0)' : '1px solid var(--border)',
-                  background: isOverall ? 'var(--primary-light)' : 'var(--surface)',
-                  textAlign: 'center'
-                }}
-              >
-                <span
-                  className={`block text-xs font-bold uppercase tracking-wider grades-eval-card__title ${
-                    isOverall ? 'text-emerald-800' : 'text-slate-500'
-                  }`}
-                  style={{
-                    fontSize: '0.66rem',
-                    fontWeight: 700,
-                    color: isOverall ? 'var(--primary)' : 'var(--text-muted)',
-                    display: 'block',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }}
-                >
-                  {label === 'CALIFICACIÓN' ? 'CALIF. TRIMESTRAL' : label}
-                </span>
-                <strong
-                  className={`block text-base sm:text-lg font-extrabold mt-1 grades-eval-card__score ${
-                    isOverall ? 'text-emerald-900' : 'text-slate-800'
-                  }`}
-                  style={{
-                    fontSize: '1.1rem',
-                    display: 'block',
-                    marginTop: '0.15rem',
-                    color: isOverall ? 'var(--primary)' : 'var(--text-main)'
-                  }}
-                >
-                  {typeof val === 'number' ? `${val.toFixed(1)} / 10` : '- / 10'}
-                </strong>
-                <small
-                  className="block text-[10px] text-slate-400 mt-0.5 grades-eval-card__subtitle"
-                  style={{
-                    fontSize: '0.62rem',
-                    color: 'var(--text-muted)',
-                    display: 'block',
-                    marginTop: '0.1rem',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }}
-                >
-                  {subtitle}
-                </small>
-              </div>
-            ))}
+          <div style={{ marginBottom: '0.75rem' }}>
+            <StudentExamGrades
+              key={`${studentId}-${classId}-${selectedTerm}`}
+              grades={termEvaluation ?? {}}
+              teacherView
+              tasksSubtitle={`Prácticas de ${classTitle ? 'clase' : 'curso'} (30%)`}
+            />
           </div>
         )}
 

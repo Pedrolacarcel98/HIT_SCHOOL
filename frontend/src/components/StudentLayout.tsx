@@ -356,7 +356,7 @@ const StudentLayout: React.FC = () => {
         </aside>
 
         <main className="student-themed-content" style={{ flex: 1, minWidth: 0, minHeight: '100vh', overflowY: 'auto', background: getMainBackground(), transition: 'background-color 0.2s ease' }}>
-          <Outlet />
+          <Outlet context={{ hasNewGrades, hasNewTasks, unreadChatCount }} />
         </main>
       </div>
 

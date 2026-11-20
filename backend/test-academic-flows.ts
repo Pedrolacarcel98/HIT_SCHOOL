@@ -4,6 +4,7 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import type { PrismaClient } from '@prisma/client';
 import { createTermGradesRouter } from './src/routes/termGrades';
+import { createDashboardRouter } from './src/routes/dashboard';
 import { createAssignmentsRouter } from './src/routes/assignments';
 import { createTaskDeliveryGradingHandler } from './src/routes/structuredTasks';
 import { authenticateToken, requireTeacher } from './src/middleware/auth';
@@ -187,10 +188,73 @@ async function checkRole(role: 'ADMIN' | 'TEACHER', modality: 'PRESENCIAL' | 'ON
   }
 }
 
+async function checkDashboardExamGrades() {
+  const students = [
+    { id: 'student', parentId: 'parent', profile: { firstName: 'First', lastName: 'Student' } },
+    { id: 'sibling', parentId: 'parent', profile: { firstName: 'Second', lastName: 'Student' } }
+  ];
+  const records = [
+    { studentId: 'student', courseId: 'course-a', course: { title: 'Same title' }, term: 1, academicYear: '2025-2026',
+      middleGrammar: 0, middleReading: 8, finalGrammar: 10, gradeOverrides: { middleExamGrade: 0 } },
+    { studentId: 'student', courseId: 'course-b', course: { title: 'Same title' }, term: 2, academicYear: '2024-2025',
+      middleExamGrade: 7, finalExamGrade: null, gradeOverrides: {} },
+    { studentId: 'student', courseId: 'course-a', course: { title: 'Same title' }, term: 3, academicYear: '2025-2026', gradeOverrides: {} },
+    { studentId: 'student', courseId: 'not-enrolled', course: { title: 'Hidden' }, term: 1, academicYear: '2025-2026', middleExamGrade: 10 },
+    { studentId: 'sibling', courseId: 'course-b', course: { title: 'Same title' }, term: 1, academicYear: '2025-2026', finalExamGrade: 6 }
+  ];
+  const database = {
+    user: {
+      findUnique: async ({ where }: any) => students.find(student => student.id === where.id),
+      findMany: async () => students
+    },
+    enrollment: { findMany: async ({ where }: any) => where.studentId === 'student' ? [{ courseId: 'course-a' }, { courseId: 'course-b' }] : [{ courseId: 'course-b' }] },
+    paymentStatus: { findMany: async () => [] },
+    assignment: { findMany: async () => [] },
+    structuredTask: { findMany: async () => [] },
+    submission: { findMany: async ({ where }: any) => where.studentId === 'student' ? [
+      { grade: 4, assignment: { course: { title: 'Same title' } } },
+      { grade: 8, assignment: { course: { title: 'Same title' } } }
+    ] : [] },
+    termGrade: { findMany: async ({ where }: any) => records.filter(record =>
+      record.studentId === where.studentId && where.courseId.in.includes(record.courseId)
+    ) }
+  };
+  const app = express();
+  app.use('/api/dashboard', createDashboardRouter(database as unknown as PrismaClient));
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise<void>(resolve => server.once('listening', resolve));
+  try {
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/dashboard/me`;
+    const fetchFor = async (id: string, role: 'STUDENT' | 'PARENT') => {
+      const token = jwt.sign({ id, role, email: 'parent@example.invalid' }, process.env.JWT_SECRET || 'secret');
+      const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      assert.equal(response.status, 200);
+      return (await response.json()).data;
+    };
+    const [student] = await fetchFor('student', 'STUDENT');
+    assert.deepEqual(student.grades, [{ courseTitle: 'Same title', average: 6 }]);
+    assert.deepEqual(student.examGrades, [
+      { courseId: 'course-a', courseTitle: 'Same title', term: 1, academicYear: '2025-2026', middleExamGrade: 0, finalExamGrade: 10 },
+      { courseId: 'course-b', courseTitle: 'Same title', term: 2, academicYear: '2024-2025', middleExamGrade: 7, finalExamGrade: null }
+    ]);
+    const family = await fetchFor('parent', 'PARENT');
+    assert.equal(family.length, 2);
+    assert.deepEqual(family[0].examGrades, student.examGrades);
+    assert.deepEqual(family[1].examGrades, [
+      { courseId: 'course-b', courseTitle: 'Same title', term: 1, academicYear: '2025-2026', middleExamGrade: null, finalExamGrade: 6 }
+    ]);
+    assert.deepEqual(family[1].grades, []);
+    console.log('PASS dashboard: exams by student, enrolled course and academic year; overrides and zero; unchanged task average');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+}
+
 async function main() {
   for (const role of ['ADMIN', 'TEACHER'] as const) {
     for (const modality of ['PRESENCIAL', 'ONLINE'] as const) await checkRole(role, modality);
   }
+  await checkDashboardExamGrades();
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; });

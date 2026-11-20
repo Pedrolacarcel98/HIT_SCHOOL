@@ -25,8 +25,8 @@ const getStorageKey = (suffix: string, studentId?: string | null) => {
   return `hit_learning_notifications:${role}:${userId}${scope}:${suffix}`;
 };
 
-const readSeenAt = (suffix: string) => Number(localStorage.getItem(getStorageKey(suffix)) || 0);
-const writeSeenAt = (suffix: string, value: number) => localStorage.setItem(getStorageKey(suffix), String(value));
+const readSeenAt = (suffix: string, studentId?: string | null) => Number(localStorage.getItem(getStorageKey(suffix, studentId)) || 0);
+const writeSeenAt = (suffix: string, value: number, studentId?: string | null) => localStorage.setItem(getStorageKey(suffix, studentId), String(value));
 const timestamp = (value?: string | null) => value ? new Date(value).getTime() || 0 : 0;
 
 const getReadTasksKey = (studentId?: string | null) => getStorageKey('read-tasks', studentId);
@@ -67,10 +67,16 @@ const prunePendingReads = (studentId: string | null | undefined, pending: Pendin
 };
 
 export const useLearningNotifications = (targetStudentId?: string | null): LearningNotifications => {
-  const [latestGrades, setLatestGrades] = useState(0);
-  const [pendingTasks, setPendingTasks] = useState<PendingTask[]>([]);
+  const [gradeState, setGradeState] = useState<{ studentId?: string | null; latest: number }>({ studentId: targetStudentId, latest: 0 });
+  const [taskState, setTaskState] = useState<{ studentId?: string | null; pending: PendingTask[] }>({ studentId: targetStudentId, pending: [] });
   const [readTasks, setReadTasks] = useState<ReadTasks>(() => readTaskEntries(targetStudentId));
   const role = localStorage.getItem('userRole');
+  const gradeScope = role === 'PARENT' ? targetStudentId : null;
+  const latestGrades = gradeState.studentId === targetStudentId ? gradeState.latest : 0;
+  const pendingTasks = useMemo(
+    () => taskState.studentId === targetStudentId ? taskState.pending : [],
+    [taskState, targetStudentId]
+  );
 
   useEffect(() => {
     setReadTasks(readTaskEntries(targetStudentId));
@@ -81,46 +87,51 @@ export const useLearningNotifications = (targetStudentId?: string | null): Learn
     return () => { readTaskSubscribers.delete(handler); };
   }, [targetStudentId]);
 
-  const loadNotifications = useCallback(async () => {
-    const token = localStorage.getItem('token');
-    if (!token || !role) return;
-    const headers = { Authorization: `Bearer ${token}` };
-
-    try {
-      if (role === 'STUDENT' || role === 'PARENT') {
-        const studentParam = targetStudentId ? `?studentId=${encodeURIComponent(targetStudentId)}` : '';
-        const [tasksResponse, gradesResponse] = await Promise.all([
-          fetch(`${apiUrl}/api/structured-tasks/me${studentParam}`, { headers }),
-          fetch(`${apiUrl}/api/term-grades/student/${targetStudentId || 'me'}`, { headers })
-        ]);
-        const tasks = tasksResponse.ok ? await tasksResponse.json() : [];
-        const grades = gradesResponse.ok ? await gradesResponse.json() : null;
-        const pending = getPendingTasks(tasks);
-        const gradeTimes = Object.values(grades?.terms || {}).map((term: any) => timestamp(term.updatedAt));
-        setPendingTasks(pending);
-        if (tasksResponse.ok) prunePendingReads(targetStudentId, pending);
-        setLatestGrades(Math.max(0, ...gradeTimes));
-      } else if (role === 'TEACHER' || role === 'ADMIN') {
-        const response = await fetch(`${apiUrl}/api/assignments/teacher`, { headers });
-        const assignments = response.ok ? await response.json() : [];
-        const submissionTimes = assignments.flatMap((assignment: any) => assignment.submissions || [])
-          .map((submission: any) => timestamp(submission.submittedAt));
-        setLatestGrades(Math.max(0, ...submissionTimes));
-      }
-    } catch {
-      // Notifications are supplementary and should never block the panel.
-    }
-  }, [role, targetStudentId]);
-
   useEffect(() => {
+    let active = true;
+    const loadNotifications = async () => {
+      const token = localStorage.getItem('token');
+      if (!token || !role) return;
+      const headers = { Authorization: `Bearer ${token}` };
+
+      try {
+        if (role === 'STUDENT' || role === 'PARENT') {
+          const studentParam = targetStudentId ? `?studentId=${encodeURIComponent(targetStudentId)}` : '';
+          const [tasksResponse, gradesResponse] = await Promise.all([
+            fetch(`${apiUrl}/api/structured-tasks/me${studentParam}`, { headers }),
+            fetch(`${apiUrl}/api/term-grades/student/${targetStudentId || 'me'}`, { headers })
+          ]);
+          const tasks = tasksResponse.ok ? await tasksResponse.json() : [];
+          const grades = gradesResponse.ok ? await gradesResponse.json() : null;
+          if (!active) return;
+          const pending = getPendingTasks(tasks);
+          const gradeTimes = Object.values(grades?.terms || {}).map((term: any) => timestamp(term.updatedAt));
+          setTaskState({ studentId: targetStudentId, pending });
+          if (tasksResponse.ok) prunePendingReads(targetStudentId, pending);
+          setGradeState({ studentId: targetStudentId, latest: Math.max(0, ...gradeTimes) });
+        } else if (role === 'TEACHER' || role === 'ADMIN') {
+          const response = await fetch(`${apiUrl}/api/assignments/teacher`, { headers });
+          const assignments = response.ok ? await response.json() : [];
+          if (!active) return;
+          const submissionTimes = assignments.flatMap((assignment: any) => assignment.submissions || [])
+            .map((submission: any) => timestamp(submission.submittedAt));
+          setGradeState({ studentId: targetStudentId, latest: Math.max(0, ...submissionTimes) });
+        }
+      } catch {
+        // Notifications are supplementary and should never block the panel.
+      }
+    };
     loadNotifications();
     const interval = window.setInterval(loadNotifications, 5000);
-    return () => window.clearInterval(interval);
-  }, [loadNotifications]);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [role, targetStudentId]);
 
   const markGradesSeen = useCallback(() => {
-    if (latestGrades > 0) writeSeenAt('grades', latestGrades);
-  }, [latestGrades]);
+    if (latestGrades > 0) writeSeenAt('grades', latestGrades, gradeScope);
+  }, [latestGrades, gradeScope]);
 
   const markTaskAsRead = useCallback((taskId: string, updatedAt?: string | null) => {
     const current = readTaskEntries(targetStudentId);
@@ -140,7 +151,7 @@ export const useLearningNotifications = (targetStudentId?: string | null): Learn
   );
 
   return {
-    hasNewGrades: latestGrades > readSeenAt('grades'),
+    hasNewGrades: latestGrades > readSeenAt('grades', gradeScope),
     hasNewTasks: unreadTasks.length > 0,
     newTaskCourseIds,
     markGradesSeen,

@@ -14,10 +14,11 @@ import {
   ChevronRight,
   MessageSquare
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { useParent } from '../context/ParentContext';
 import CustomSelect from '../components/CustomSelect';
 import PWAInstallButton from '../components/PWAInstallButton';
+import QuickActionNotification, { ChatUnreadBadge, type DashboardNotifications } from '../components/QuickActionNotification';
 import { generateFamilyMonthlyInvoicePDF, generateFamilyStatementPDF } from '../utils/invoice';
 
 interface DashboardStudentData {
@@ -32,6 +33,14 @@ interface DashboardStudentData {
     upcoming: { id: string; title: string; course: string; deadline: string | null }[];
   };
   grades: { courseTitle: string; average: number }[];
+  examGrades: {
+    courseId: string;
+    courseTitle: string;
+    term: number;
+    academicYear: string;
+    middleExamGrade: number | null;
+    finalExamGrade: number | null;
+  }[];
 }
 
 interface FamilyPaymentLine {
@@ -92,6 +101,7 @@ const DashboardStudent: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const { hasNewGrades, hasNewTasks, unreadChatCount } = useOutletContext<DashboardNotifications>();
   const { childrenList, parentName, parentUser } = useParent();
   const userRole = localStorage.getItem('userRole');
 
@@ -283,26 +293,29 @@ const DashboardStudent: React.FC = () => {
       <section className="dashboard-quick-actions" aria-label="Accesos directos del alumno">
         <button 
           onClick={() => navigate('/student/courses')} 
-          className="quick-action-pill"
+          className={`quick-action-pill${hasNewTasks ? ' quick-action-pill--unread' : ''}`}
           type="button"
         >
-          <BookOpen size={15} color="var(--primary)" /> Mis Clases y Tareas
+          <BookOpen size={15} color={hasNewTasks ? '#059669' : 'var(--primary)'} /> Mis Clases y Tareas
+          {hasNewTasks && <QuickActionNotification label="Hay tareas nuevas" />}
         </button>
 
         <button 
           onClick={() => navigate('/student/grades')} 
-          className="quick-action-pill"
+          className={`quick-action-pill${hasNewGrades ? ' quick-action-pill--unread' : ''}`}
           type="button"
         >
-          <Award size={15} color="#7c3aed" /> Mis Calificaciones
+          <Award size={15} color={hasNewGrades ? '#059669' : '#7c3aed'} /> Mis Calificaciones
+          {hasNewGrades && <QuickActionNotification label="Hay nuevas calificaciones" />}
         </button>
 
         <button 
           onClick={() => navigate('/student/chat')} 
-          className="quick-action-pill"
+          className={`quick-action-pill${unreadChatCount > 0 ? ' quick-action-pill--unread' : ''}`}
           type="button"
         >
-          <MessageSquare size={15} color="var(--primary)" /> Chat con Profesor
+          <MessageSquare size={15} color={unreadChatCount > 0 ? '#059669' : 'var(--primary)'} /> Chat con Profesor
+          {unreadChatCount > 0 && <ChatUnreadBadge count={unreadChatCount} />}
         </button>
 
         {(!dashboardData[0]?.hasParent || userRole === 'PARENT') && (
@@ -558,13 +571,13 @@ const DashboardStudent: React.FC = () => {
                             Mis Notas & Progreso
                           </h3>
                           <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                            Evaluación continua
+                            Media de entregas
                           </span>
                         </div>
                       </div>
 
                       {overallAverage && (
-                        <span className="dashboard-stat-badge" style={{ background: '#f3e8ff', color: '#6b21a8', border: '1px solid #e9d5ff' }}>
+                        <span className="dashboard-stat-badge" title="Media de las notas de entregas por clase" style={{ background: '#f3e8ff', color: '#6b21a8', border: '1px solid #e9d5ff' }}>
                           ⭐ {overallAverage} / 10
                         </span>
                       )}
@@ -572,8 +585,7 @@ const DashboardStudent: React.FC = () => {
 
                     {data.grades.length === 0 ? (
                       <div style={{ textAlign: 'center', padding: '1.75rem 1rem', color: 'var(--text-muted)' }}>
-                        <p style={{ margin: 0, fontSize: '0.88rem' }}>Aún no se han publicado calificaciones oficiales.</p>
-                        <p style={{ margin: '0.35rem 0 0', fontSize: '0.78rem' }}>Las notas de exámenes y ejercicios aparecerán aquí.</p>
+                        <p style={{ margin: 0, fontSize: '0.88rem' }}>Aún no hay entregas calificadas.</p>
                       </div>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -601,6 +613,21 @@ const DashboardStudent: React.FC = () => {
                             </div>
                           );
                         })}
+                      </div>
+                    )}
+                    {data.examGrades.length > 0 && (
+                      <div className="dashboard-exam-grades">
+                        <h4>Exámenes por trimestre</h4>
+                        {data.examGrades.map(exam => (
+                          <div className="dashboard-exam-grade" key={`${exam.courseId}-${exam.academicYear}-${exam.term}`}>
+                            <div className="dashboard-exam-grade__title">{exam.courseTitle}</div>
+                            <div className="dashboard-exam-grade__term">{exam.term}º trimestre · {exam.academicYear}</div>
+                            <div className="dashboard-exam-grade__scores">
+                              <span>Midterm: <strong>{exam.middleExamGrade === null ? '—' : `${exam.middleExamGrade.toFixed(1)} / 10`}</strong></span>
+                              <span>Final Term: <strong>{exam.finalExamGrade === null ? '—' : `${exam.finalExamGrade.toFixed(1)} / 10`}</strong></span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>

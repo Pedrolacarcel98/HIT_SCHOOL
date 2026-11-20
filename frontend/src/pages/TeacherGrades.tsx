@@ -639,7 +639,7 @@ const TeacherGrades: React.FC = () => {
                                   <ModalityBadge modality={course.modality} />
                                 </div>
                                 <span className="class-card-header__meta">
-                                  {`${course.totalStudents} alumno${course.totalStudents === 1 ? '' : 's'} matriculado${course.totalStudents === 1 ? '' : 's'} · ${course.totalSubmissions} entrega${course.totalSubmissions === 1 ? '' : 'es'}`}
+                                  {`${course.totalStudents} alumno${course.totalStudents === 1 ? '' : 's'} matriculado${course.totalStudents === 1 ? '' : 's'} · ${course.totalSubmissions} entrega${course.totalSubmissions === 1 ? '' : 's'}`}
                                 </span>
                                 <span className={`class-card-header__status ${course.pendingSubmissions > 0 ? 'is-pending' : 'is-clear'}`}>
                                   {course.pendingSubmissions > 0

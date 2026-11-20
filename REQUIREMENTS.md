@@ -205,6 +205,7 @@ A continuación se detallan los requerimientos acordados en las reuniones con el
 - [x] Chat privado directo Profesor ↔ Alumno con historial persistente.
 - [x] Canal de comunicación privado Profesor ↔ Padres/Tutores (hilos independientes por hijo).
 - [x] Tablón de anuncios (*Stream*) por clase para publicaciones grupales.
+- [x] Los accesos rápidos de Inicio resaltan las novedades del menú lateral: tareas estructuradas pendientes sin leer y notas nuevas para alumnos/tutores, entregas nuevas para profesores/administradores y mensajes sin leer para todos. El chat muestra un contador y los demás avisos muestran «Nuevo». Los avisos académicos del tutor corresponden al hijo seleccionado; la lectura de notas y tareas se guarda en el navegador.
 - [/] Notificaciones automáticas:
   - [x] Email de cuenta activada enviado directamente por el backend mediante SMTP al formalizar la primera matrícula.
   - [x] Email de cuenta reactivada enviado directamente por el backend mediante SMTP al volver a matricular a un alumno dado de baja.
@@ -236,6 +237,7 @@ A continuación se detallan los requerimientos acordados en las reuniones con el
 ### 2.3 Calificaciones y Progreso
 - [x] Pestaña «Mis Calificaciones» integrada en el aula virtual del alumno (`StudentCourseView.tsx`).
 - [x] Panel global de calificaciones con notas numéricas sobre 10 y desglose CEFR.
+- [x] En Inicio, el resumen muestra Midterm y Final Term por clase y trimestre de todos los años disponibles de las clases matriculadas. La media de entregas permanece separada y no incluye esas notas de examen.
 - [x] Modal interactivo de revisión pedagógica de exámenes con diseño Glassmorphism y desenfoque de fondo.
 - [x] Pestaña «Compañeros» para consultar la lista de clase (retirada posteriormente de la vista del alumno por decisión funcional).
 - [x] Tras reactivación, el alumno no ve calificaciones antiguas como activas si ya no está matriculado en esas clases; los datos permanecen en BBDD para trazabilidad.
