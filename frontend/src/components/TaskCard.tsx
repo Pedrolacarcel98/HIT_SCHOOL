@@ -14,7 +14,8 @@ import {
   BookmarkPlus,
   Trash2,
   Users,
-  Award
+  Award,
+  Link as LinkIcon
 } from 'lucide-react';
 
 export interface TaskStepItem {
@@ -35,7 +36,7 @@ export interface TaskStepItem {
   material?: {
     id: string;
     title: string;
-    type: 'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'FORM';
+    type: 'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'LINK' | 'FORM';
     url?: string | null;
     description?: string | null;
     level?: string | null;
@@ -99,6 +100,7 @@ const getMaterialIcon = (type?: string, size = 16) => {
     case 'FORM': return <ClipboardCheck size={size} style={{ color: 'var(--primary)' }} />;
     case 'VIDEO': return <Video size={size} style={{ color: '#ef4444' }} />;
     case 'AUDIO': return <Headphones size={size} style={{ color: '#f59e0b' }} />;
+    case 'LINK': return <LinkIcon size={size} style={{ color: '#0f766e' }} />;
     default: return <FileText size={size} style={{ color: '#0284c7' }} />;
   }
 };

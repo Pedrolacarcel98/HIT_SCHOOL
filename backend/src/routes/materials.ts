@@ -102,6 +102,16 @@ const parsePublishAt = (value: unknown) => {
   return { value: publishAt };
 };
 
+const isHttpUrl = (value: unknown): value is string => {
+  if (typeof value !== 'string') return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
 // Listar materiales con filtros opcionales (type, level, category, search)
 router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
@@ -395,6 +405,9 @@ router.post('/', authenticateToken, requireTeacher, async (req: AuthRequest, res
     if (!title || !type) {
       return res.status(400).json({ error: 'Título y tipo son obligatorios' });
     }
+    if (type === 'LINK' && !isHttpUrl(url)) {
+      return res.status(400).json({ error: 'El enlace web debe ser una URL HTTP o HTTPS válida.' });
+    }
 
     const material = await prisma.material.create({
       data: {
@@ -421,6 +434,16 @@ router.put('/:id', authenticateToken, requireTeacher, async (req: AuthRequest, r
   try {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const { title, description, type, level, category, url, formData } = req.body;
+    const existingMaterial = await prisma.material.findUnique({
+      where: { id },
+      select: { type: true, url: true }
+    });
+    if (!existingMaterial) return res.status(404).json({ error: 'Material no encontrado' });
+    const finalType = type || existingMaterial.type;
+    const finalUrl = url === undefined ? existingMaterial.url : url;
+    if (finalType === 'LINK' && !isHttpUrl(finalUrl)) {
+      return res.status(400).json({ error: 'El enlace web debe ser una URL HTTP o HTTPS válida.' });
+    }
 
     const updated = await prisma.material.updateMany({
       where: { id },

@@ -28,8 +28,8 @@ async function prepare(role, viewport, handleApi) {
   return { context, page, errors };
 }
 
-async function mount(page, path, props, parent = false) {
-  await page.evaluate(async ({ path, props, parent }) => {
+async function mount(page, path, props, parent = false, router = false) {
+  await page.evaluate(async ({ path, props, parent, router }) => {
     await import('/src/index.css');
     await import('/src/App.css');
     const { default: React } = await import('/node_modules/.vite/deps/react.js');
@@ -37,6 +37,13 @@ async function mount(page, path, props, parent = false) {
     const createRoot = ReactDOM.createRoot || ReactDOM.default.createRoot;
     const { default: Component } = await import(path);
     let element = React.createElement(Component, props);
+    if (router) {
+      const source = await fetch(path).then(response => response.text());
+      const routerPath = source.match(/from "([^"]*react-router-dom\.js\?[^"]+)"/)?.[1];
+      if (!routerPath) throw new Error('Cannot locate Vite router dependency');
+      const { MemoryRouter } = await import(routerPath);
+      element = React.createElement(MemoryRouter, null, element);
+    }
     if (parent) {
       const { ParentProvider } = await import('/src/context/ParentContext.tsx');
       element = React.createElement(ParentProvider, null, element);
@@ -45,7 +52,112 @@ async function mount(page, path, props, parent = false) {
     container.id = 'flow-test';
     document.body.replaceChildren(container);
     createRoot(container).render(element);
-  }, { path, props, parent });
+  }, { path, props, parent, router });
+}
+
+async function checkStudentCounts() {
+  const students = Array.from({ length: 88 }, (_, index) => ({
+    id: `student-${index}`, email: `student-${index}@example.invalid`,
+    status: index < 85 ? 'ACTIVE' : 'INACTIVE', modality: 'PRESENCIAL',
+    profile: { firstName: 'Test', lastName: String(index) }
+  }));
+  const enrollment = (index, extra = {}) => ({
+    id: `enrollment-${index}`, studentId: students[index].id,
+    student: students[index], academicYear: '2025-2026', startDate: '2025-09-01',
+    endDate: null, status: 'ACTIVE', modality: 'PRESENCIAL',
+    monthlyFee: 35, billingPeriod: 'MONTHLY', hasBook: false, bookPrice: null, ...extra
+  });
+  const enrollments = [
+    ...Array.from({ length: 81 }, (_, index) => enrollment(index)),
+    enrollment(0, { id: 'duplicate', academicYear: '2024-2025', startDate: '2024-09-01' }),
+    enrollment(81, { endDate: '2025-10-01' }),
+    enrollment(82, { status: 'SUSPENDED' }),
+    enrollment(85)
+  ];
+  const { context, page, errors } = await prepare('ADMIN', { width: 1366, height: 900 }, async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname === '/api/students') return route.fulfill({ json: students });
+    if (url.pathname === '/api/payments/academic-years') return route.fulfill({ json: ['2025-2026', '2024-2025'] });
+    if (url.pathname === '/api/enrollments/all') return route.fulfill({ json: enrollments });
+    return route.fulfill({ json: [] });
+  });
+  try {
+    await mount(page, '/src/pages/TeacherGrades.tsx', {}, false, true);
+    await expect(page.getByRole('button', { name: 'Vista General por Alumnos (85)' })).toBeVisible();
+    await mount(page, '/src/pages/EnrollmentsManagement.tsx', {}, false, true);
+    const metric = page.getByText('ALUMNOS ACTIVOS (ACADEMIA)', { exact: true }).locator('..');
+    await expect(metric.locator('p').nth(1)).toHaveText('85');
+    await expect(metric).toContainText('Matrículas activas (todos los cursos): 81 alumnos únicos');
+    await expect(page.locator('tbody tr')).toHaveCount(81);
+    await expect(page.getByRole('alert')).toContainText('4 alumnos activos');
+    await page.getByPlaceholder('Buscar por alumno, email o DNI...').fill('student-80@');
+    await expect(page.locator('tbody tr')).toHaveCount(1);
+    await expect(metric.locator('p').nth(1)).toHaveText('85');
+    await page.getByPlaceholder('Buscar por alumno, email o DNI...').fill('');
+
+    await page.evaluate(() => {
+      const originalFetch = window.fetch;
+      window.countRequests = [];
+      window.fetch = (input, options) => {
+        if (String(input).includes('/api/enrollments/all')) {
+          return new Promise(resolve => window.countRequests.push({ url: String(input), resolve }));
+        }
+        return originalFetch(input, options);
+      };
+    });
+    await page.getByRole('button', { name: 'Todos los cursos', exact: true }).click();
+    await page.getByRole('option', { name: 'Curso 2024-2025', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.countRequests.length)).toBe(1);
+    await page.getByRole('button', { name: 'Curso 2024-2025', exact: true }).click();
+    await page.getByRole('option', { name: 'Curso 2025-2026', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.countRequests.length)).toBe(2);
+    await page.evaluate(data => {
+      window.countRequests[1].resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }));
+    }, enrollments.filter(item => item.academicYear === '2025-2026'));
+    await expect(metric).toContainText('Matrículas activas (2025-2026): 81 alumnos únicos');
+    await page.evaluate(async data => {
+      window.countRequests[0].resolve(new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }));
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    }, [enrollments[81]]);
+    await expect(metric).toContainText('Matrículas activas (2025-2026): 81 alumnos únicos');
+    await expect(page.locator('tbody tr')).toHaveCount(81);
+
+    await page.evaluate(() => {
+      const originalFetch = window.fetch;
+      window.paymentCountRequests = [];
+      window.fetch = (input, options) => {
+        if (new URL(String(input), window.location.href).pathname === '/api/payments') {
+          return new Promise(resolve => window.paymentCountRequests.push({ url: String(input), resolve }));
+        }
+        return originalFetch(input, options);
+      };
+    });
+    await mount(page, '/src/pages/TeacherPayments.tsx', {}, false, true);
+    await expect.poll(() => page.evaluate(() => window.paymentCountRequests.length)).toBe(1);
+    const paymentStudents = students.filter(student => student.status === 'ACTIVE').map(student => ({
+      ...student, firstName: student.profile.firstName, lastName: student.profile.lastName, payments: []
+    }));
+    await page.evaluate(data => {
+      window.paymentCountRequests[0].resolve(new Response(JSON.stringify({ students: data })));
+    }, paymentStudents);
+    await expect(page.getByText('ALUMNOS ACTIVOS (85 de 85)', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Histórico de Bajas', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.paymentCountRequests.length)).toBe(2);
+    await page.getByRole('button', { name: 'Alumnos Activos', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.paymentCountRequests.length)).toBe(3);
+    await page.evaluate(data => {
+      window.paymentCountRequests[2].resolve(new Response(JSON.stringify({ students: data })));
+    }, paymentStudents);
+    await expect(page.getByText('ALUMNOS ACTIVOS (85 de 85)', { exact: true })).toBeVisible();
+    await page.evaluate(async data => {
+      window.paymentCountRequests[1].resolve(new Response(JSON.stringify({ students: data })));
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    }, [paymentStudents[0]]);
+    await expect(page.getByText('ALUMNOS ACTIVOS (85 de 85)', { exact: true })).toBeVisible();
+    assert.deepEqual(errors, []);
+    checks++;
+    console.log('PASS counts: 88 registered / 85 active, unique enrollments, filters and reversed year/tab responses');
+  } finally { await context.close(); }
 }
 
 async function checkNotes(role, modality, viewport) {
@@ -517,7 +629,9 @@ async function checkReportCard() {
 }
 
 try {
-  if (process.argv.includes('--report-card')) {
+  if (process.argv.includes('--student-counts')) {
+    await checkStudentCounts();
+  } else if (process.argv.includes('--report-card')) {
     await checkReportCard();
   } else for (const viewport of [{ width: 1366, height: 900 }, { width: 650, height: 844 }, { width: 390, height: 844 }]) {
     if (process.argv.includes('--dashboard')) {

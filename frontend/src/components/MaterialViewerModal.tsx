@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, HelpCircle, Image, Video, Headphones, X } from 'lucide-react';
+import { FileText, HelpCircle, Image, Video, Headphones, X, Link as LinkIcon, ExternalLink } from 'lucide-react';
 import AudioPlayer from './AudioPlayer';
 import VideoPlayer from './VideoPlayer';
 import DocumentViewer from './DocumentViewer';
@@ -9,7 +9,7 @@ export interface ViewerMaterial {
   id: string;
   title: string;
   description?: string | null;
-  type: 'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'FORM' | 'EXAM';
+  type: 'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'LINK' | 'FORM' | 'EXAM';
   level?: string | null;
   category?: string | null;
   url?: string | null;
@@ -28,6 +28,7 @@ const getTypeIcon = (type: ViewerMaterial['type']) => {
     case 'IMAGE': return <Image size={20} style={{ color: '#f472b6' }} />;
     case 'VIDEO': return <Video size={20} style={{ color: '#f87171' }} />;
     case 'AUDIO': return <Headphones size={20} style={{ color: '#fbbf24' }} />;
+    case 'LINK': return <LinkIcon size={20} style={{ color: '#0f766e' }} />;
     default: return <HelpCircle size={20} style={{ color: '#34d399' }} />;
   }
 };
@@ -50,6 +51,7 @@ const MaterialViewerModal: React.FC<MaterialViewerModalProps> = ({ material, onC
         {material.type === 'VIDEO' && material.url && <><VideoPlayer url={material.url} title={material.title} />{material.description && <p style={{ color: 'var(--text-muted)' }}>{material.description}</p>}</>}
         {material.type === 'DOCUMENT' && material.url && <DocumentViewer url={material.url} title={material.title} />}
         {material.type === 'IMAGE' && material.url && <img src={getImageDisplayUrl(material.url)} alt={material.title} referrerPolicy="no-referrer" style={{ maxWidth: '100%', maxHeight: 550, display: 'block', margin: 'auto', objectFit: 'contain' }} />}
+        {material.type === 'LINK' && material.url && <a href={material.url} target="_blank" rel="noopener noreferrer" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', width: 'fit-content', margin: '0 auto', textDecoration: 'none' }}><ExternalLink size={16} /> Abrir enlace web</a>}
         {isForm && material.formData && <FormPlayer title={material.title} description={material.description || undefined} questions={material.formData.questions || []} readOnly audioMode={audioMode} initialAnswers={Object.fromEntries((material.formData.questions || []).map((question: { id: string; correctAnswer: string | number }) => [question.id, question.correctAnswer]))} />}
         {!material.url && !material.formData && <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>Este recurso no tiene contenido disponible.</p>}
       </div>

@@ -13,9 +13,11 @@ import ModalityBadge from '../components/ModalityBadge';
 import ExpedienteAcademico from '../components/ExpedienteAcademico';
 import type { CourseData, FlatSubmission, StudentWithMeta } from '../components/ExpedienteAcademico';
 import ClassGradesDetail from '../components/ClassGradesDetail';
+import { isActiveStudent } from '../utils/studentStatus';
 
 interface StudentData {
   id: string;
+  status: string;
   email: string;
   modality?: 'PRESENCIAL' | 'ONLINE' | 'HIBRIDO';
   profile?: {
@@ -133,7 +135,10 @@ const TeacherGrades: React.FC = () => {
         fetch(`${apiUrl}/api/assignments/teacher`, { headers })
       ]);
 
-      if (studentsRes.ok) setStudents(await studentsRes.json());
+      if (studentsRes.ok) {
+        const registeredStudents: StudentData[] = await studentsRes.json();
+        setStudents(registeredStudents.filter(isActiveStudent));
+      }
       if (coursesRes.ok) {
         const loadedCourses = await coursesRes.json();
         const coursesWithStudents = await Promise.all(
@@ -453,7 +458,7 @@ const TeacherGrades: React.FC = () => {
                         transition: 'all 0.15s ease'
                       }}
                     >
-                      <Users size={17} /> Vista General por Alumnos ({students.length})
+                      <Users size={17} /> Vista General por Alumnos ({studentsWithMeta.length})
                     </button>
 
                     <button
@@ -527,7 +532,7 @@ const TeacherGrades: React.FC = () => {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem', alignItems: 'flex-start' }}>
                       <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
                         <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)', fontWeight: 600, fontSize: '0.88rem', color: 'var(--text-muted)' }}>
-                          ALUMNOS REGISTRADOS ({filteredStudents.length})
+                          ALUMNOS ACTIVOS ({filteredStudents.length})
                         </div>
 
                         <div style={{ maxHeight: '680px', overflowY: 'auto' }}>

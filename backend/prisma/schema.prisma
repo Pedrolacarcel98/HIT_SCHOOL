@@ -41,6 +41,7 @@ enum MaterialType {
   IMAGE
   VIDEO
   AUDIO
+  LINK
   FORM
 }
 

@@ -1576,8 +1576,7 @@ th {
   }
 }
 
-/* Barra de píldoras de filtro con scroll horizontal táctil */
-/* El wrapper confina el carrusel: sin él, flex-nowrap estira el ancho de la página. */
+/* En móvil, la barra de píldoras conserva el scroll horizontal táctil. */
 .filter-pills-wrap {
   width: 100%;
   max-width: 100%;
@@ -1603,6 +1602,17 @@ th {
 
 .filter-pills::-webkit-scrollbar {
   display: none;
+}
+
+@media (min-width: 768px) {
+  .filter-pills-wrap {
+    overflow: visible;
+  }
+
+  .filter-pills {
+    flex-wrap: wrap;
+    overflow: visible;
+  }
 }
 
 .filter-pill {

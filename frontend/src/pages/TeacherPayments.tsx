@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import {
@@ -177,7 +177,9 @@ const TeacherPayments: React.FC = () => {
     }
   };
 
-  const fetchPayments = async () => {
+  const paymentRequestId = useRef(0);
+  const fetchPayments = async (signal?: AbortSignal) => {
+    const requestId = ++paymentRequestId.current;
     try {
       setLoading(true);
       setError('');
@@ -185,10 +187,12 @@ const TeacherPayments: React.FC = () => {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
       const yearParam = selectedAcademicYear !== 'ALL' ? `&academicYear=${selectedAcademicYear}` : '';
       const res = await fetch(`${apiUrl}/api/payments?tab=${activeTab}${yearParam}`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
+        signal
       });
 
       const data: PaymentsResponse | { error: string } = await res.json();
+      if (requestId !== paymentRequestId.current || signal?.aborted) return;
 
       if (!res.ok) {
         setError('error' in data ? data.error : 'No se pudo cargar el estado de pagos.');
@@ -197,10 +201,11 @@ const TeacherPayments: React.FC = () => {
 
       setStudents((data as PaymentsResponse).students || []);
     } catch (fetchError) {
+      if (requestId !== paymentRequestId.current || signal?.aborted) return;
       console.error(fetchError);
       setError('No se pudo conectar con el servidor.');
     } finally {
-      setLoading(false);
+      if (requestId === paymentRequestId.current && !signal?.aborted) setLoading(false);
     }
   };
 
@@ -209,7 +214,9 @@ const TeacherPayments: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchPayments();
+    const controller = new AbortController();
+    fetchPayments(controller.signal);
+    return () => controller.abort();
   }, [activeTab, selectedAcademicYear]);
 
   useEffect(() => {

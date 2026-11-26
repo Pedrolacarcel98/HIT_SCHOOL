@@ -6,6 +6,7 @@ import {
   Clock3,
   Download,
   ExternalLink,
+  MessageSquare,
 } from 'lucide-react';
 import TaskDeliveryReviewModal, { type TaskForReview } from '../components/TaskDeliveryReviewModal';
 import StudentCompetencyGrades from '../components/StudentCompetencyGrades';
@@ -182,7 +183,8 @@ const StudentGrades: React.FC = () => {
         {/* Observaciones del profesor */}
         {currentTermInfo?.observations && (
           <div style={{ padding: '0.75rem 1rem', background: 'var(--surface-alt)', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '0.85rem', color: 'var(--text-main)', fontStyle: 'italic' }}>
-            💬 Observaciones pedagógicas del profesor: "{currentTermInfo.observations}"
+            <MessageSquare size={15} strokeWidth={1.5} aria-hidden="true" style={{ color: 'var(--primary)', verticalAlign: 'middle', marginRight: '0.4rem' }} />
+            Observaciones del profesor: "{currentTermInfo.observations}"
           </div>
         )}
       </div>
@@ -342,7 +344,8 @@ const StudentGrades: React.FC = () => {
 
                   {task.taskFeedback && (
                     <div style={{ marginTop: '0.45rem', padding: '0.4rem 0.65rem', background: '#f8fafc', borderRadius: '6px', fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic', border: '1px solid #e2e8f0' }}>
-                      💬 <strong>Feedback global:</strong> "{task.taskFeedback}"
+                      <MessageSquare size={14} strokeWidth={1.5} aria-hidden="true" style={{ color: 'var(--primary)', verticalAlign: 'middle', marginRight: '0.4rem' }} />
+                      <strong>Feedback del profesor:</strong> "{task.taskFeedback}"
                     </div>
                   )}
 
