@@ -13,7 +13,8 @@ import {
   Video,
   Headphones,
   ClipboardCheck,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Link as LinkIcon
 } from 'lucide-react';
 import MaterialViewerModal, { type ViewerMaterial } from './MaterialViewerModal';
 import TaskCard, { type TaskItem } from './TaskCard';
@@ -34,7 +35,7 @@ const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 interface MaterialItem {
   id: string;
   title: string;
-  type: 'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'FORM';
+  type: 'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'LINK' | 'FORM';
   level?: string;
   description?: string | null;
   url?: string | null;
@@ -379,6 +380,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
       case 'VIDEO': return <Video size={size} style={{ color: '#ef4444' }} />;
       case 'AUDIO': return <Headphones size={size} style={{ color: '#f59e0b' }} />;
       case 'IMAGE': return <ImageIcon size={size} style={{ color: '#8b5cf6' }} />;
+      case 'LINK': return <LinkIcon size={size} style={{ color: '#0f766e' }} />;
       default: return <FileText size={size} style={{ color: '#0284c7' }} />;
     }
   };
@@ -389,6 +391,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
       case 'VIDEO': return 'Vídeo';
       case 'AUDIO': return 'Audio / Listening';
       case 'IMAGE': return 'Imagen / Infografía';
+      case 'LINK': return 'Enlace Web';
       default: return 'Documento';
     }
   };
@@ -804,7 +807,7 @@ const ClassworkTab: React.FC<{ courseId: string }> = ({ courseId }) => {
               </div>
 
               <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                {([['ALL', 'Todos'], ['DOCUMENT', 'Documentos'], ['VIDEO', 'Vídeos'], ['AUDIO', 'Audios'], ['FORM', 'Exámenes']] as const).map(([val, label]) => (
+                {([['ALL', 'Todos'], ['DOCUMENT', 'Documentos'], ['VIDEO', 'Vídeos'], ['AUDIO', 'Audios'], ['LINK', 'Enlaces Web'], ['FORM', 'Exámenes']] as const).map(([val, label]) => (
                   <button
                     key={val}
                     type="button"

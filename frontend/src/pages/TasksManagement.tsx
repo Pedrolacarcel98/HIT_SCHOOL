@@ -18,7 +18,8 @@ import {
   Video,
   X,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Link as LinkIcon
 } from 'lucide-react';
 import TaskCard, { type TaskItem } from '../components/TaskCard';
 import MaterialViewerModal from '../components/MaterialViewerModal';
@@ -31,7 +32,7 @@ interface Material {
   id: string;
   title: string;
   description?: string;
-  type: 'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'FORM';
+  type: 'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'LINK' | 'FORM';
   level: 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2' | 'GENERAL';
   category: 'GRAMMAR_VOCABULARY' | 'READING' | 'SPEAKING' | 'WRITING' | 'LISTENING' | 'MOCK_EXAM';
   url?: string;
@@ -476,6 +477,7 @@ const TasksManagement: React.FC = () => {
       case 'VIDEO': return <Video size={size} style={{ color: '#ef4444' }} />;
       case 'AUDIO': return <Headphones size={size} style={{ color: '#f59e0b' }} />;
       case 'IMAGE': return <Image size={size} style={{ color: '#8b5cf6' }} />;
+      case 'LINK': return <LinkIcon size={size} style={{ color: '#0f766e' }} />;
       default: return <FileText size={size} style={{ color: '#0284c7' }} />;
     }
   };
@@ -486,6 +488,7 @@ const TasksManagement: React.FC = () => {
       case 'AUDIO': return 'Audio';
       case 'FORM': return 'Examen';
       case 'IMAGE': return 'Imagen';
+      case 'LINK': return 'Enlace Web';
       default: return 'Documento';
     }
   };
@@ -1196,7 +1199,7 @@ const TasksManagement: React.FC = () => {
               </div>
 
               <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                {([['ALL', 'Todos'], ['DOCUMENT', 'Documentos'], ['VIDEO', 'Vídeos'], ['AUDIO', 'Audios'], ['FORM', 'Exámenes']] as const).map(([val, label]) => (
+                {([['ALL', 'Todos'], ['DOCUMENT', 'Documentos'], ['VIDEO', 'Vídeos'], ['AUDIO', 'Audios'], ['LINK', 'Enlaces Web'], ['FORM', 'Exámenes']] as const).map(([val, label]) => (
                   <button
                     key={val}
                     type="button"

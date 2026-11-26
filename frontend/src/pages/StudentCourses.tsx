@@ -85,6 +85,7 @@ const parseSavedAnswers = (content?: string | null): Record<string, string | num
 
 const getResourceOpenUrl = (material: { type: string; url?: string | null }) => {
   const rawUrl = material.url || '';
+  if (material.type === 'LINK') return rawUrl;
   const googleDocumentId = rawUrl.match(/docs\.google\.com\/document\/d\/([^/?]+)/)?.[1];
   if (material.type === 'DOCUMENT' && googleDocumentId) {
     return `https://docs.google.com/document/d/${googleDocumentId}/preview`;
@@ -577,7 +578,7 @@ const StudentCourses: React.FC = () => {
                                   disabled={!step.material.url && step.material.type !== 'FORM'}
                                   style={{ padding: '0.35rem 0.65rem', borderRadius: '10px', border: '1px solid var(--primary-border)', background: 'var(--primary-light)', color: 'var(--primary-text)', fontSize: '0.78rem', fontWeight: 700, cursor: (step.material.url || step.material.type === 'FORM') ? 'pointer' : 'default', opacity: (step.material.url || step.material.type === 'FORM') ? 1 : 0.6 }}
                                 >
-                                  [ {step.material.type} ] {step.material.title}
+                                  {step.material.type === 'LINK' ? <><Link size={14} /> Enlace Web · {step.material.title}</> : `[ ${step.material.type} ] ${step.material.title}`}
                                 </button>
                               )}
                             </div>

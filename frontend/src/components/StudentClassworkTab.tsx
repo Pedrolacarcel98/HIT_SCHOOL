@@ -144,6 +144,7 @@ const parseSavedExam = (content?: string | null): ParsedExamData | null => {
 
 const getResourceOpenUrl = (material: { type: string; url?: string | null }) => {
   const rawUrl = material.url || '';
+  if (material.type === 'LINK') return rawUrl;
   const googleDocumentId = rawUrl.match(/docs\.google\.com\/document\/d\/([^/?]+)/)?.[1];
   if (material.type === 'DOCUMENT' && googleDocumentId) {
     return `https://docs.google.com/document/d/${googleDocumentId}/preview`;
@@ -1142,7 +1143,17 @@ const StudentClassworkTab: React.FC<StudentClassworkTabProps> = ({ courseId, vie
                           <ExternalLink size={13} /> Abrir en pestaña nueva
                         </a>
                       </div>
-                      {viewingMaterial.type === 'VIDEO' ? (
+                      {viewingMaterial.type === 'LINK' ? (
+                        <a
+                          href={getResourceOpenUrl({ type: viewingMaterial.type, url: viewingMaterial.url })}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn-primary"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'fit-content', textDecoration: 'none' }}
+                        >
+                          <ExternalLink size={15} /> Abrir enlace web
+                        </a>
+                      ) : viewingMaterial.type === 'VIDEO' ? (
                         <VideoPlayer url={viewingMaterial.url} title={viewingMaterial.title} />
                       ) : viewingMaterial.type === 'AUDIO' ? (
                         <AudioPlayer src={viewingMaterial.url} title={viewingMaterial.title} />

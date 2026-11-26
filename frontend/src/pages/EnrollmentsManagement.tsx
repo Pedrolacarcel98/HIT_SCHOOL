@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   GraduationCap,
@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import CustomSelect from '../components/CustomSelect';
 import ModalityBadge from '../components/ModalityBadge';
+import { getActiveStudentEnrollments, isActiveEnrollment, isActiveStudent } from '../utils/studentStatus';
 
 interface EnrollmentStudent {
   id: string;
@@ -53,6 +54,8 @@ interface EnrollmentItem {
 const EnrollmentsManagement: React.FC = () => {
   const navigate = useNavigate();
   const [enrollments, setEnrollments] = useState<EnrollmentItem[]>([]);
+  const [activeStudentCount, setActiveStudentCount] = useState(0);
+  const enrollmentRequestId = useRef(0);
   const [academicYears, setAcademicYears] = useState<string[]>([]);
   const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>('ALL');
   const [loading, setLoading] = useState(true);
@@ -97,39 +100,50 @@ const EnrollmentsManagement: React.FC = () => {
       if (res.ok) {
         const years: string[] = await res.json();
         setAcademicYears(years);
-        if (years.length > 0 && selectedAcademicYear === 'ALL') {
-          setSelectedAcademicYear(years[0]);
-        }
       }
     } catch (err) {
       console.error('Error obteniendo cursos escolares:', err);
     }
   };
 
-  const fetchEnrollments = async () => {
+  const fetchEnrollments = async (signal?: AbortSignal, academicYear = selectedAcademicYear) => {
+    const requestId = ++enrollmentRequestId.current;
     try {
       setLoading(true);
       setError('');
       const token = localStorage.getItem('token');
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-      const yearParam = selectedAcademicYear !== 'ALL' ? `?academicYear=${selectedAcademicYear}` : '';
-      const res = await fetch(`${apiUrl}/api/enrollments/all${yearParam}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const yearParam = academicYear !== 'ALL' ? `?academicYear=${encodeURIComponent(academicYear)}` : '';
+      const headers = { Authorization: `Bearer ${token}` };
+      const [res, studentsRes] = await Promise.all([
+        fetch(`${apiUrl}/api/enrollments/all${yearParam}`, { headers, signal }),
+        fetch(`${apiUrl}/api/students`, { headers, signal })
+      ]);
+      if (requestId !== enrollmentRequestId.current || signal?.aborted) return;
 
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error || 'No se pudieron cargar las matrículas.');
+        if (requestId === enrollmentRequestId.current && !signal?.aborted) setError(data.error || 'No se pudieron cargar las matrículas.');
+        return;
+      }
+
+      if (!studentsRes.ok) {
+        const data = await studentsRes.json();
+        if (requestId === enrollmentRequestId.current && !signal?.aborted) setError(data.error || 'No se pudo cargar el total de alumnos activos.');
         return;
       }
 
       const data: EnrollmentItem[] = await res.json();
+      const students: EnrollmentStudent[] = await studentsRes.json();
+      if (requestId !== enrollmentRequestId.current || signal?.aborted) return;
       setEnrollments(data);
+      setActiveStudentCount(new Set(students.filter(isActiveStudent).map(student => student.id)).size);
     } catch (err) {
+      if (requestId !== enrollmentRequestId.current || signal?.aborted) return;
       console.error('Error cargando matrículas:', err);
       setError('Error de conexión con el servidor.');
     } finally {
-      setLoading(false);
+      if (requestId === enrollmentRequestId.current && !signal?.aborted) setLoading(false);
     }
   };
 
@@ -138,7 +152,9 @@ const EnrollmentsManagement: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchEnrollments();
+    const controller = new AbortController();
+    fetchEnrollments(controller.signal);
+    return () => controller.abort();
   }, [selectedAcademicYear]);
 
   const handleOpenEdit = (enr: EnrollmentItem) => {
@@ -231,8 +247,7 @@ const EnrollmentsManagement: React.FC = () => {
     setRolloverToYear(to);
 
     // Preseleccionar alumnos activos del curso from
-    const activeStudentIds = enrollments
-      .filter(e => (from === 'ALL' || e.academicYear === from) && e.status === 'ACTIVE')
+    const activeStudentIds = getActiveStudentEnrollments(enrollments.filter(e => from === 'ALL' || e.academicYear === from))
       .map(e => e.studentId);
     setRolloverSelectedIds(Array.from(new Set(activeStudentIds)));
     setShowRolloverModal(true);
@@ -274,7 +289,7 @@ const EnrollmentsManagement: React.FC = () => {
       setShowRolloverModal(false);
       setSelectedAcademicYear(rolloverToYear);
       fetchAcademicYears();
-      fetchEnrollments();
+      if (rolloverToYear === selectedAcademicYear) fetchEnrollments();
     } catch (err) {
       showToast('Error de conexión al ejecutar renovación');
     } finally {
@@ -284,9 +299,9 @@ const EnrollmentsManagement: React.FC = () => {
 
   // Filtrado de matrículas
   const filteredEnrollments = useMemo(() => {
-    return enrollments.filter((enr) => {
+    return (statusFilter === 'ACTIVE' ? getActiveStudentEnrollments(enrollments) : enrollments).filter((enr) => {
       if (statusFilter !== 'ALL') {
-        const isEnrActive = enr.status === 'ACTIVE' && !enr.endDate;
+        const isEnrActive = isActiveEnrollment(enr);
         if (statusFilter === 'ACTIVE' && !isEnrActive) return false;
         if (statusFilter === 'INACTIVE' && isEnrActive) return false;
       }
@@ -314,21 +329,22 @@ const EnrollmentsManagement: React.FC = () => {
   }, [enrollments, statusFilter, periodicityFilter, modalityFilter, searchQuery]);
 
   // Métricas
+  const activeEnrollments = useMemo(() => getActiveStudentEnrollments(enrollments), [enrollments]);
   const totalActivas = useMemo(
-    () => enrollments.filter(e => e.status === 'ACTIVE' && !e.endDate).length,
-    [enrollments]
+    () => activeEnrollments.length,
+    [activeEnrollments]
   );
   const totalPresencial = useMemo(
-    () => enrollments.filter(e => e.status === 'ACTIVE' && !e.endDate && e.modality === 'PRESENCIAL').length,
-    [enrollments]
+    () => activeEnrollments.filter(e => e.modality === 'PRESENCIAL').length,
+    [activeEnrollments]
   );
   const totalOnline = useMemo(
-    () => enrollments.filter(e => e.status === 'ACTIVE' && !e.endDate && e.modality === 'ONLINE').length,
-    [enrollments]
+    () => activeEnrollments.filter(e => e.modality === 'ONLINE').length,
+    [activeEnrollments]
   );
   const totalLibros = useMemo(
-    () => enrollments.filter(e => e.status === 'ACTIVE' && !e.endDate && e.hasBook).length,
-    [enrollments]
+    () => activeEnrollments.filter(e => e.hasBook).length,
+    [activeEnrollments]
   );
 
   return (
@@ -403,22 +419,31 @@ const EnrollmentsManagement: React.FC = () => {
       {/* Métricas Bento Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
         <div className="glass-panel" style={{ padding: '1.1rem 1.25rem', background: '#fff' }}>
-          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.82rem', fontWeight: 600 }}>MATRÍCULAS ACTIVAS</p>
-          <p style={{ margin: '0.35rem 0 0', fontSize: '1.6rem', fontWeight: 700, color: '#047857' }}>{totalActivas}</p>
+          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.82rem', fontWeight: 600 }}>ALUMNOS ACTIVOS (ACADEMIA)</p>
+          <p style={{ margin: '0.35rem 0 0', fontSize: '1.6rem', fontWeight: 700, color: '#047857' }}>{loading || error ? '—' : activeStudentCount}</p>
+          <p style={{ margin: '0.35rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+            Matrículas activas ({selectedAcademicYear === 'ALL' ? 'todos los cursos' : selectedAcademicYear}): {loading || error ? '—' : totalActivas} alumnos únicos
+          </p>
         </div>
         <div className="glass-panel" style={{ padding: '1.1rem 1.25rem', background: '#fff' }}>
           <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.82rem', fontWeight: 600 }}>ALUMNOS PRESENCIALES</p>
-          <p style={{ margin: '0.35rem 0 0', fontSize: '1.6rem', fontWeight: 700, color: '#1682b3' }}>{totalPresencial}</p>
+          <p style={{ margin: '0.35rem 0 0', fontSize: '1.6rem', fontWeight: 700, color: '#1682b3' }}>{loading || error ? '—' : totalPresencial}</p>
         </div>
         <div className="glass-panel" style={{ padding: '1.1rem 1.25rem', background: '#fff' }}>
           <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.82rem', fontWeight: 600 }}>ALUMNOS ONLINE</p>
-          <p style={{ margin: '0.35rem 0 0', fontSize: '1.6rem', fontWeight: 700, color: '#7950b8' }}>{totalOnline}</p>
+          <p style={{ margin: '0.35rem 0 0', fontSize: '1.6rem', fontWeight: 700, color: '#7950b8' }}>{loading || error ? '—' : totalOnline}</p>
         </div>
         <div className="glass-panel" style={{ padding: '1.1rem 1.25rem', background: '#fff' }}>
           <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.82rem', fontWeight: 600 }}>CON LIBRO / MATERIAL</p>
-          <p style={{ margin: '0.35rem 0 0', fontSize: '1.6rem', fontWeight: 700, color: '#b45309' }}>{totalLibros}</p>
+          <p style={{ margin: '0.35rem 0 0', fontSize: '1.6rem', fontWeight: 700, color: '#b45309' }}>{loading || error ? '—' : totalLibros}</p>
         </div>
       </div>
+
+      {!loading && !error && selectedAcademicYear === 'ALL' && totalActivas < activeStudentCount && (
+        <div role="alert" style={{ marginBottom: '1rem', padding: '1rem', borderRadius: '8px', background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a' }}>
+          Hay {activeStudentCount - totalActivas} alumnos activos sin una matrícula abierta y activa. Revisa sus matrículas; el total de alumnos activos coincide con Control de Pagos.
+        </div>
+      )}
 
       {/* Filtros y Buscador */}
       <div className="glass-panel" style={{ padding: '1rem 1.25rem', marginBottom: '1.5rem', background: '#fff', display: 'flex', gap: '1rem', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
@@ -518,7 +543,7 @@ const EnrollmentsManagement: React.FC = () => {
               ) : (
                 filteredEnrollments.map((enr) => {
                   const studentName = `${enr.student.profile?.firstName || ''} ${enr.student.profile?.lastName || ''}`.trim() || 'Alumno';
-                  const isActive = enr.status === 'ACTIVE' && !enr.endDate;
+                  const isActive = isActiveEnrollment(enr);
 
                   return (
                     <tr
@@ -887,8 +912,7 @@ const EnrollmentsManagement: React.FC = () => {
                   Alumnos a Renovar ({rolloverSelectedIds.length} seleccionados)
                 </label>
                 <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '8px', padding: '0.5rem', background: 'var(--surface-alt)' }}>
-                  {enrollments
-                    .filter(e => (rolloverFromYear === 'ALL' || e.academicYear === rolloverFromYear) && e.status === 'ACTIVE')
+                  {getActiveStudentEnrollments(enrollments.filter(e => rolloverFromYear === 'ALL' || e.academicYear === rolloverFromYear))
                     .map((enr) => {
                       const isChecked = rolloverSelectedIds.includes(enr.studentId);
                       const name = `${enr.student.profile?.firstName || ''} ${enr.student.profile?.lastName || ''}`.trim() || enr.student.email;

@@ -19,7 +19,8 @@ import {
   CheckSquare,
   ClipboardCheck,
   Pencil,
-  BookOpen
+  BookOpen,
+  Link as LinkIcon
 } from 'lucide-react';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -35,7 +36,7 @@ interface Material {
   id: string;
   title: string;
   description?: string;
-  type: 'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'FORM';
+  type: 'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'LINK' | 'FORM';
   level: 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2' | 'GENERAL';
   category: 'GRAMMAR_VOCABULARY' | 'READING' | 'SPEAKING' | 'WRITING' | 'LISTENING' | 'MOCK_EXAM';
   url?: string;
@@ -128,7 +129,7 @@ const MaterialsManagement: React.FC = () => {
   // Formulario nuevo recurso estándar
   const [resTitle, setResTitle] = useState('');
   const [resDesc, setResDesc] = useState('');
-  const [resType, setResType] = useState<'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'AUDIO'>('DOCUMENT');
+  const [resType, setResType] = useState<'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'LINK'>('DOCUMENT');
   const [resLevel, setResLevel] = useState('B2');
   const [resCategory, setResCategory] = useState('GRAMMAR_VOCABULARY');
   const [resUrl, setResUrl] = useState('');
@@ -201,6 +202,7 @@ const MaterialsManagement: React.FC = () => {
   const handleCreateResource = async (e: React.FormEvent) => {
     e.preventDefault();
     const normalizedUrl = (() => {
+      if (resType === 'LINK') return resUrl.trim();
       const driveFileId = resUrl.match(/drive\.google\.com\/file\/d\/([^/?]+)/)?.[1]
         || resUrl.match(/[?&]id=([^&/?]+)/)?.[1]
         || resUrl.match(/lh3\.googleusercontent\.com\/d\/([^=/?]+)/)?.[1];
@@ -253,7 +255,7 @@ const MaterialsManagement: React.FC = () => {
     setEditingStandardMaterial(material);
     setResTitle(material.title);
     setResDesc(material.description || '');
-    setResType(material.type as 'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'AUDIO');
+    setResType(material.type as 'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'LINK');
     setResLevel(material.level);
     setResCategory(material.category);
     setResUrl(material.url || '');
@@ -282,11 +284,12 @@ const MaterialsManagement: React.FC = () => {
     return names.length > 2 ? `${names.slice(0, 2).join(', ')}...` : names.join(', ');
   };
 
-  const getMaterialIcon = (type: Material['type'], _size?: number) => {
-    if (type === 'FORM') return <ClipboardCheck size={16} style={{ color: 'var(--primary)' }} />;
-    if (type === 'IMAGE') return <Image size={16} style={{ color: '#ec4899' }} />;
-    if (type === 'VIDEO') return <Video size={16} style={{ color: '#ef4444' }} />;
-    if (type === 'AUDIO') return <Headphones size={16} style={{ color: '#f59e0b' }} />;
+  const getMaterialIcon = (type: Material['type'], size = 16) => {
+    if (type === 'FORM') return <ClipboardCheck size={size} style={{ color: 'var(--primary)' }} />;
+    if (type === 'IMAGE') return <Image size={size} style={{ color: '#ec4899' }} />;
+    if (type === 'VIDEO') return <Video size={size} style={{ color: '#ef4444' }} />;
+    if (type === 'AUDIO') return <Headphones size={size} style={{ color: '#f59e0b' }} />;
+    if (type === 'LINK') return <LinkIcon size={size} style={{ color: '#0f766e' }} />;
     return <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 5, background: '#dbeafe' }}><FileText size={14} style={{ color: '#2563eb' }} /></span>;
   };
   
@@ -294,6 +297,7 @@ const MaterialsManagement: React.FC = () => {
     if (type === 'FORM') return 'EXAMEN INTERACTIVO';
     if (type === 'VIDEO') return 'VÍDEO';
     if (type === 'AUDIO') return 'AUDIO';
+    if (type === 'LINK') return 'ENLACE WEB';
     return 'DOCUMENTO';
   };
 
@@ -491,6 +495,7 @@ const MaterialsManagement: React.FC = () => {
       case 'IMAGE': return <Image size={size} style={{ color: '#f472b6' }} />;
       case 'VIDEO': return <Video size={size} style={{ color: '#f87171' }} />;
       case 'AUDIO': return <Headphones size={size} style={{ color: '#fbbf24' }} />;
+      case 'LINK': return <LinkIcon size={size} style={{ color: '#0f766e' }} />;
       case 'FORM': return <HelpCircle size={size} style={{ color: '#34d399' }} />;
       default: return <FileText size={size} />;
     }
@@ -502,6 +507,7 @@ const MaterialsManagement: React.FC = () => {
       case 'IMAGE': return 'Imagen';
       case 'VIDEO': return 'Vídeo';
       case 'AUDIO': return 'Audio (Listening)';
+      case 'LINK': return 'Enlace Web';
       case 'FORM': return 'Examen Interactivo';
       default: return type;
     }
@@ -551,6 +557,7 @@ const MaterialsManagement: React.FC = () => {
             { id: 'IMAGE', label: 'Fotos', icon: <Image size={16} /> },
             { id: 'VIDEO', label: 'Vídeos', icon: <Video size={16} /> },
             { id: 'AUDIO', label: 'Audios', icon: <Headphones size={16} /> },
+            { id: 'LINK', label: 'Enlaces Web', icon: <LinkIcon size={16} /> },
             { id: 'FORM', label: 'Exámenes y Formularios', icon: <HelpCircle size={16} /> },
           ].map(tab => (
             <button
@@ -733,11 +740,11 @@ const MaterialsManagement: React.FC = () => {
 
                 <div className="material-card__footer">
                   <button
-                    onClick={() => setViewingMaterial(m)}
+                    onClick={() => m.type === 'LINK' && m.url ? window.open(m.url, '_blank', 'noopener,noreferrer') : setViewingMaterial(m)}
                     className="btn-primary"
                     style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1rem', fontSize: '0.85rem', whiteSpace: 'nowrap', minWidth: 0 }}
                   >
-                    <Play size={15} /> {m.type === 'FORM' ? 'Abrir Examen' : 'Ver / Reproducir'}
+                    {m.type === 'LINK' ? <LinkIcon size={15} /> : <Play size={15} />} {m.type === 'LINK' ? 'Abrir enlace' : m.type === 'FORM' ? 'Abrir Examen' : 'Ver / Reproducir'}
                   </button>
 
                   <div className="material-card__actions">
@@ -1050,7 +1057,7 @@ const MaterialsManagement: React.FC = () => {
                 <input value={materialSearch} onChange={(event) => setMaterialSearch(event.target.value)} placeholder="Buscar por título o descripción..." aria-label="Buscar materiales" style={{ width: '100%', padding: '0.75rem 0.75rem 0.75rem 2.25rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface-alt)', color: 'var(--text-main)', outline: 'none' }} />
               </div>
               <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                {([['ALL', 'Todos'], ['DOCUMENT', 'Documentos'], ['VIDEO', 'Vídeos'], ['AUDIO', 'Audios'], ['FORM', 'Exámenes']] as const).map(([value, label]) => (
+                {([['ALL', 'Todos'], ['DOCUMENT', 'Documentos'], ['VIDEO', 'Vídeos'], ['AUDIO', 'Audios'], ['LINK', 'Enlaces Web'], ['FORM', 'Exámenes']] as const).map(([value, label]) => (
                   <button key={value} type="button" onClick={() => setMaterialCategoryFilter(value)} className={materialCategoryFilter === value ? 'btn-primary' : 'btn-secondary'} style={{ padding: '0.4rem 0.7rem', fontSize: '0.78rem' }}>{label}</button>
                 ))}
               </div>
@@ -1222,10 +1229,11 @@ const MaterialsManagement: React.FC = () => {
                     value={resType}
                     onChange={(val: any) => setResType(val)}
                     options={[
-                      { value: 'DOCUMENT', label: '📄 Documento (PDF / Guía)' },
-                      { value: 'AUDIO', label: '🎧 Pista de Audio (Listening)' },
-                      { value: 'VIDEO', label: '🎥 Vídeo (YouTube / Vimeo / MP4)' },
-                      { value: 'IMAGE', label: '🖼️ Imagen / Infografía' }
+                      { value: 'DOCUMENT', label: '▤ Documento (PDF / Guía)' },
+                      { value: 'AUDIO', label: '♫ Pista de Audio (Listening)' },
+                      { value: 'VIDEO', label: '▷ Vídeo (YouTube / Vimeo / MP4)' },
+                      { value: 'IMAGE', label: '▧ Imagen / Infografía' },
+                      { value: 'LINK', label: '↗ Enlace Web' }
                     ]}
                     style={{ width: '100%' }}
                   />
@@ -1269,19 +1277,26 @@ const MaterialsManagement: React.FC = () => {
 
               <div>
                 <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                  Enlace / URL del archivo o vídeo
+                  {resType === 'LINK' ? 'Enlace Web / URL' : 'Enlace / URL del archivo o vídeo'}
                 </label>
                 <input
                   type="url"
                   required
                   value={resUrl}
                   onChange={(e) => setResUrl(e.target.value)}
-                  placeholder="https://ejemplo.com/archivo.pdf o https://youtu.be/..."
+                  placeholder={resType === 'LINK' ? 'https://ejemplo.com/articulo-o-recurso' : 'https://ejemplo.com/archivo.pdf o https://youtu.be/...'}
                   style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text)' }}
                 />
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'block' }}>
-                  Para imágenes de Google Drive, usa el enlace individual del archivo, no el enlace de una carpeta. El archivo debe estar compartido para cualquiera con el enlace.
-                </span>
+                {resType === 'IMAGE' && (
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'block' }}>
+                    Para imágenes de Google Drive, usa el enlace individual del archivo, no el enlace de una carpeta. El archivo debe estar compartido para cualquiera con el enlace.
+                  </span>
+                )}
+                {resType === 'LINK' && (
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'block' }}>
+                    Los alumnos abrirán este enlace en una pestaña nueva. Introduce una URL que empiece por http:// o https://.
+                  </span>
+                )}
               </div>
 
               <div>
